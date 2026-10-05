@@ -1,0 +1,13 @@
+<div class="d-flex justify-content-between align-items-center mb-3"><h1 class="h4 m-0">Rondas de guardias</h1><a class="btn btn-primary" href="<?= e(url('/panel/rondas/puntos/nuevo')) ?>">+ Nuevo punto</a></div>
+<div class="alert alert-info">Cada punto tiene un QR único. Imprimilo y colocálo en el lugar de control. La PWA registra hora, GPS y distancia.</div>
+<h2 class="h5">Puntos de ronda</h2>
+<?php if ($points): ?><link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>"><div id="round-map" style="height:280px" class="rounded border mb-3"></div><script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script>
+const roundPoints=<?= json_encode(array_map(fn($p)=>['name'=>$p['name'],'code'=>$p['code'],'lat'=>(float)$p['lat'],'lng'=>(float)$p['lng']],$points),JSON_UNESCAPED_UNICODE) ?>;
+const map=L.map('round-map'); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map); const bounds=[]; roundPoints.forEach(p=>{const el=document.createElement('div');el.textContent=p.code+' · '+p.name;L.marker([p.lat,p.lng]).addTo(map).bindPopup(el);bounds.push([p.lat,p.lng]);}); map.fitBounds(bounds,{padding:[20,20]});
+</script><?php endif; ?>
+<div class="table-responsive mb-4"><table class="table table-sm align-middle"><thead><tr><th>Código</th><th>Nombre</th><th>Ubicación</th><th>Radio</th><th></th></tr></thead><tbody>
+<?php foreach ($points as $p): ?><tr><td><code><?= e($p['code']) ?></code></td><td><?= e($p['name']) ?><?= $p['is_critical'] ? ' ⚠' : '' ?></td><td><?= e($p['sector_name'] ?: $p['site_name'] ?: '—') ?></td><td><?= e($p['radius_m']) ?> m</td><td><a class="btn btn-outline-secondary btn-sm" target="_blank" href="<?= e(url('/panel/rondas/puntos/' . $p['uuid'] . '/qr')) ?>">Imprimir QR</a></td></tr><?php endforeach; ?>
+<?php if (!$points): ?><tr><td colspan="5" class="text-body-secondary">Todavía no hay puntos.</td></tr><?php endif; ?></tbody></table></div>
+<h2 class="h5">Rondas recientes</h2><div class="table-responsive"><table class="table table-sm"><thead><tr><th>Inicio</th><th>Guardia</th><th>Ruta</th><th>Estado</th><th>Escaneos</th></tr></thead><tbody>
+<?php foreach ($rounds as $r): ?><tr><td><?= e(fecha($r['started_at'])) ?></td><td><?= e($r['user_name']) ?></td><td><?= e($r['route_name'] ?: 'Libre') ?></td><td><span class="badge text-bg-<?= $r['status'] === 'completa' ? 'success' : 'warning' ?>"><?= e($r['status']) ?></span></td><td><?= e($r['scans_count']) ?></td></tr><?php endforeach; ?>
+<?php if (!$rounds): ?><tr><td colspan="5" class="text-body-secondary">No hay rondas registradas todavía.</td></tr><?php endif; ?></tbody></table></div>

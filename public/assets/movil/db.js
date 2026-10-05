@@ -2,7 +2,7 @@
 // hasta que se sincroniza: catálogos, sectores, equipos, empleados, observaciones, cola de envío
 // (outbox) y fotos pendientes.
 const NAME = 'secapp-movil';
-const VERSION = 1;
+const VERSION = 2;
 const STORES = {
     kv: { keyPath: 'key' },
     catalog_items: { keyPath: 'uuid', indexes: ['catalog'] },
@@ -11,6 +11,10 @@ const STORES = {
     equipment: { keyPath: 'uuid', indexes: ['code'] },
     employees: { keyPath: 'uuid' },
     observations: { keyPath: 'uuid' },
+    patrol_points: { keyPath: 'uuid' },
+    patrol_routes: { keyPath: 'uuid' },
+    patrol_rounds: { keyPath: 'uuid' },
+    patrol_scans: { keyPath: 'uuid' },
     outbox: { keyPath: 'op_id' },
     uploads: { keyPath: 'upload_uuid', indexes: ['observation_uuid'] },
 };

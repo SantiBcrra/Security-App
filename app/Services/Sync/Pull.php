@@ -19,7 +19,7 @@ use App\Services\UserAuth;
  */
 final class Pull
 {
-    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations'];
+    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans'];
     private const OVERLAP_SECONDS = 5;
     private const OBS_HISTORY_DAYS = 180;
 
@@ -126,6 +126,18 @@ final class Pull
                     LEFT JOIN equipment eq ON eq.id = t.equipment_id LEFT JOIN users au ON au.id = t.assigned_user_id
                     LEFT JOIN users ru ON ru.id = t.reporter_user_id
                     WHERE ' . implode(' AND ', $where) . $order, $params];
+            case 'patrol_points':
+                return ["SELECT t.* FROM patrol_points t WHERE {$after}{$order}", $params];
+            case 'patrol_routes':
+                return ["SELECT t.* FROM patrol_routes t WHERE {$after}{$order}", $params];
+            case 'patrol_rounds':
+                $join = 'SELECT t.*, pr.uuid AS route_uuid FROM patrol_rounds t LEFT JOIN patrol_routes pr ON pr.id=t.route_id WHERE ';
+                if (UserAuth::scope('rondas') === 'propios') { $params[] = (int) UserAuth::user()['id']; return [$join . "{$after} AND t.user_id=?{$order}", $params]; }
+                return [$join . $after . $order, $params];
+            case 'patrol_scans':
+                $join = 'SELECT t.*, pr.uuid AS round_uuid, pp.uuid AS point_uuid FROM patrol_scans t JOIN patrol_rounds pr ON pr.id=t.round_id JOIN patrol_points pp ON pp.id=t.point_id WHERE ';
+                if (UserAuth::scope('rondas') === 'propios') { $params[] = (int) UserAuth::user()['id']; return [$join . "{$after} AND t.user_id=?{$order}", $params]; }
+                return [$join . $after . $order, $params];
         }
         throw new \InvalidArgumentException($entity);
     }
@@ -150,6 +162,10 @@ final class Pull
                 'assigned_name' => $r['assigned_name'], 'action_due_on' => $r['action_due_on'],
                 'created_at_device' => str_replace(' ', 'T', $r['created_at_device']) . 'Z', 'updated_at' => str_replace(' ', 'T', $r['updated_at']) . 'Z',
             ],
+            'patrol_points' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'code' => $r['code'], 'description' => $r['description'], 'lat' => (float) $r['lat'], 'lng' => (float) $r['lng'], 'radius_m' => (int) $r['radius_m'], 'critical' => (bool) $r['is_critical']],
+            'patrol_routes' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'description' => $r['description'], 'frequency' => $r['frequency'], 'expected_minutes' => $r['expected_minutes']],
+            'patrol_rounds' => ['uuid' => $r['uuid'], 'route_uuid' => $r['route_uuid'], 'user_id' => $r['user_id'], 'status' => $r['status'], 'started_at' => str_replace(' ', 'T', $r['started_at']) . 'Z', 'finished_at' => $r['finished_at'] ? str_replace(' ', 'T', $r['finished_at']) . 'Z' : null],
+            'patrol_scans' => ['uuid' => $r['uuid'], 'round_uuid' => $r['round_uuid'], 'point_uuid' => $r['point_uuid'], 'scanned_at_device' => str_replace(' ', 'T', $r['scanned_at_device']) . 'Z', 'lat' => $r['lat'] !== null ? (float) $r['lat'] : null, 'lng' => $r['lng'] !== null ? (float) $r['lng'] : null, 'accuracy_m' => $r['accuracy_m'] !== null ? (float) $r['accuracy_m'] : null, 'distance_m' => $r['distance_m'] !== null ? (float) $r['distance_m'] : null, 'within_radius' => (bool) $r['within_radius'], 'note' => $r['note']],
         };
     }
 

@@ -24,6 +24,7 @@ final class Permissions
         'epp'              => 'EPP',
         'capacitaciones'   => 'Capacitaciones',
         'reportes'         => 'Reportes',
+        'rondas'           => 'Rondas de guardias',
     ];
 
     public const ACTIONS = [
@@ -42,7 +43,7 @@ final class Permissions
     ];
 
     /** Módulos de seguridad e higiene (los que gestiona el responsable de SyH). */
-    public const SH_MODULES = ['observaciones', 'acciones', 'inspecciones', 'incidentes', 'permisos_trabajo', 'epp', 'capacitaciones', 'reportes'];
+    public const SH_MODULES = ['observaciones', 'acciones', 'inspecciones', 'incidentes', 'permisos_trabajo', 'epp', 'capacitaciones', 'reportes', 'rondas'];
 
     public const ADMIN_ROLE = 'admin_empresa';
     public const AUDITOR_ROLE = 'auditor';
@@ -120,7 +121,8 @@ final class Permissions
             'reportante' => [
                 'name'        => 'Reportante',
                 'description' => 'Operario o guardia: crea reportes y ve los propios.',
-                'permissions' => $grant(['observaciones', 'incidentes'], ['ver', 'crear'], 'propios'),
+                'permissions' => $grant(['observaciones', 'incidentes'], ['ver', 'crear'], 'propios')
+                    + $grant(['rondas'], ['ver', 'crear', 'cerrar'], 'propios'),
             ],
             self::AUDITOR_ROLE => [
                 'name'        => 'Auditor externo',

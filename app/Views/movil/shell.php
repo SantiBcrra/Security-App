@@ -128,6 +128,21 @@
         </template>
     </main>
 
+    <!-- Rondas -->
+    <main class="app-main" x-show="!detailUuid && tab === 'rondas'">
+        <template x-if="roundPointUuid">
+            <div>
+                <button class="btn btn-link px-0 mb-2" @click="go('rondas'); roundPointUuid=null">← Rondas</button>
+                <div class="card mb-3"><div class="card-body"><h2 class="h5" x-text="roundPoint?.name || 'Punto de ronda'"></h2><div class="text-body-secondary" x-text="roundPoint?.code"></div><div class="small mt-2" x-show="roundPoint" x-text="'Radio permitido: ' + roundPoint.radius_m + ' m'"></div></div></div>
+                <button class="btn btn-primary btn-lg w-100 mb-2" @click="scanRoundPoint()" :disabled="!roundPoint || !canPatrol">📍 Registrar este punto</button>
+                <button class="btn btn-outline-secondary w-100" x-show="activeRound" @click="finishRound()">Finalizar ronda</button>
+            </div>
+        </template>
+        <template x-if="!roundPointUuid">
+            <div><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h6 text-body-secondary m-0">Rondas</h2><button class="btn btn-outline-primary btn-sm" @click="openScanner()">Escanear QR</button></div><div class="alert alert-info small">Escaneá el QR de cada punto. Se guarda la hora y la ubicación GPS, incluso sin señal.</div><button class="btn btn-primary w-100 mb-3" x-show="!activeRound && canPatrol" @click="startRound()">Iniciar ronda libre</button><div class="small text-body-secondary" x-show="!patrolPoints.length">Sin puntos sincronizados todavía.</div><template x-for="p in patrolPoints" :key="p.uuid"><a class="obs-card" :href="'#/ronda/punto/' + p.uuid"><strong x-text="p.code + ' · ' + p.name"></strong><div class="small text-body-secondary" x-text="'Radio ' + p.radius_m + ' m'"></div></a></template></div>
+        </template>
+    </main>
+
     <!-- Reportar -->
     <main class="app-main" x-show="!detailUuid && tab === 'reportar'">
         <template x-if="!canCreate && meta"><div class="alert alert-secondary">Tu rol no puede cargar reportes.</div></template>
@@ -294,6 +309,7 @@
     <nav class="tabbar">
         <a :class="{ active: tab === 'reportar' && !detailUuid }" href="#/reportar"><span>➕</span>Reportar</a>
         <a :class="{ active: tab === 'reportes' && !detailUuid }" href="#/reportes"><span>📋</span>Reportes</a>
+        <a :class="{ active: tab === 'rondas' && !detailUuid }" href="#/rondas"><span>🚶</span>Rondas</a>
         <a :class="{ active: tab === 'avisos' && !detailUuid }" href="#/avisos"><span>🔔</span>Avisos<b class="tab-badge" x-show="unread" x-text="unread"></b></a>
         <a :class="{ active: tab === 'ajustes' && !detailUuid }" href="#/ajustes"><span>⚙️</span>Ajustes</a>
     </nav>

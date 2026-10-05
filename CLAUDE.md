@@ -142,6 +142,14 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   envía a suscripciones web (`push_subscriptions`, destino `web:{id}`) y a tokens Expo futuros.
 - Prueba de estrés: `php tools/sync-stress.php http://localhost/securityapp {empresa} {usuario} {clave} 500 10`.
 
+## Rondas de guardias (Etapa 9 adelantada)
+- Puntos de ronda en `patrol_points`, con QR público, coordenadas, radio permitido y marca de punto crítico.
+- Rutas y orden de puntos en `patrol_routes` / `patrol_route_points`; ejecuciones y escaneos en `patrol_rounds` / `patrol_scans`.
+- Panel `/panel/rondas` para alta de puntos, impresión de QR e historial. El QR apunta a `/ronda/punto/{uuid}` y abre la PWA.
+- Cada escaneo guarda hora del dispositivo, hora de recepción, GPS, precisión, distancia calculada y si quedó dentro del radio. No se duplica un punto dentro de la misma ronda.
+- La PWA guarda rondas y escaneos en IndexedDB y los envía con `round.start`, `round.scan` y `round.finish`; las operaciones son idempotentes por `op_id`.
+- El mapa operativo usa Leaflet/OpenStreetMap ya incluido; no se agrega dependencia de Google Maps.
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.

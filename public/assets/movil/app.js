@@ -58,6 +58,11 @@ document.addEventListener('alpine:init', () => {
     window.Alpine.data('movil', () => ({
         view: 'loading',
         tab: 'reportar',
+        roundPointUuid: null,
+        roundPoint: null,
+        activeRound: null,
+        patrolPoints: [],
+        patrolRounds: [],
         detailUuid: null,
         toast: null,
         meta: null,
@@ -176,8 +181,12 @@ document.addEventListener('alpine:init', () => {
                 this.openDetail(id);
                 return;
             }
+            if (section === 'ronda' && id === 'punto') {
+                this.roundPointUuid = location.hash.split('/')[2] || null;
+                this.tab = 'rondas'; this.loadRoundPoint(); return;
+            }
             this.detailUuid = null;
-            this.tab = ['reportar', 'reportes', 'avisos', 'ajustes'].includes(section) ? section : 'reportar';
+            this.tab = ['reportar', 'reportes', 'rondas', 'avisos', 'ajustes'].includes(section) ? section : 'reportar';
             if (this.tab === 'avisos') this.loadNotifications();
             if (this.tab === 'reportar') this.ensureGps();
             if (this.tab === 'ajustes') this.loadFailed();
@@ -194,6 +203,8 @@ document.addEventListener('alpine:init', () => {
             this.catalogs.risks = sorted(items.filter((i) => i.catalog === 'tipo_riesgo'));
             this.sectors = (await db.all('sectors')).sort((a, b) => a.label.localeCompare(b.label));
             this.equipment = (await db.all('equipment')).sort((a, b) => a.code.localeCompare(b.code));
+            this.patrolPoints = await db.all('patrol_points');
+            this.patrolRounds = (await db.all('patrol_rounds')).sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
             this.observations = (await db.all('observations')).sort((a, b) => (b.created_at_device || '').localeCompare(a.created_at_device || ''));
             this.meta = await db.getKv('meta');
             Object.assign(this.sync, await pendingCounts(), { lastSync: await db.getKv('lastSync') });
@@ -216,6 +227,7 @@ document.addEventListener('alpine:init', () => {
             return (q ? this.sectors.filter((s) => s.label.toLowerCase().includes(q)) : this.sectors).slice(0, 40);
         },
         get canCreate() { return !!this.meta?.permisos?.observaciones?.acciones?.includes('crear'); },
+        get canPatrol() { return !!this.meta?.permisos?.rondas?.acciones?.includes('crear'); },
         get myReports() { return this.observations.filter((o) => o.mine || o.local); },
         get otherReports() { return this.observations.filter((o) => !o.mine && !o.local); },
         fmtDate(iso) {
@@ -273,6 +285,8 @@ document.addEventListener('alpine:init', () => {
                     if (!this.scanner.open) { stream.getTracks().forEach((t) => t.stop()); return; }
                     try {
                         const codes = await detector.detect(video);
+                        const patrol = codes.map((c) => c.rawValue.match(/\/ronda\/punto\/([0-9a-f-]{36})/i)).find(Boolean);
+                        if (patrol) { this.scanner.open = false; stream.getTracks().forEach((t) => t.stop()); location.hash = '#/ronda/punto/' + patrol[1].toLowerCase(); return; }
                         const m = codes.map((c) => c.rawValue.match(/\/q\/([0-9a-f-]{36})/i)).find(Boolean);
                         if (m) {
                             const eq = this.equipment.find((e) => e.uuid === m[1].toLowerCase());
@@ -295,6 +309,41 @@ document.addEventListener('alpine:init', () => {
             }
         },
         closeScanner() { this.scanner.open = false; },
+
+        async loadRoundPoint() {
+            this.roundPoint = this.patrolPoints.find((p) => p.uuid === this.roundPointUuid) || null;
+            if (!this.roundPoint) this.flash('Punto no sincronizado todavía. Conectate y sincronizá.');
+        },
+        async startRound() {
+            const uuid = crypto.randomUUID();
+            const gps = await this.currentPosition();
+            this.activeRound = { uuid, status: 'en_curso', started_at: new Date().toISOString() };
+            await db.put('patrol_rounds', this.activeRound);
+            await enqueue('round.start', { uuid, lat: gps?.lat, lng: gps?.lng });
+            this.flash('Ronda iniciada');
+        },
+        async scanRoundPoint() {
+            if (!this.roundPoint) return;
+            if (!this.activeRound) await this.startRound();
+            const gps = await this.currentPosition();
+            const scan = { uuid: crypto.randomUUID(), round_uuid: this.activeRound.uuid, point_uuid: this.roundPoint.uuid,
+                lat: gps?.lat, lng: gps?.lng, accuracy_m: gps?.acc, scanned_at_device: new Date().toISOString() };
+            await db.put('patrol_scans', { ...scan, point_id: this.roundPoint.uuid, local: true });
+            await enqueue('round.scan', scan);
+            this.flash(gps ? 'Punto registrado con GPS' : 'Punto registrado sin GPS');
+        },
+        async finishRound() {
+            if (!this.activeRound) return;
+            await enqueue('round.finish', { round_uuid: this.activeRound.uuid });
+            await db.put('patrol_rounds', { ...this.activeRound, status: 'completa' });
+            this.activeRound = null; this.flash('Ronda finalizada');
+        },
+        currentPosition() {
+            return new Promise((resolve) => {
+                if (!navigator.geolocation) return resolve(null);
+                navigator.geolocation.getCurrentPosition((p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) }), () => resolve(null), { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 });
+            });
+        },
 
         formErrors() {
             const errs = [];

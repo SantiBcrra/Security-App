@@ -28,6 +28,7 @@ use App\Controllers\Web\Panel\SettingsController;
 use App\Controllers\Web\Panel\ProfileController;
 use App\Controllers\Web\Panel\QrController;
 use App\Controllers\Web\Panel\RolesController;
+use App\Controllers\Web\Panel\RoundsController;
 use App\Controllers\Web\Panel\UsersController;
 use App\Core\Router;
 use App\Middleware\ApiRateLimit;
@@ -123,6 +124,11 @@ return static function (Router $r): void {
         $r->post('/observaciones/{uuid}/correccion', [ObservationsController::class, 'correct'], [$can('observaciones', 'editar')]);
         $r->post('/observaciones/{uuid}/accion/{action}', [ObservationsController::class, 'transition'], [$can('observaciones', 'ver')]);
 
+        $r->get('/rondas', [RoundsController::class, 'index'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/puntos/nuevo', [RoundsController::class, 'pointForm'], [$can('rondas', 'crear')]);
+        $r->post('/rondas/puntos', [RoundsController::class, 'pointStore'], [$can('rondas', 'crear')]);
+        $r->get('/rondas/puntos/{uuid}/qr', [RoundsController::class, 'qr'], [$can('rondas', 'ver')]);
+
         // Notificaciones (campanita) y "Recibido" de alertas críticas
         $r->get('/notificaciones', [NotificationsController::class, 'index']);
         $r->get('/notificaciones/recientes', [NotificationsController::class, 'recent']);
@@ -202,6 +208,7 @@ return static function (Router $r): void {
 
     // QR de equipos: lo que lee la cámara del celular (con sesión abre la ficha; si no, login y vuelve)
     $r->get('/q/{uuid}', [QrController::class, 'resolve']);
+    $r->get('/ronda/punto/{uuid}', [QrController::class, 'patrolPoint']);
 
     // Archivos por link firmado temporal (sin sesión, la firma es el permiso)
     $r->get('/archivos/logo/{uuid}', [TenantsController::class, 'logo']);

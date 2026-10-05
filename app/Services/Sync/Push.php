@@ -6,6 +6,7 @@ namespace App\Services\Sync;
 use App\Core\DB;
 use App\Core\Uuid;
 use App\Models\Observations;
+use App\Models\Patrols;
 use App\Services\ObservationInput;
 use App\Services\ObservationService;
 use App\Services\UserAuth;
@@ -18,7 +19,7 @@ use App\Services\UserAuth;
 final class Push
 {
     public const MAX_OPS = 50;
-    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition'];
+    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
     public static function run(array $operations): array
@@ -58,6 +59,9 @@ final class Push
                 'observation.create'     => self::create($data),
                 'observation.comment'    => self::comment($data),
                 'observation.transition' => self::transition($data),
+                'round.start'            => self::roundStart($data),
+                'round.scan'             => self::roundScan($data),
+                'round.finish'           => self::roundFinish($data),
                 default                  => self::error('Tipo de operación desconocido: ' . $type),
             };
         } catch (\Throwable $e) {
@@ -115,6 +119,26 @@ final class Push
         }
         $fresh = Observations::findById((int) $obs['id']);
         return ['status' => 'ok', 'data' => ['uuid' => $fresh['uuid'], 'status' => $fresh['status']]];
+    }
+
+    private static function roundStart(array $data): array
+    {
+        if (!UserAuth::can('rondas', 'crear')) return self::error('Tu rol no puede iniciar rondas.');
+        $r = Patrols::start(!empty($data['route_uuid']) ? (string) $data['route_uuid'] : null, isset($data['lat']) ? (float) $data['lat'] : null, isset($data['lng']) ? (float) $data['lng'] : null, (string) ($data['uuid'] ?? ''));
+        return ['status' => 'ok', 'data' => ['uuid' => $r['uuid'], 'status' => $r['status']]];
+    }
+
+    private static function roundScan(array $data): array
+    {
+        if (!UserAuth::can('rondas', 'crear')) return self::error('Tu rol no puede registrar rondas.');
+        return ['status' => 'ok', 'data' => Patrols::scan($data)];
+    }
+
+    private static function roundFinish(array $data): array
+    {
+        if (!UserAuth::can('rondas', 'cerrar')) return self::error('Tu rol no puede cerrar rondas.');
+        $r = Patrols::finish((string) ($data['round_uuid'] ?? ''));
+        return ['status' => 'ok', 'data' => ['uuid' => $r['uuid'], 'status' => $r['status']]];
     }
 
     private static function error(string $message): array

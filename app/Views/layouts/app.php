@@ -7,6 +7,7 @@ $me = App\Services\UserAuth::user();
 $menu = array_filter([
     ['/panel', 'Inicio', true],
     ['/panel/observaciones', 'Observaciones', App\Services\UserAuth::can('observaciones', 'ver')],
+    ['/panel/rondas', 'Rondas', App\Services\UserAuth::can('rondas', 'ver')],
     ['/panel/datos/empleados', 'Datos maestros', App\Services\UserAuth::can('datos_maestros', 'ver')],
     ['/panel/usuarios', 'Usuarios', App\Services\UserAuth::can('usuarios', 'ver')],
     ['/panel/roles', 'Roles', App\Services\UserAuth::can('roles', 'ver')],

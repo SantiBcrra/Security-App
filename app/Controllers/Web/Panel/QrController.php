@@ -33,4 +33,9 @@ final class QrController
         $items = array_map(fn ($r) => ['code' => $r['code'], 'name' => $r['name'], 'url' => absolute_url('/q/' . $r['uuid'])], $rows);
         return Response::html(View::render('panel/master/labels', ['title' => 'Etiquetas QR', 'items' => $items], null));
     }
+
+    public function patrolPoint(Request $request, string $uuid): Response
+    {
+        return Response::redirect('/movil#/ronda/punto/' . rawurlencode($uuid));
+    }
 }
