@@ -23,8 +23,26 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   el aislamiento lo da la conexión (`DB::master()` / `DB::tenant()`). Se esperan 2–3 empresas.
 - **Sin dependencias externas por ahora**: sin Composer ni librerías. JWT propio (HS256 con
   `hash_hmac`) para la app móvil. Tests con runner propio (`tests/run.php`).
-- `/install` y `/cron` viven dentro de `/public` (si no, con docroot en `/public` no se alcanzan).
+- `/install` lo atiende el front controller; el diagnóstico vive en `public/check.php` y se
+  publica en `/install/check.php` (regla en `public/.htaccess`). No crear carpetas reales en
+  `public/` con el mismo nombre que una ruta (Apache redirige agregando `/public/`).
 - Migraciones en dos carpetas: `database/migrations/master` y `database/migrations/tenant`.
+- Instalado = existe `storage/installed.lock`. Sin él, todo redirige a `/install`
+  (middleware `RequireInstalled`). Con él, `/install` y `/install/check.php` dan 403.
+- Super-admins de la plataforma (`platform_admins`, base maestra) son distintos de los usuarios
+  de empresas (Etapa 3). Login con bloqueo: 5 fallos por email+IP o 20 por IP en 15 min.
+
+## Migraciones
+- Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
+  Nunca editar una migración ya aplicada: se crea otra.
+- `.sql` con sentencias separadas por `;` (sin `DELIMITER`: nada de triggers ni procedures).
+  `.php` que devuelve `function (PDO $db): void` para migraciones de datos.
+- Siempre idempotentes (`CREATE TABLE IF NOT EXISTS`, etc.): MySQL no tiene DDL transaccional;
+  si una falla se corta ahí y al corregirla se reintenta desde ese archivo.
+- Tablas: `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, fechas `DATETIME`
+  en UTC (`UTC_TIMESTAMP()`), índices con nombre `idx_tabla_campos` / `uq_tabla_campos`.
+- Se aplican desde el panel: `/admin/migraciones` → "Actualizar base de datos"
+  (`Migrator::runAll()`, con lock `GET_LOCK` por base).
 
 ## Convenciones de código
 - PHP **8.2** como mínimo común (nada de 8.3/8.4). `declare(strict_types=1)`, namespace `App\`
@@ -43,9 +61,13 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 
 ## Estructura
 ```
-public/            docroot (index.php front controller, assets/, install/check.php)
-app/Core/          App, Router, Request, Response, View, DB, Config, ErrorHandler, Logger, Session, Storage, helpers
-app/Controllers/   Web/ y Api/
+public/            docroot (index.php front controller, assets/, check.php)
+app/Core/          App, Router, Request, Response, View, DB, Config, ErrorHandler, Logger, Session,
+                   Storage, Migrator, Csrf, Flash, Validator, Uuid, EnvCheck, helpers
+app/Middleware/    RequireInstalled, VerifyCsrf (globales), RequireSuperAdmin
+app/Controllers/   Web/ (Install, Admin/*) y Api/
+app/Models/        acceso a datos (único lugar con SQL)
+app/Services/      lógica (AdminAuth)
 app/Views/         layouts/, errors/
 app/routes.php     declaración de rutas
 config/            config.php (git) + config.local.php (NO git, lo genera el instalador)
@@ -58,6 +80,12 @@ tests/             run.php + *Test.php
 ```bash
 /Applications/XAMPP/xamppfiles/bin/php tests/run.php
 ```
+- Los tests de migraciones crean y borran la base `securityapp_test` (root sin contraseña en
+  127.0.0.1; se saltean si no hay MySQL). Los tests usan un storage temporal, no el real.
+- En XAMPP Apache corre como `daemon`: `storage/` y `config/` necesitan permiso de escritura
+  para todos (`chmod -R a+rwX storage && chmod a+rwx config`). En el hosting no hace falta.
+- Base maestra local: `securityapp`. Reinstalar desde cero: borrar `storage/installed.lock` y
+  `config/config.local.php`, vaciar la base y abrir `/install`.
 - Inicio: http://localhost/securityapp/
 - Diagnóstico: http://localhost/securityapp/install/check.php
 - Logs: `storage/logs/app-YYYY-MM-DD.log`

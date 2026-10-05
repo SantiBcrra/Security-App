@@ -39,3 +39,13 @@ function fecha(?string $utc, string $format = 'd/m/Y H:i', ?string $timezone = n
     $tz = new DateTimeZone($timezone ?? (string) Config::get('app.timezone', 'UTC'));
     return (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->setTimezone($tz)->format($format);
 }
+
+function csrf_field(): string
+{
+    return \App\Core\Csrf::field();
+}
+
+function csrf_token(): string
+{
+    return \App\Core\Csrf::token();
+}

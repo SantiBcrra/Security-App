@@ -13,6 +13,9 @@ DirectoryIndex index.php
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
+    # Diagnóstico standalone: se publica en /install/check.php (el archivo vive en public/check.php)
+    RewriteRule ^install/check\.php$ check.php [L]
+
     # Archivos y carpetas reales se sirven directo; el resto va a index.php
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d

@@ -83,6 +83,11 @@ final class Request
         return $this->headers[strtolower($name)] ?? null;
     }
 
+    public function ip(): string
+    {
+        return (string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+    }
+
     public function bearerToken(): ?string
     {
         $auth = $this->header('authorization');

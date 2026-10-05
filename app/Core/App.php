@@ -36,6 +36,12 @@ final class App
         $router->dispatch($request)->send();
     }
 
+    /** El instalador crea este archivo al terminar; sin él, todo redirige a /install. */
+    public static function isInstalled(): bool
+    {
+        return is_file(Storage::path('installed.lock'));
+    }
+
     /**
      * Prefijo de URL donde está instalada la app ('' en un subdominio, '/securityapp' en
      * una subcarpeta). Si el docroot es la raíz del proyecto, el .htaccess reescribe a

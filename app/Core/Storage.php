@@ -12,9 +12,18 @@ final class Storage
     private const DIRS = ['logs', 'sessions', 'cache', 'tenants'];
     private const DENY = "Require all denied\n<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n";
 
+    private static ?string $root = null;
+
     public static function root(): string
     {
-        return BASE_PATH . '/storage';
+        return self::$root ?? BASE_PATH . '/storage';
+    }
+
+    /** Solo para tests: usar otra carpeta (temporal) en lugar de /storage. */
+    public static function useRoot(string $root): void
+    {
+        self::$root = $root;
+        self::ensure();
     }
 
     public static function path(string $relative = ''): string

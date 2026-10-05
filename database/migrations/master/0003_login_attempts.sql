@@ -1,0 +1,12 @@
+-- Intentos de login para bloquear fuerza bruta.
+-- scope: 'platform' (super-admin) o el uuid de la empresa (usuarios, Etapa 3).
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    scope VARCHAR(64) NOT NULL,
+    email VARCHAR(191) NOT NULL,
+    ip VARCHAR(45) NOT NULL,
+    success TINYINT(1) NOT NULL,
+    created_at DATETIME NOT NULL,
+    KEY idx_login_attempts_lookup (scope, email, ip, created_at),
+    KEY idx_login_attempts_ip (ip, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

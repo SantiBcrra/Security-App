@@ -8,7 +8,7 @@
  */
 declare(strict_types=1);
 
-$basePath = dirname(__DIR__, 2);
+$basePath = dirname(__DIR__);
 $minPhp = '8.2.0';
 
 header('X-Content-Type-Options: nosniff');

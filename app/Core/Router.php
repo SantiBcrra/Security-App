@@ -36,6 +36,12 @@ final class Router
         $this->add(['DELETE'], $path, $handler, $middlewares);
     }
 
+    /** Middleware para todas las rutas que se declaren después (llamar antes de definir rutas). */
+    public function middleware(callable ...$middlewares): void
+    {
+        $this->middlewares = array_merge($this->middlewares, $middlewares);
+    }
+
     public function group(string $prefix, array $middlewares, callable $routes): void
     {
         [$prevPrefix, $prevMw] = [$this->prefix, $this->middlewares];

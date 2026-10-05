@@ -9,8 +9,15 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/app/bootstrap.php';
 restore_exception_handler();
+// Los tests no escriben en el storage real (logs, locks): usan una carpeta temporal.
+App\Core\Storage::useRoot(sys_get_temp_dir() . '/secapp_test_storage');
 
 final class AssertionFailed extends Exception
+{
+}
+
+/** Lanzar desde un test para saltearlo (ej: no hay MySQL disponible). */
+final class SkipTest extends Exception
 {
 }
 
@@ -31,6 +38,7 @@ function assert_true(bool $condition, string $message = 'la condición no se cum
 
 $passed = 0;
 $failed = 0;
+$skipped = 0;
 foreach (glob(__DIR__ . '/*Test.php') as $file) {
     $tests = require $file;
     echo basename($file) . PHP_EOL;
@@ -39,6 +47,9 @@ foreach (glob(__DIR__ . '/*Test.php') as $file) {
             $test();
             $passed++;
             echo "  ✓ {$name}" . PHP_EOL;
+        } catch (SkipTest $e) {
+            $skipped++;
+            echo "  - {$name} (salteado: {$e->getMessage()})" . PHP_EOL;
         } catch (Throwable $e) {
             $failed++;
             echo "  ✗ {$name}" . PHP_EOL . '      ' . $e->getMessage() . PHP_EOL;
@@ -46,5 +57,5 @@ foreach (glob(__DIR__ . '/*Test.php') as $file) {
     }
 }
 
-echo PHP_EOL . "{$passed} OK, {$failed} fallidos" . PHP_EOL;
+echo PHP_EOL . "{$passed} OK, {$failed} fallidos" . ($skipped ? ", {$skipped} salteados" : '') . PHP_EOL;
 exit($failed > 0 ? 1 : 0);
