@@ -66,8 +66,8 @@ final class Response
             'Referrer-Policy'        => 'strict-origin-when-cross-origin',
         ];
         if (str_starts_with($contentType, 'text/html')) {
-            // Solo recursos propios. Alpine.js (build estándar) necesita 'unsafe-eval'.
-            $headers['Content-Security-Policy'] = "default-src 'self'; img-src 'self' data: blob:; "
+            // Solo recursos propios (+ mapas de OpenStreetMap). Alpine.js (build estándar) necesita 'unsafe-eval'.
+            $headers['Content-Security-Policy'] = "default-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; "
                 . "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
                 . "frame-ancestors 'self'; base-uri 'self'; form-action 'self'";
         }

@@ -88,6 +88,25 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   reanudable). Un importador por entidad en `app/Services/Import/`. Empleados por DNI, equipos por
   código; en una actualización no se borran datos que el archivo trae vacíos.
 
+## Observaciones (Etapa 6)
+- Tablas `observations`, `observation_events` (línea de tiempo, solo inserción),
+  `observation_attachments`, `observation_people`, `sequences` (número OBS-000001 por empresa con
+  `SELECT … FOR UPDATE`; `Sequences::next()` exige transacción abierta).
+- **Evidencia inmutable**: `original_data` (JSON del reporte tal como llegó) + `original_hash`
+  (SHA-256) nunca se actualizan (`Observations::update()` los descarta). Las columnas de
+  clasificación son el valor vigente; una corrección = evento `correction` con antes/después.
+  Fotos: el archivo recibido no se modifica (sha256 + EXIF guardados); miniatura aparte.
+- Flujo en `ObservationWorkflow` (abierta → en_analisis → accion_asignada → cerrada; descartada;
+  reabrir). Toda transición pasa por `ObservationService::transition()` (permiso + estado bloqueado).
+- Alcance: `ObservationService::scope()` / `canView()` (propios, sectores + lo propio, todo).
+- Anónimo (setting `observaciones.anonimo_habilitado`): sin autor, sin auditoría que lo vincule.
+- Riesgo inminente: evento `imminent_alert` + `ObservationAlerts::imminent()` (Etapa 7 envía avisos).
+- Mapas: Leaflet local (`public/assets/vendor/leaflet`) + tiles de OpenStreetMap (permitidos en la CSP).
+- "PDF" = página imprimible (`/imprimir`), sin librerías.
+- Datos demo SOLO en local: `php tools/seed-demo.php {empresa} http://localhost/securityapp`
+  (aplica migraciones pendientes, solo agrega, links de activación en `storage/demo-links.txt`).
+  `tools/` está bloqueado por web y excluido del deploy.
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.

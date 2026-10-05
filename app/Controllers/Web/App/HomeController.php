@@ -10,6 +10,8 @@ use App\Core\SignedUrl;
 use App\Core\Tenant;
 use App\Core\View;
 use App\Models\TenantAudit;
+use App\Models\Observations;
+use App\Services\ObservationService;
 use App\Services\UserAuth;
 
 /** Inicio del área de la empresa. Acá se montan los módulos desde la Etapa 3. */
@@ -20,8 +22,22 @@ final class HomeController
         $tenant = Tenant::current();
         // Datos técnicos y auditoría: solo para quien administra usuarios (o soporte).
         $isManager = UserAuth::can('usuarios', 'ver');
+        $obs = null;
+        if (UserAuth::can('observaciones', 'ver')) {
+            $scope = ObservationService::scope();
+            $pending = ['status' => ['abierta', 'en_analisis', 'accion_asignada']];
+            $me = UserAuth::user();
+            $obs = [
+                'pending'   => Observations::count($pending, $scope),
+                'imminent'  => Observations::count($pending + ['imminent' => 1], $scope),
+                'assigned'  => $me ? Observations::count($pending + ['assigned_user_id' => (int) $me['id']], $scope) : 0,
+                'mine'      => $me ? Observations::count(['reporter_user_id' => (int) $me['id']], $scope) : 0,
+                'latest'    => Observations::search([], $scope, 6),
+            ];
+        }
         return Response::html(View::render('app/home', [
             'title'   => 'Inicio',
+            'obs'     => $obs,
             'tenant'  => $tenant,
             'dbName'  => UserAuth::user() === null ? (string) DB::tenant()->query('SELECT DATABASE()')->fetchColumn() : null,
             'events'  => $isManager ? TenantAudit::latest(DB::tenant(), 10) : null,

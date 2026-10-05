@@ -13,6 +13,8 @@ use App\Controllers\Web\HomeController;
 use App\Controllers\Web\InstallController;
 use App\Controllers\Web\Panel\ImportController;
 use App\Controllers\Web\Panel\MasterDataController;
+use App\Controllers\Web\Panel\ObservationsController;
+use App\Controllers\Web\Panel\SettingsController;
 use App\Controllers\Web\Panel\ProfileController;
 use App\Controllers\Web\Panel\QrController;
 use App\Controllers\Web\Panel\RolesController;
@@ -91,6 +93,21 @@ return static function (Router $r): void {
         $r->post('/usuarios/{uuid}/estado', [UsersController::class, 'toggle'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/invitacion', [UsersController::class, 'invite'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/dispositivos/{device}/revocar', [UsersController::class, 'revokeDevice'], [$can('usuarios', 'editar')]);
+
+        // Observaciones (actos / condiciones inseguras). Alcance por rol en ObservationService::scope().
+        $r->get('/observaciones', [ObservationsController::class, 'index'], [$can('observaciones', 'ver')]);
+        $r->get('/observaciones/nueva', [ObservationsController::class, 'create'], [$can('observaciones', 'crear')]);
+        $r->post('/observaciones', [ObservationsController::class, 'store'], [$can('observaciones', 'crear')]);
+        $r->get('/observaciones/{uuid}', [ObservationsController::class, 'show'], [$can('observaciones', 'ver')]);
+        $r->get('/observaciones/{uuid}/imprimir', [ObservationsController::class, 'printable'], [$can('observaciones', 'ver')]);
+        $r->get('/observaciones/{uuid}/fotos/{attachment}', [ObservationsController::class, 'photo'], [$can('observaciones', 'ver')]);
+        $r->post('/observaciones/{uuid}/fotos', [ObservationsController::class, 'addPhotos'], [$can('observaciones', 'crear')]);
+        $r->post('/observaciones/{uuid}/comentario', [ObservationsController::class, 'comment'], [$can('observaciones', 'crear')]);
+        $r->post('/observaciones/{uuid}/correccion', [ObservationsController::class, 'correct'], [$can('observaciones', 'editar')]);
+        $r->post('/observaciones/{uuid}/accion/{action}', [ObservationsController::class, 'transition'], [$can('observaciones', 'ver')]);
+
+        $r->get('/configuracion', [SettingsController::class, 'show'], [$can('configuracion', 'ver')]);
+        $r->post('/configuracion', [SettingsController::class, 'update'], [$can('configuracion', 'editar')]);
 
         // Datos maestros (plantas, sectores, puestos, empleados, contratistas, equipos, catálogos).
         // Rutas fijas antes que las genéricas /datos/{resource}/...

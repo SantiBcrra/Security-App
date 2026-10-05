@@ -6,9 +6,11 @@ $support = App\Services\Impersonation::active();
 $me = App\Services\UserAuth::user();
 $menu = array_filter([
     ['/panel', 'Inicio', true],
+    ['/panel/observaciones', 'Observaciones', App\Services\UserAuth::can('observaciones', 'ver')],
     ['/panel/datos/empleados', 'Datos maestros', App\Services\UserAuth::can('datos_maestros', 'ver')],
     ['/panel/usuarios', 'Usuarios', App\Services\UserAuth::can('usuarios', 'ver')],
     ['/panel/roles', 'Roles', App\Services\UserAuth::can('roles', 'ver')],
+    ['/panel/configuracion', 'Configuración', App\Services\UserAuth::can('configuracion', 'ver')],
 ], fn ($item) => $item[2]);
 $currentPath = '/' . trim((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/');
 ?>
@@ -51,7 +53,7 @@ $currentPath = '/' . trim((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_
             </ul>
             <?php if ($me): ?>
                 <div class="d-flex align-items-center gap-2">
-                    <a class="nav-link small" href="<?= e(url('/panel/perfil')) ?>"><?= e($me['name']) ?> · <span class="text-body-secondary"><?= e($me['role_name']) ?></span></a>
+                    <a class="nav-link small text-nowrap" href="<?= e(url('/panel/perfil')) ?>" title="<?= e($me['role_name']) ?> · Mi perfil"><?= e($me['name']) ?></a>
                     <form method="post" action="<?= e(url('/panel/salir')) ?>">
                         <?= csrf_field() ?>
                         <button class="btn btn-outline-secondary btn-sm">Salir</button>

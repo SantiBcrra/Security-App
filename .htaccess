@@ -13,7 +13,7 @@ DirectoryIndex index.php
     RewriteEngine On
 
     # Carpetas internas: nunca accesibles por web (además tienen su propio .htaccess deny)
-    RewriteRule ^(app|config|database|storage|tests|vendor)(/|$) - [F,L]
+    RewriteRule ^(app|config|database|storage|tests|tools|vendor)(/|$) - [F,L]
 
     # Pasar el header Authorization a PHP (algunos Apache lo eliminan)
     RewriteCond %{HTTP:Authorization} .
