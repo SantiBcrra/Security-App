@@ -68,6 +68,26 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   se guarda su SHA-256). Reutilizar un refresh viejo revoca el dispositivo. Middleware
   `RequireApiUser`.
 
+## Datos maestros (Etapa 4)
+- Plantas (`sites`), sectores (`sectors`, jerarquía planta > nave > sector, máx. 3 niveles,
+  `path` materializado `/3/7/12/`), puestos, contratistas, empleados (propios o de contratista),
+  equipos y catálogos (`catalog_items`, una tabla con `catalog` = tipo_riesgo | categoria |
+  severidad | causa | tipo_equipo; definidos en `app/Services/Catalogs.php`).
+- Todas las tablas maestras: `uuid`, `is_active`, `updated_at`, `deleted_at` (para la sync).
+  Nada se borra: se desactiva.
+- CRUD genérico: cada entidad es un `App\Resources\*Resource` (campos, columnas, validación);
+  lo atiende `MasterDataController` en `/panel/datos/{recurso}`. Modelos sobre `Models\Repository`.
+  En formularios las referencias viajan como UUID, nunca como id interno.
+- Alcance por sector: `SectorScope::sectorIds($modulo)` → null (todo) o ids permitidos
+  (sectores del usuario + descendientes). Asignación en el formulario de usuario (`user_sectors`).
+- Plantillas de rubro: `database/seeds/templates/{clave}.php`, idempotentes (`IndustryTemplates`).
+- QR de equipos: `/q/{uuid}` (con sesión → ficha; sin sesión → login y vuelve). Etiquetas A4 en
+  `/panel/datos/equipos/etiquetas`. QR generado en el navegador con `qrcode.min.js` local.
+- Importación: `Core\Spreadsheet` (CSV y XLSX propios, sin librerías; `.xls` no) +
+  `Services\Import\Importer` (subir → mapeo por sinónimos → vista previa → lotes de 100 por AJAX,
+  reanudable). Un importador por entidad en `app/Services/Import/`. Empleados por DNI, equipos por
+  código; en una actualización no se borran datos que el archivo trae vacíos.
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.
@@ -125,7 +145,8 @@ tests/             run.php + *Test.php
 - En XAMPP Apache corre como `daemon`: `storage/` y `config/` necesitan permiso de escritura
   para todos (`chmod -R a+rwX storage && chmod a+rwx config`). En el hosting no hace falta.
 - Archivos/carpetas que crea Apache en `storage/` quedan a nombre de `daemon`: para borrarlos en
-  local hace falta un script PHP servido por Apache (o `sudo`).
+  local hace falta un script PHP servido por Apache (o `sudo`). Al limpiar pruebas, borrar SOLO
+  la carpeta del uuid de prueba, nunca todo `storage/tenants/*` (ahí están las empresas reales).
 - Base maestra local: `securityapp`. Reinstalar desde cero: borrar `storage/installed.lock` y
   `config/config.local.php`, vaciar la base y abrir `/install`.
 - Inicio: http://localhost/securityapp/
