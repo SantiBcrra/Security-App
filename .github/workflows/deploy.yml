@@ -1,0 +1,48 @@
+# Deploy al hosting por FTPS: sube solo los archivos que cambiaron.
+#
+# Antes de usarlo, cargar en GitHub → Settings → Secrets and variables → Actions:
+#   FTP_SERVER    ej: ftp.tudominio.com
+#   FTP_USERNAME  cuenta FTP dedicada, limitada a la carpeta de la app
+#   FTP_PASSWORD
+#   FTP_DIR       carpeta destino en el servidor, terminada en "/" (ej: /public_html/seguridad/)
+#
+# Por ahora se dispara SOLO a mano (Actions → Deploy → Run workflow).
+# Para deploy automático en cada push a main, descomentar el bloque "push".
+name: Deploy
+
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tests
+        run: php tests/run.php
+
+      - name: Subir por FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_DIR }}
+          protocol: ftps
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .github/**
+            tests/**
+            storage/**
+            config/config.local.php
+            PLAN.md
+            CLAUDE.md
+            **/.DS_Store

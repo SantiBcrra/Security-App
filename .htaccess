@@ -1,0 +1,25 @@
+# Security App — .htaccess de la RAÍZ del proyecto.
+# Se usa solo si el document root del hosting NO puede apuntar a /public:
+# manda todo a public/ y bloquea las carpetas internas.
+Options -Indexes
+DirectoryIndex index.php
+
+# Dotfiles (.git, .env, estado del deploy FTP) y documentación interna
+<FilesMatch "^\.|\.(md|sql|log|bak|lock|yml|yaml)$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Carpetas internas: nunca accesibles por web (además tienen su propio .htaccess deny)
+    RewriteRule ^(app|config|database|storage|tests|vendor)(/|$) - [F,L]
+
+    # Pasar el header Authorization a PHP (algunos Apache lo eliminan)
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Todo lo demás va a public/
+    RewriteCond %{REQUEST_URI} !/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>

@@ -1,0 +1,15 @@
+# Credenciales del entorno (las genera el instalador)
+/config/config.local.php
+
+# Datos y archivos generados en runtime (se mantienen solo .htaccess y .gitkeep)
+/storage/**
+!/storage/.htaccess
+!/storage/*/
+!/storage/*/.gitkeep
+
+# OS / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
