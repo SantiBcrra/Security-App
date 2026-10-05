@@ -22,6 +22,7 @@ $feedback = fn (string $f) => isset($errors[$f]) ? '<div class="invalid-feedback
         Suspendida el <?= e(fecha($tenant['suspended_at'], 'd/m/Y H:i')) ?>. Motivo: <?= e($tenant['status_reason']) ?>
     </div>
 <?php endif; ?>
+<?php require BASE_PATH . '/app/Views/partials/invitation.php'; ?>
 <?php if ($dbError): ?>
     <div class="alert alert-danger">No se puede conectar a la base de esta empresa: <?= e($dbError) ?></div>
 <?php endif; ?>
@@ -86,6 +87,31 @@ $feedback = fn (string $f) => isset($errors[$f]) ? '<div class="invalid-feedback
                 <div class="form-text mb-2">PNG, JPG o WebP, hasta 1 MB.</div>
                 <button class="btn btn-outline-primary btn-sm">Subir logo</button>
             </form>
+        </div>
+
+        <div class="card shadow-sm mb-3">
+            <div class="card-header"><strong>Administradores de la empresa</strong></div>
+            <?php if ($admins === null): ?>
+                <p class="small text-body-secondary p-3 mb-0">La base de la empresa tiene actualizaciones pendientes: andá a <a href="<?= e(url('/admin/migraciones')) ?>">Base de datos</a>.</p>
+            <?php else: ?>
+                <?php if ($admins): ?>
+                    <ul class="list-group list-group-flush small">
+                        <?php foreach ($admins as $a): ?>
+                            <li class="list-group-item d-flex justify-content-between">
+                                <span><?= e($a['name']) ?><br><span class="text-body-secondary"><?= e($a['email']) ?></span></span>
+                                <span><?= !$a['is_active'] ? 'desactivado' : ($a['activated'] ? 'activo' : 'sin activar') ?></span>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+                <form class="card-body" method="post" action="<?= e(url('/admin/empresas/' . $tenant['uuid'] . '/administrador')) ?>">
+                    <?= csrf_field() ?>
+                    <p class="small text-body-secondary"><?= $admins ? 'Agregar otro administrador:' : 'La empresa todavía no tiene administrador. Crealo y compartile el link de activación: elige su contraseña él mismo.' ?></p>
+                    <input class="form-control form-control-sm mb-2" name="name" placeholder="Nombre y apellido" required maxlength="120">
+                    <input class="form-control form-control-sm mb-2" type="email" name="email" placeholder="Email" required maxlength="191">
+                    <button class="btn btn-outline-primary btn-sm" <?= $isSuspended ? 'disabled' : '' ?>>Crear administrador</button>
+                </form>
+            <?php endif; ?>
         </div>
 
         <div class="card shadow-sm mb-3">

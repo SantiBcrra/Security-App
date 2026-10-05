@@ -49,6 +49,25 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Archivos de empresa: `TenantFiles` (storage/tenants/{uuid}/…, MIME real con finfo, nombre UUID).
   Nunca se sirven directo: controlador con permisos o `SignedUrl::make()` (link temporal).
 
+## Usuarios, roles y permisos (Etapa 3)
+- **Usuarios y roles viven en la base de cada empresa** (como `system_users`/`roles` del ERP).
+  La maestra solo tiene empresas y super-admins. Una persona en dos empresas = dos cuentas.
+- Login web: `/login` (empresa + email o DNI + contraseña), `/login/{slug}`; la última empresa
+  se recuerda en una cookie. 2FA TOTP opcional (`Totp`, secreto cifrado con `Crypto`).
+- Alta de usuarios por invitación: link `/activar/{slug}/{token}` (token hasheado, 72 h, un uso),
+  para copiar o mandar por WhatsApp (`wa.me`). Nadie más conoce la contraseña. El primer admin
+  de cada empresa lo crea el super-admin desde el detalle de la empresa.
+- Permisos: registro único en `app/Policies/Permissions.php` (módulos × acciones + alcance
+  todo/sectores/propios). Roles base `is_system` no editables: se copian y se ajusta la copia.
+- En código: `UserAuth::can('modulo', 'accion')`, `UserAuth::scope('modulo')`; por ruta:
+  `new RequirePermission('modulo', 'accion')`. El menú de `/panel` se arma con `can()`.
+- El usuario se recarga desde la base en cada request: desactivarlo, vencerle el acceso o
+  cambiarle el rol tiene efecto en el próximo click. No se puede dejar la empresa sin admin.
+- API app móvil: `POST /api/v1/auth/login|refresh|logout`, `GET /api/v1/me`. Access JWT propio
+  (`Jwt`, HS256, 15 min) + refresh rotativo por dispositivo (`{uuid empresa}.{aleatorio}`, 60 días,
+  se guarda su SHA-256). Reutilizar un refresh viejo revoca el dispositivo. Middleware
+  `RequireApiUser`.
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.
@@ -81,12 +100,14 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 public/            docroot (index.php front controller, assets/, check.php)
 app/Core/          App, Router, Request, Response, View, DB, Config, ErrorHandler, Logger, Session,
                    Storage, Migrator, Csrf, Flash, Validator, Uuid, EnvCheck, Tenant, Crypto,
-                   SignedUrl, TenantFiles, Cuit, helpers
+                   SignedUrl, TenantFiles, Cuit, Jwt, Totp, helpers
 app/Middleware/    RequireInstalled, VerifyCsrf (globales), RequireSuperAdmin, RequireTenant,
-                   ReadOnlyImpersonation
+                   ReadOnlyImpersonation, RequirePermission, RequireApiUser
+app/Policies/      Permissions (módulos, acciones, alcances y roles base)
 app/Controllers/   Web/ (Install, Admin/*) y Api/
 app/Models/        acceso a datos (único lugar con SQL)
-app/Services/      lógica (AdminAuth, Audit, TenantProvisioner, Impersonation)
+app/Services/      lógica (AdminAuth, UserAuth, ApiAuth, UserInvitation, Audit,
+                   TenantProvisioner, Impersonation)
 app/Views/         layouts/, errors/
 app/routes.php     declaración de rutas
 config/            config.php (git) + config.local.php (NO git, lo genera el instalador)

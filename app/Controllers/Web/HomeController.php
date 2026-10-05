@@ -5,12 +5,14 @@ namespace App\Controllers\Web;
 
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\Session;
+use App\Services\UserAuth;
 
 final class HomeController
 {
-    /** Por ahora la entrada es el panel super-admin; el login de usuarios llega en la Etapa 3. */
+    /** Entrada del sistema: usuarios de empresas → /login o /panel. (El super-admin entra por /admin.) */
     public function index(Request $request): Response
     {
-        return Response::redirect('/admin');
+        return Response::redirect(Session::get(UserAuth::USER_KEY) ? '/panel' : '/login');
     }
 }

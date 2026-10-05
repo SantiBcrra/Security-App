@@ -10,6 +10,7 @@ use App\Core\SignedUrl;
 use App\Core\Tenant;
 use App\Core\View;
 use App\Models\TenantAudit;
+use App\Services\UserAuth;
 
 /** Inicio del área de la empresa. Acá se montan los módulos desde la Etapa 3. */
 final class HomeController
@@ -17,11 +18,13 @@ final class HomeController
     public function index(Request $request): Response
     {
         $tenant = Tenant::current();
+        // Datos técnicos y auditoría: solo para quien administra usuarios (o soporte).
+        $isManager = UserAuth::can('usuarios', 'ver');
         return Response::html(View::render('app/home', [
             'title'   => 'Inicio',
             'tenant'  => $tenant,
-            'dbName'  => (string) DB::tenant()->query('SELECT DATABASE()')->fetchColumn(),
-            'events'  => TenantAudit::latest(DB::tenant(), 10),
+            'dbName'  => UserAuth::user() === null ? (string) DB::tenant()->query('SELECT DATABASE()')->fetchColumn() : null,
+            'events'  => $isManager ? TenantAudit::latest(DB::tenant(), 10) : null,
         ], 'layouts/app'));
     }
 

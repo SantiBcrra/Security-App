@@ -23,6 +23,13 @@ final class Tenants
         return $stmt->fetch() ?: null;
     }
 
+    public static function findBySlug(string $slug): ?array
+    {
+        $stmt = DB::master()->prepare('SELECT * FROM tenants WHERE slug = ? LIMIT 1');
+        $stmt->execute([mb_strtolower(trim($slug))]);
+        return $stmt->fetch() ?: null;
+    }
+
     public static function slugExists(string $slug): bool
     {
         $stmt = DB::master()->prepare('SELECT 1 FROM tenants WHERE slug = ? LIMIT 1');

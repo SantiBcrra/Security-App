@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\Csrf;
+use App\Core\DB;
 use App\Core\Session;
 use App\Models\LoginAttempt;
 use App\Models\PlatformAdmin;
@@ -22,8 +23,9 @@ final class AdminAuth
     /** @return 'ok'|'invalid'|'locked' */
     public static function attempt(string $email, string $password, string $ip): string
     {
-        if (LoginAttempt::recentFailures(self::SCOPE, $email, $ip, self::WINDOW_MINUTES) >= self::MAX_FAILURES
-            || LoginAttempt::recentFailuresFromIp($ip, self::WINDOW_MINUTES) >= self::MAX_FAILURES_IP) {
+        $db = DB::master();
+        if (LoginAttempt::recentFailures($db, self::SCOPE, $email, $ip, self::WINDOW_MINUTES) >= self::MAX_FAILURES
+            || LoginAttempt::recentFailuresFromIp($db, $ip, self::WINDOW_MINUTES) >= self::MAX_FAILURES_IP) {
             return 'locked';
         }
 
@@ -32,7 +34,7 @@ final class AdminAuth
         $hash = $admin['password_hash'] ?? password_hash(random_bytes(16), PASSWORD_DEFAULT);
         $valid = password_verify($password, $hash) && $admin !== null && (int) $admin['is_active'] === 1;
 
-        LoginAttempt::record(self::SCOPE, $email, $ip, $valid);
+        LoginAttempt::record($db, self::SCOPE, $email, $ip, $valid);
         if (!$valid) {
             return 'invalid';
         }

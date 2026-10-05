@@ -51,9 +51,13 @@ final class Audit
         }
     }
 
-    /** Quién actúa. En Etapa 3 se agrega el usuario logueado de la empresa. */
+    /** Quién actúa: usuario de la empresa, super-admin (soporte) o el sistema. */
     private static function actor(): array
     {
+        $user = UserAuth::user();
+        if ($user !== null) {
+            return ['actor_type' => 'user', 'actor_id' => (int) $user['id'], 'actor_name' => $user['name']];
+        }
         $admin = AdminAuth::user();
         if ($admin !== null) {
             return ['actor_type' => 'platform_admin', 'actor_id' => (int) $admin['id'], 'actor_name' => $admin['name']];

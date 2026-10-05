@@ -49,3 +49,10 @@ function csrf_token(): string
 {
     return \App\Core\Csrf::token();
 }
+
+/** URL completa (con esquema y dominio) para links que salen del sistema: invitaciones, mails. */
+function absolute_url(string $path = '/'): string
+{
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    return (\App\Core\App::isHttps() ? 'https://' : 'http://') . $host . url($path);
+}

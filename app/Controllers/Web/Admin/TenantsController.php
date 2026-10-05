@@ -21,6 +21,10 @@ use App\Models\Tenants;
 use App\Services\Audit;
 use App\Services\Impersonation;
 use App\Services\TenantProvisioner;
+use App\Services\UserInvitation;
+use App\Models\Roles;
+use App\Models\Users;
+use App\Policies\Permissions;
 
 /** Empresas: alta (con su base propia), edición, logo, suspensión e impersonación. */
 final class TenantsController
@@ -110,9 +114,17 @@ final class TenantsController
         [$old, $errors] = Flash::pullInput();
 
         $tenantEvents = [];
+        $admins = [];
         $dbError = null;
         try {
-            $tenantEvents = TenantAudit::latest(Tenant::connect($tenant), 15);
+            $pdo = Tenant::connect($tenant);
+            $tenantEvents = TenantAudit::latest($pdo, 15);
+            try {
+                $admins = $pdo->query("SELECT u.name, u.email, u.is_active, u.password_hash IS NOT NULL AS activated, u.last_login_at
+                    FROM users u JOIN roles r ON r.id = u.role_id WHERE r.slug = 'admin_empresa' ORDER BY u.name")->fetchAll();
+            } catch (\PDOException) {
+                $admins = null; // base sin migrar todavía (falta "Actualizar base de datos")
+            }
         } catch (\Throwable $e) {
             $dbError = $e->getMessage();
         }
@@ -126,6 +138,8 @@ final class TenantsController
             'platformEvents' => PlatformAudit::forEntity('tenant', $uuid, 15),
             'tenantEvents'   => $tenantEvents,
             'dbError'        => $dbError,
+            'admins'         => $admins,
+            'invitation'     => UserInvitation::pullFlash(),
         ], 'layouts/admin'));
     }
 
@@ -221,6 +235,40 @@ final class TenantsController
             return Response::redirect('/admin/empresas/' . $uuid);
         }
         return Response::redirect('/panel');
+    }
+
+    /** Primer administrador de la empresa: se crea en SU base con un link de activación. */
+    public function createAdmin(Request $request, string $uuid): Response
+    {
+        $tenant = Tenants::findByUuid($uuid);
+        if ($tenant === null) {
+            return Response::redirect('/admin/empresas');
+        }
+        $name = trim((string) $request->input('name', ''));
+        $email = mb_strtolower(trim((string) $request->input('email', '')));
+        if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            Flash::add('danger', 'Para crear el administrador cargá nombre y un email válido.');
+            return Response::redirect('/admin/empresas/' . $uuid);
+        }
+        try {
+            Tenant::activate($tenant);
+        } catch (TenantSuspended $e) {
+            Flash::add('danger', $e->getMessage() . ' Reactivala primero.');
+            return Response::redirect('/admin/empresas/' . $uuid);
+        }
+        if (Users::emailTaken($email)) {
+            Flash::add('danger', 'Ya existe un usuario con ese email en la empresa.');
+            return Response::redirect('/admin/empresas/' . $uuid);
+        }
+        $role = Roles::findBySlug(Permissions::ADMIN_ROLE);
+        $user = Users::findById(Users::create(['name' => $name, 'email' => $email, 'role_id' => (int) $role['id']]));
+        $link = UserInvitation::issue($user);
+        UserInvitation::flash($user, $link);
+        Audit::platform('tenant.admin.create', 'tenant', $uuid, null, ['name' => $name, 'email' => $email]);
+        Audit::tenant('user.create', 'user', $user['uuid'], null, ['name' => $name, 'email' => $email, 'rol' => $role['name']]);
+        Tenant::deactivate();
+        Flash::add('success', "Administrador {$name} creado. Compartile el link para que active su cuenta (vence en " . UserInvitation::TTL_HOURS . ' h).');
+        return Response::redirect('/admin/empresas/' . $uuid);
     }
 
     public function stopImpersonation(Request $request): Response

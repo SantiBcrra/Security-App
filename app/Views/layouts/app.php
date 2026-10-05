@@ -3,6 +3,12 @@
 $tenant = App\Core\Tenant::current();
 $logoUrl = $tenant ? App\Controllers\Web\App\HomeController::logoUrl($tenant) : null;
 $support = App\Services\Impersonation::active();
+$me = App\Services\UserAuth::user();
+$menu = array_filter([
+    ['/panel', 'Inicio', true],
+    ['/panel/usuarios', 'Usuarios', App\Services\UserAuth::can('usuarios', 'ver')],
+    ['/panel/roles', 'Roles', App\Services\UserAuth::can('roles', 'ver')],
+], fn ($item) => $item[2]);
 ?>
 <!doctype html>
 <html lang="es">
@@ -33,7 +39,23 @@ $support = App\Services\Impersonation::active();
             <?php if ($logoUrl): ?><img src="<?= e($logoUrl) ?>" alt="" style="height:32px"><?php endif; ?>
             <span class="fw-semibold"><?= e($tenant['name'] ?? '') ?></span>
         </a>
-        <span class="navbar-text small text-body-secondary"><?= e(config('app.name')) ?></span>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#panelnav" aria-label="Menú"><span class="navbar-toggler-icon"></span></button>
+        <div class="collapse navbar-collapse" id="panelnav">
+            <ul class="navbar-nav me-auto">
+                <?php foreach ($menu as [$href, $label]): ?>
+                    <li class="nav-item"><a class="nav-link" href="<?= e(url($href)) ?>"><?= e($label) ?></a></li>
+                <?php endforeach; ?>
+            </ul>
+            <?php if ($me): ?>
+                <div class="d-flex align-items-center gap-2">
+                    <a class="nav-link small" href="<?= e(url('/panel/perfil')) ?>"><?= e($me['name']) ?> · <span class="text-body-secondary"><?= e($me['role_name']) ?></span></a>
+                    <form method="post" action="<?= e(url('/panel/salir')) ?>">
+                        <?= csrf_field() ?>
+                        <button class="btn btn-outline-secondary btn-sm">Salir</button>
+                    </form>
+                </div>
+            <?php endif; ?>
+        </div>
     </div>
 </nav>
 <main class="container py-4">
