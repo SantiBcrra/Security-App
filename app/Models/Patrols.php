@@ -39,8 +39,9 @@ final class Patrols
 
     public static function routes(): array
     {
-        return DB::tenant()->query('SELECT r.*, COUNT(rp.id) AS point_count FROM patrol_routes r
-            LEFT JOIN patrol_route_points rp ON rp.route_id = r.id WHERE r.deleted_at IS NULL GROUP BY r.id ORDER BY r.is_active DESC, r.name')->fetchAll();
+        return DB::tenant()->query('SELECT r.*,
+            (SELECT COUNT(*) FROM patrol_route_points rp WHERE rp.route_id = r.id) AS point_count
+            FROM patrol_routes r WHERE r.deleted_at IS NULL ORDER BY r.is_active DESC, r.name')->fetchAll();
     }
 
     public static function route(string $uuid): ?array
