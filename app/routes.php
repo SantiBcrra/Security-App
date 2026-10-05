@@ -2,6 +2,11 @@
 declare(strict_types=1);
 
 use App\Controllers\Api\AuthController as ApiAuthController;
+use App\Controllers\Api\DevicesController;
+use App\Controllers\Api\NotificationsController as ApiNotificationsController;
+use App\Controllers\Api\ObservationsController as ApiObservationsController;
+use App\Controllers\Api\SyncController;
+use App\Controllers\Api\UploadsController;
 use App\Controllers\Web\Admin\AuthController as AdminAuthController;
 use App\Controllers\Web\Admin\DashboardController;
 use App\Controllers\Web\Admin\MigrationsController;
@@ -13,6 +18,7 @@ use App\Controllers\Web\CronController;
 use App\Controllers\Web\DiagController;
 use App\Controllers\Web\HomeController;
 use App\Controllers\Web\InstallController;
+use App\Controllers\Web\MobileController;
 use App\Controllers\Web\Panel\ImportController;
 use App\Controllers\Web\Panel\MasterDataController;
 use App\Controllers\Web\Panel\NotificationRulesController;
@@ -24,6 +30,7 @@ use App\Controllers\Web\Panel\QrController;
 use App\Controllers\Web\Panel\RolesController;
 use App\Controllers\Web\Panel\UsersController;
 use App\Core\Router;
+use App\Middleware\ApiRateLimit;
 use App\Middleware\ReadOnlyImpersonation;
 use App\Middleware\RequireApiUser;
 use App\Middleware\RequireInstalled;
@@ -161,11 +168,34 @@ return static function (Router $r): void {
     $r->group('/api/v1', [], static function (Router $r): void {
         $r->post('/auth/login', [ApiAuthController::class, 'login']);
         $r->post('/auth/refresh', [ApiAuthController::class, 'refresh']);
-        $r->group('', [new RequireApiUser()], static function (Router $r): void {
+        $r->group('', [new RequireApiUser(), new ApiRateLimit(300)], static function (Router $r): void {
             $r->post('/auth/logout', [ApiAuthController::class, 'logout']);
             $r->get('/me', [ApiAuthController::class, 'me']);
+
+            // Sincronización offline (Etapa 5)
+            $r->get('/sync/pull', [SyncController::class, 'pull']);
+            $r->post('/sync/push', [SyncController::class, 'push']);
+            $r->post('/uploads', [UploadsController::class, 'init']);
+            $r->get('/uploads/{uuid}', [UploadsController::class, 'status']);
+            $r->put('/uploads/{uuid}', [UploadsController::class, 'chunk']);
+            $r->post('/uploads/{uuid}/complete', [UploadsController::class, 'complete']);
+
+            $r->get('/observations/{uuid}', [ApiObservationsController::class, 'show']);
+            $r->get('/observations/{uuid}/photos/{photo}', [ApiObservationsController::class, 'photo']);
+            $r->get('/notifications', [ApiNotificationsController::class, 'index']);
+            $r->post('/notifications/read', [ApiNotificationsController::class, 'readAll']);
+            $r->post('/alerts/{uuid}/ack', [ApiNotificationsController::class, 'ack']);
+
+            $r->get('/push/vapid-key', [DevicesController::class, 'vapidKey']);
+            $r->post('/push/subscribe', [DevicesController::class, 'subscribe']);
+            $r->post('/push/unsubscribe', [DevicesController::class, 'unsubscribe']);
         });
     });
+
+    // App de campo instalable (PWA): funciona offline y habla con la API v1.
+    $r->get('/movil', [MobileController::class, 'shell']);
+    $r->get('/movil/sw.js', [MobileController::class, 'serviceWorker']);
+    $r->get('/movil/manifest.webmanifest', [MobileController::class, 'manifest']);
 
     // Tareas programadas por URL (cron del hosting o cron-job.org), protegidas con clave.
     $r->get('/cron/run', [CronController::class, 'run']);

@@ -8,6 +8,9 @@ final class Request
     /** Parámetros de la ruta ({id}), los completa el Router. */
     public array $params = [];
 
+    /** Cuerpo crudo (subidas por partes). En tests se asigna directo. */
+    public ?string $body = null;
+
     public function __construct(
         public readonly string $method,
         public readonly string $path,
@@ -71,6 +74,11 @@ final class Request
     {
         $path = '/' . trim($path, '/');
         return preg_replace('#/+#', '/', $path);
+    }
+
+    public function rawBody(): string
+    {
+        return $this->body ??= (string) file_get_contents('php://input');
     }
 
     public function input(string $key, mixed $default = null): mixed

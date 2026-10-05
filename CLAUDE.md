@@ -103,7 +103,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Riesgo inminente: evento `imminent_alert` + `ObservationAlerts::imminent()` (Etapa 7 envía avisos).
 - Mapas: Leaflet local (`public/assets/vendor/leaflet`) + tiles de OpenStreetMap (permitidos en la CSP).
 - "PDF" = página imprimible (`/imprimir`), sin librerías.
-- Datos demo SOLO en local: `php tools/seed-demo.php {empresa} http://localhost/securityapp`
+- Datos demo SOLO en local (las pruebas e2e lo sobrescriben: hacer backup de `storage/demo-links.txt`): `php tools/seed-demo.php {empresa} http://localhost/securityapp`
   (aplica migraciones pendientes, solo agrega, links de activación en `storage/demo-links.txt`).
   `tools/` está bloqueado por web y excluido del deploy.
 
@@ -123,6 +123,24 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   contraseña cifrada en `platform_settings`). Push = API HTTP de Expo; WhatsApp = Meta Cloud API
   con plantilla de 2 parámetros (deshabilitado hasta configurarlo).
 - En tests: `MailTransport::$fake` y `Channels::$fakeExternal` (no sale nada a internet).
+
+## API de sincronización y app de campo (Etapas 5 y 8)
+- Contrato en `docs/api/openapi.yaml`. Pull por cursor `(updated_at, id)` por entidad con ventana de
+  5 s para cambios recientes (`Sync\Pull`); push de hasta 50 operaciones idempotentes por `op_id`
+  (`idempotency_keys`) y por uuid del celular (`Sync\Push`); fotos por partes con SHA-256
+  (`Uploads`, tabla `uploads`); rate limit por dispositivo (`RateLimiter`, tabla `rate_limits`).
+- La validación del alta de observaciones es una sola: `ObservationInput::validate()` (web y API).
+- **La app de campo es una PWA** en `/movil/` (decisión del usuario: no Expo por ahora). Shell,
+  service worker y manifest los sirve `MobileController`; JS en módulos nativos sin compilar en
+  `public/assets/movil/` (`db.js` IndexedDB, `api.js` JWT, `sync.js` outbox, `app.js` Alpine).
+  Al cambiar cualquier archivo de la app cambia la versión del SW y se actualiza sola.
+- PWA = contexto seguro: HTTPS o `localhost`. Probar en el celular contra XAMPP por Wi-Fi requiere
+  `chrome://flags` → "Insecure origins treated as secure" con `http://IP-de-la-Mac`. El navegador
+  integrado de la app de escritorio NO soporta service workers (probar instalación/push en Chrome).
+- Web Push propio: `Core\Ece` (aes128gcm, RFC 8291 — test con el vector oficial) y `Core\Vapid`
+  (ES256). Claves VAPID en `platform_settings` (privada cifrada). El canal "push" de la Etapa 7
+  envía a suscripciones web (`push_subscriptions`, destino `web:{id}`) y a tokens Expo futuros.
+- Prueba de estrés: `php tools/sync-stress.php http://localhost/securityapp {empresa} {usuario} {clave} 500 10`.
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

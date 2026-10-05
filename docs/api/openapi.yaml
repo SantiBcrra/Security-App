@@ -1,0 +1,109 @@
+openapi: 3.0.3
+info:
+  title: Security App — API v1
+  version: "1.0"
+  description: |
+    API de la app de campo (PWA en /movil y futuras apps nativas).
+    Todas las respuestas tienen la forma `{ ok, data, error }` con `error = { message, code }`.
+    Autenticación: `Authorization: Bearer {access_token}` (JWT HS256, 15 min). Renovar con
+    `/auth/refresh` (refresh token rotativo por dispositivo; reutilizar uno viejo revoca el dispositivo).
+    Límite: 300 pedidos por minuto por dispositivo (429 + Retry-After).
+servers:
+  - url: /api/v1
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    Envelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { nullable: true }
+        error: { type: object, nullable: true, properties: { message: { type: string }, code: { type: string } } }
+    Operation:
+      type: object
+      required: [op_id, type, data]
+      properties:
+        op_id: { type: string, format: uuid, description: "Generado en el celular. Reenviar el mismo op_id devuelve el mismo resultado (idempotente)." }
+        type: { type: string, enum: [observation.create, observation.comment, observation.transition] }
+        data:
+          type: object
+          description: |
+            observation.create: uuid (del celular), category, severity, sector (UUIDs), description, created_at_device (ISO 8601),
+              opcionales risk_type, equipment, location_text, lat, lng, gps_accuracy, imminent (0/1), anonymous (0/1), people[].
+            observation.comment: uuid, comment.
+            observation.transition: uuid, action (analizar|asignar|cerrar|descartar|reabrir), input { comment, assigned_user, action_text, action_due_on }.
+security: [{ bearer: [] }]
+paths:
+  /auth/login:
+    post:
+      security: []
+      summary: Ingreso desde un dispositivo
+      requestBody: { content: { application/json: { schema: { type: object, required: [empresa, usuario, password, device_uuid],
+        properties: { empresa: { type: string }, usuario: { type: string, description: email o DNI }, password: { type: string },
+          device_uuid: { type: string, format: uuid }, device_name: { type: string }, totp: { type: string } } } } } }
+      responses:
+        "200": { description: "access_token, refresh_token, expires_in" }
+        "401": { description: "invalid_credentials | totp_required | totp_invalid" }
+        "429": { description: locked }
+  /auth/refresh:
+    post: { security: [], summary: Renovar tokens (rota el refresh), responses: { "200": { description: tokens nuevos }, "401": { description: invalid_refresh } } }
+  /auth/logout:
+    post: { summary: Cerrar la sesión del dispositivo, responses: { "200": { description: ok } } }
+  /me:
+    get: { summary: Usuario, rol, permisos y empresa, responses: { "200": { description: ok } } }
+  /sync/pull:
+    get:
+      summary: Cambios desde el cursor
+      description: |
+        Entidades: catalog_items, sites, sectors, equipment, employees, observations (según el alcance del rol, últimos 180 días).
+        `deleted` trae los uuid dados de baja. Paginado: repetir con el cursor devuelto mientras `has_more` sea true.
+        El cliente hace upsert por uuid (puede recibir algo dos veces sin duplicar).
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 500, maximum: 1000 } }
+      responses: { "200": { description: "changes, deleted, cursor, has_more, server_time, meta" } }
+  /sync/push:
+    post:
+      summary: Lote de operaciones generadas offline (máx. 50)
+      requestBody: { content: { application/json: { schema: { type: object, properties: { operations: { type: array, items: { $ref: '#/components/schemas/Operation' } } } } } } }
+      responses:
+        "200": { description: "results[]: { op_id, status: ok|error, data | error } (los errores de validación no se reintentan)" }
+        "413": { description: más de 50 operaciones }
+  /uploads:
+    post:
+      summary: Alta de una foto por partes (idempotente)
+      requestBody: { content: { application/json: { schema: { type: object, required: [upload_uuid, observation_uuid, size, sha256],
+        properties: { upload_uuid: { type: string, format: uuid }, observation_uuid: { type: string, format: uuid }, name: { type: string },
+          size: { type: integer, maximum: 15728640 }, sha256: { type: string } } } } } }
+      responses: { "200": { description: "estado: received_bytes, status" }, "404": { description: la observación todavía no llegó } }
+  /uploads/{uuid}:
+    get: { summary: Estado (para reanudar), parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+    put:
+      summary: Parte de la foto (cuerpo binario, máx. 1,5 MB)
+      parameters:
+        - { name: uuid, in: path, required: true, schema: { type: string } }
+        - { name: offset, in: query, required: true, schema: { type: integer }, description: "tiene que ser igual a received_bytes" }
+      requestBody: { content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses: { "200": { description: estado }, "409": { description: "offset distinto: data.received_bytes dice desde dónde seguir" } }
+  /uploads/{uuid}/complete:
+    post:
+      summary: Verifica tamaño y SHA-256 y guarda la foto como evidencia (idempotente)
+      parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: "status completed + attachment_uuid" }, "409": { description: faltan partes }, "422": { description: hash distinto o no es una imagen } }
+  /observations/{uuid}:
+    get: { summary: Detalle con línea de tiempo, fotos y acciones posibles, parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+  /observations/{uuid}/photos/{photo}:
+    get: { summary: Miniatura de una foto, parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }, { name: photo, in: path, required: true, schema: { type: string } }], responses: { "200": { description: imagen } } }
+  /notifications:
+    get: { summary: Avisos del usuario (unread + items), responses: { "200": { description: ok } } }
+  /notifications/read:
+    post: { summary: Marcar todos como leídos, responses: { "200": { description: ok } } }
+  /alerts/{uuid}/ack:
+    post: { summary: '"Recibido" de una alerta crítica (corta el escalamiento)', parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+  /push/vapid-key:
+    get: { summary: Clave pública VAPID para suscribirse a Web Push, responses: { "200": { description: public_key (base64url) } } }
+  /push/subscribe:
+    post: { summary: 'Registrar la suscripción Web Push del dispositivo ({ subscription: PushSubscription.toJSON() })', responses: { "200": { description: ok } } }
+  /push/unsubscribe:
+    post: { summary: Quitar una suscripción ({ endpoint }), responses: { "200": { description: ok } } }

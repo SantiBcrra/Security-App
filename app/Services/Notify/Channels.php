@@ -49,6 +49,17 @@ final class Channels
     private static function push(array $row): void
     {
         $payload = json_decode((string) $row['payload'], true) ?: [];
+        if (str_starts_with($row['to_address'], 'web:')) {
+            $sub = \App\Models\PushSubscriptions::find((int) substr($row['to_address'], 4));
+            if ($sub === null) {
+                return; // la suscripción ya no existe: no hay a quién mandarle
+            }
+            WebPush::send($sub, [
+                'title' => $row['subject'], 'body' => mb_strimwidth((string) $row['body_text'], 0, 180, '…'),
+                'url' => $payload['app_url'] ?? null, 'critical' => (bool) $row['is_critical'], 'tag' => $payload['observation'] ?? null,
+            ], (bool) $row['is_critical']);
+            return;
+        }
         $headers = ($token = PlatformSettings::secret('push.expo_token')) ? ['Authorization: Bearer ' . $token] : [];
         $res = Http::postJson('https://exp.host/--/api/v2/push/send', [[
             'to' => $row['to_address'], 'title' => $row['subject'], 'body' => mb_strimwidth((string) $row['body_text'], 0, 180, '…'),

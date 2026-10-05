@@ -18,6 +18,7 @@ use App\Models\Observations;
 use App\Models\Sectors;
 use App\Models\Settings;
 use App\Models\Users;
+use App\Services\ObservationInput;
 use App\Services\ObservationService;
 use App\Services\ObservationWorkflow;
 use App\Services\UserAuth;
@@ -73,7 +74,7 @@ final class ObservationsController
     public function store(Request $request): Response
     {
         $in = $request->post;
-        [$data, $people, $errors] = $this->validate($in);
+        [$data, $people, $errors] = ObservationInput::validate($in);
         $photos = $this->uploadedPhotos($request);
         if (count($photos) > 10) {
             $errors['photos'] = 'Máximo 10 fotos por observación.';
@@ -235,77 +236,6 @@ final class ObservationsController
             'sectors'    => Sectors::options(),
             'equipment'  => array_map(fn ($e) => $e['code'] . ' · ' . $e['name'], array_column(Equipment::list(null, false, [], 2000), null, 'uuid')),
         ];
-    }
-
-    /** @return array{0: array, 1: list<int>, 2: array} [datos, ids de involucrados, errores] */
-    private function validate(array $in): array
-    {
-        $errors = [];
-        $cat = fn (string $catalog, string $key) => ($item = CatalogItems::findByUuid((string) ($in[$key] ?? ''))) && $item['catalog'] === $catalog ? $item : null;
-        $category = $cat('categoria', 'category');
-        $risk = $cat('tipo_riesgo', 'risk_type');
-        $severity = $cat('severidad', 'severity');
-        $sector = Sectors::findByUuid((string) ($in['sector'] ?? ''));
-        $equipment = ($in['equipment'] ?? '') !== '' ? Equipment::findByUuid((string) $in['equipment']) : null;
-        if ($category === null) {
-            $errors['category'] = 'Elegí si es un acto, una condición o una buena práctica.';
-        }
-        if ($severity === null) {
-            $errors['severity'] = 'Elegí la severidad.';
-        }
-        if ($sector === null && $equipment && $equipment['sector_id']) {
-            $sector = Sectors::findById((int) $equipment['sector_id']);
-        }
-        if ($sector === null) {
-            $errors['sector'] = 'Elegí el sector donde ocurrió.';
-        }
-        if (($in['equipment'] ?? '') !== '' && $equipment === null) {
-            $errors['equipment'] = 'Equipo inválido.';
-        }
-        $description = trim((string) ($in['description'] ?? ''));
-        if (mb_strlen($description) < 10) {
-            $errors['description'] = 'Contá qué viste (mínimo 10 caracteres).';
-        } elseif (mb_strlen($description) > 5000) {
-            $errors['description'] = 'La descripción es demasiado larga (máx. 5000).';
-        }
-        // Fecha y hora del hecho: en la zona de la empresa → UTC. No futura ni de hace más de un año.
-        $occurred = \DateTimeImmutable::createFromFormat('Y-m-d\TH:i', (string) ($in['occurred_at'] ?? ''), new \DateTimeZone(Tenant::timezone() ?? 'UTC'));
-        if (!$occurred) {
-            $errors['occurred_at'] = 'Fecha y hora inválidas.';
-        } elseif ($occurred->getTimestamp() > time() + 300) {
-            $errors['occurred_at'] = 'La fecha no puede ser futura.';
-        } elseif ($occurred->getTimestamp() < time() - 366 * 86400) {
-            $errors['occurred_at'] = 'La fecha es de hace más de un año.';
-        }
-        $lat = trim((string) ($in['lat'] ?? ''));
-        $lng = trim((string) ($in['lng'] ?? ''));
-        if (($lat !== '' || $lng !== '') && (!is_numeric($lat) || !is_numeric($lng) || abs((float) $lat) > 90 || abs((float) $lng) > 180)) {
-            $errors['lat'] = 'Ubicación GPS inválida.';
-        }
-        $people = [];
-        foreach ((array) ($in['people'] ?? []) as $uuid) {
-            if (($e = Employees::findByUuid((string) $uuid)) !== null) {
-                $people[] = (int) $e['id'];
-            }
-        }
-        $anonymous = !empty($in['anonymous']) && Settings::bool('observaciones.anonimo_habilitado');
-        $data = [
-            'category_id'       => $category['id'] ?? null,
-            'risk_type_id'      => $risk['id'] ?? null,
-            'severity_id'       => $severity['id'] ?? null,
-            'site_id'           => $sector['site_id'] ?? null,
-            'sector_id'         => $sector['id'] ?? null,
-            'equipment_id'      => $equipment['id'] ?? null,
-            'description'       => $description,
-            'location_text'     => mb_substr(trim((string) ($in['location_text'] ?? '')), 0, 191) ?: null,
-            'lat'               => $lat !== '' ? $lat : null,
-            'lng'               => $lng !== '' ? $lng : null,
-            'gps_accuracy_m'    => ctype_digit((string) ($in['gps_accuracy'] ?? '')) ? (int) $in['gps_accuracy'] : null,
-            'imminent_risk'     => !empty($in['imminent']) ? 1 : 0,
-            'is_anonymous'      => $anonymous ? 1 : 0,
-            'created_at_device' => $occurred ? $occurred->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s') : null,
-        ];
-        return [$data, $people, $errors];
     }
 
     /** $_FILES['photos'] (múltiple) → lista normalizada. */

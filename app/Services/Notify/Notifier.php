@@ -78,7 +78,8 @@ final class Notifier
                         'channel' => $channel, 'user_id' => $userId, 'to_address' => $address,
                         'subject' => $message['title'], 'body_text' => self::text($message),
                         'body_html' => $channel === 'email' ? self::html($message, $user) : null,
-                        'payload' => json_encode(['url' => $message['url'], 'event' => $event, 'observation' => $obs['uuid']]),
+                        'payload' => json_encode(['url' => $message['url'], 'event' => $event, 'observation' => $obs['uuid'],
+                            'app_url' => absolute_url('/movil') . '#/observacion/' . $obs['uuid']]),
                         'event' => $event, 'entity_uuid' => $obs['uuid'], 'is_critical' => $message['critical'] ? 1 : 0,
                     ]);
                 }
@@ -112,12 +113,14 @@ final class Notifier
         };
     }
 
+    /** Destinos push: suscripciones web (PWA, "web:{id}") y tokens Expo de una futura app nativa. */
     private static function pushTokens(int $userId): array
     {
+        $web = array_map(fn ($s) => 'web:' . $s['id'], \App\Models\PushSubscriptions::forUser($userId));
         $stmt = DB::tenant()->prepare('SELECT DISTINCT push_token FROM user_devices WHERE user_id = ? AND push_token IS NOT NULL
             AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP()');
         $stmt->execute([$userId]);
-        return $stmt->fetchAll(\PDO::FETCH_COLUMN);
+        return array_merge($web, $stmt->fetchAll(\PDO::FETCH_COLUMN));
     }
 
     /** Teléfono del empleado vinculado al usuario, en formato internacional para WhatsApp (Argentina: 549 + área + número). */
