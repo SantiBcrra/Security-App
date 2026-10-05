@@ -50,6 +50,22 @@ foreach ($roles as $r) { if ($r['slug'] === Permissions::AUDITOR_ROLE) { $audito
                     <input class="form-control<?= $invalid('access_expires') ?>" type="date" id="f_exp" name="access_expires" value="<?= e($old['access_expires']) ?>">
                     <?= $feedback('access_expires') ?>
                 </div>
+                <div class="col-12">
+                    <label class="form-label">Sectores asignados</label>
+                    <?php if (!$sectors): ?>
+                        <div class="form-text">Todavía no hay sectores cargados (Datos maestros → Sectores).</div>
+                    <?php else: ?>
+                        <div class="border rounded p-2" style="max-height: 220px; overflow:auto">
+                            <?php foreach ($sectors as $sid => $s): ?>
+                                <div class="form-check" style="margin-left: <?= e(($s['depth'] - 1) * 1.25) ?>rem">
+                                    <input class="form-check-input" type="checkbox" name="sectors[]" value="<?= e($sid) ?>" id="sec_<?= e($sid) ?>" <?= in_array($sid, $assigned, true) ? 'checked' : '' ?>>
+                                    <label class="form-check-label small" for="sec_<?= e($sid) ?>"><?= e($s['label']) ?></label>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="form-text">Para roles con alcance "Sus sectores" (ej. supervisor): ve esos sectores y todo lo que está debajo.</div>
+                    <?php endif; ?>
+                </div>
                 <?php if ($canEdit): ?>
                     <div class="col-12"><button class="btn btn-primary"><?= $user ? 'Guardar cambios' : 'Crear y generar link de activación' ?></button></div>
                 <?php endif; ?>

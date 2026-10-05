@@ -10,6 +10,8 @@ use App\Core\Tenant;
 use App\Core\Validator;
 use App\Core\View;
 use App\Models\Roles;
+use App\Models\Sectors;
+use App\Models\UserSectors;
 use App\Models\UserDevices;
 use App\Models\Users;
 use App\Policies\Permissions;
@@ -47,6 +49,7 @@ final class UsersController
         }
         $fields = self::fields($data, $role);
         $id = Users::create($fields);
+        UserSectors::replace($id, self::sectorIds($data));
         $user = Users::findById($id);
         Audit::tenant('user.create', 'user', $user['uuid'], null, self::auditable($user));
         UserInvitation::flash($user, UserInvitation::issue($user));
@@ -87,6 +90,7 @@ final class UsersController
         $fields = self::fields($data, $role);
         $before = self::auditable($user);
         Users::update((int) $user['id'], $fields);
+        UserSectors::replace((int) $user['id'], self::sectorIds($data));
         $after = self::auditable(Users::findById((int) $user['id']));
         if ($before !== $after) {
             Audit::tenant('user.update', 'user', $uuid, array_diff_assoc($before, $after), array_diff_assoc($after, $before));
@@ -158,6 +162,9 @@ final class UsersController
             'errors'  => $errors,
             'roles'   => Roles::all(),
             'devices' => $user ? UserDevices::forUser((int) $user['id']) : [],
+            'sectors' => Sectors::labelMap(false),
+            'assigned' => isset($old['sectors']) ? array_map('intval', (array) $old['sectors'])
+                : ($user ? UserSectors::forUser((int) $user['id']) : []),
             'isSelf'  => $user && (int) $user['id'] === (int) (UserAuth::user()['id'] ?? 0),
         ], 'layouts/app'));
     }
@@ -212,9 +219,18 @@ final class UsersController
         ];
     }
 
+    /** Sectores tildados en el formulario (ids válidos). @return list<int> */
+    private static function sectorIds(array $data): array
+    {
+        $valid = Sectors::labelMap();
+        return array_values(array_filter(array_map('intval', (array) ($data['sectors'] ?? [])), fn ($id) => isset($valid[$id])));
+    }
+
     private static function auditable(array $user): array
     {
+        $sectors = Sectors::labelMap();
         return [
+            'sectores' => implode(', ', array_map(fn ($id) => $sectors[$id]['label'] ?? $id, UserSectors::forUser((int) $user['id']))),
             'name' => $user['name'], 'email' => $user['email'], 'dni' => $user['dni'],
             'rol' => $user['role_name'], 'activo' => (int) $user['is_active'], 'acceso_hasta' => $user['access_expires_at'],
         ];

@@ -11,7 +11,10 @@ use App\Controllers\Web\AuthController;
 use App\Controllers\Web\DiagController;
 use App\Controllers\Web\HomeController;
 use App\Controllers\Web\InstallController;
+use App\Controllers\Web\Panel\ImportController;
+use App\Controllers\Web\Panel\MasterDataController;
 use App\Controllers\Web\Panel\ProfileController;
+use App\Controllers\Web\Panel\QrController;
 use App\Controllers\Web\Panel\RolesController;
 use App\Controllers\Web\Panel\UsersController;
 use App\Core\Router;
@@ -89,6 +92,26 @@ return static function (Router $r): void {
         $r->post('/usuarios/{uuid}/invitacion', [UsersController::class, 'invite'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/dispositivos/{device}/revocar', [UsersController::class, 'revokeDevice'], [$can('usuarios', 'editar')]);
 
+        // Datos maestros (plantas, sectores, puestos, empleados, contratistas, equipos, catálogos).
+        // Rutas fijas antes que las genéricas /datos/{resource}/...
+        $r->post('/datos/plantilla', [MasterDataController::class, 'applyTemplate'], [$can('datos_maestros', 'crear')]);
+        $r->get('/datos/equipos/etiquetas', [QrController::class, 'labels'], [$can('datos_maestros', 'ver')]);
+        $r->get('/datos/{resource}', [MasterDataController::class, 'index'], [$can('datos_maestros', 'ver')]);
+        $r->get('/datos/{resource}/nuevo', [MasterDataController::class, 'create'], [$can('datos_maestros', 'crear')]);
+        $r->post('/datos/{resource}', [MasterDataController::class, 'store'], [$can('datos_maestros', 'crear')]);
+        $r->get('/datos/{resource}/{uuid}', [MasterDataController::class, 'edit'], [$can('datos_maestros', 'ver')]);
+        $r->post('/datos/{resource}/{uuid}', [MasterDataController::class, 'update'], [$can('datos_maestros', 'editar')]);
+        $r->post('/datos/{resource}/{uuid}/estado', [MasterDataController::class, 'toggle'], [$can('datos_maestros', 'editar')]);
+
+        // Importación Excel/CSV
+        $r->get('/importar', [ImportController::class, 'index'], [$can('datos_maestros', 'crear')]);
+        $r->post('/importar', [ImportController::class, 'upload'], [$can('datos_maestros', 'crear')]);
+        $r->get('/importar/plantilla/{entity}', [ImportController::class, 'template'], [$can('datos_maestros', 'ver')]);
+        $r->get('/importar/{uuid}', [ImportController::class, 'show'], [$can('datos_maestros', 'crear')]);
+        $r->post('/importar/{uuid}/mapeo', [ImportController::class, 'saveMapping'], [$can('datos_maestros', 'crear')]);
+        $r->post('/importar/{uuid}/lote', [ImportController::class, 'batch'], [$can('datos_maestros', 'crear')]);
+        $r->get('/importar/{uuid}/errores', [ImportController::class, 'errors'], [$can('datos_maestros', 'crear')]);
+
         $r->get('/roles', [RolesController::class, 'index'], [$can('roles', 'ver')]);
         $r->get('/roles/{uuid}', [RolesController::class, 'edit'], [$can('roles', 'ver')]);
         $r->post('/roles/{uuid}', [RolesController::class, 'update'], [$can('roles', 'editar')]);
@@ -105,6 +128,9 @@ return static function (Router $r): void {
             $r->get('/me', [ApiAuthController::class, 'me']);
         });
     });
+
+    // QR de equipos: lo que lee la cámara del celular (con sesión abre la ficha; si no, login y vuelve)
+    $r->get('/q/{uuid}', [QrController::class, 'resolve']);
 
     // Archivos por link firmado temporal (sin sesión, la firma es el permiso)
     $r->get('/archivos/logo/{uuid}', [TenantsController::class, 'logo']);

@@ -1,0 +1,28 @@
+-- Equipos (autoelevadores, puentes grúa, prensas...). El QR de cada uno apunta a /q/{uuid}.
+CREATE TABLE IF NOT EXISTS equipment (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    uuid CHAR(36) NOT NULL,
+    code VARCHAR(40) NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    type_id INT UNSIGNED NULL,
+    site_id INT UNSIGNED NULL,
+    sector_id INT UNSIGNED NULL,
+    brand VARCHAR(80) NULL,
+    model VARCHAR(80) NULL,
+    serial_number VARCHAR(80) NULL,
+    year SMALLINT UNSIGNED NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'operativo',
+    notes TEXT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    deleted_at DATETIME NULL,
+    UNIQUE KEY uq_equipment_uuid (uuid),
+    UNIQUE KEY uq_equipment_code (code),
+    KEY idx_equipment_type (type_id),
+    KEY idx_equipment_sector (sector_id),
+    KEY idx_equipment_updated (updated_at),
+    CONSTRAINT fk_equipment_type FOREIGN KEY (type_id) REFERENCES catalog_items (id),
+    CONSTRAINT fk_equipment_site FOREIGN KEY (site_id) REFERENCES sites (id),
+    CONSTRAINT fk_equipment_sector FOREIGN KEY (sector_id) REFERENCES sectors (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1,0 +1,33 @@
+-- Personas que trabajan en la empresa: personal propio (contractor_id NULL) o de contratistas.
+-- Un empleado no es necesariamente un usuario del sistema (user_id opcional).
+CREATE TABLE IF NOT EXISTS employees (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    uuid CHAR(36) NOT NULL,
+    file_number VARCHAR(30) NULL,
+    dni VARCHAR(12) NOT NULL,
+    last_name VARCHAR(80) NOT NULL,
+    first_name VARCHAR(80) NOT NULL,
+    position_id INT UNSIGNED NULL,
+    sector_id INT UNSIGNED NULL,
+    contractor_id INT UNSIGNED NULL,
+    hire_date DATE NULL,
+    phone VARCHAR(40) NULL,
+    email VARCHAR(191) NULL,
+    user_id INT UNSIGNED NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    deleted_at DATETIME NULL,
+    UNIQUE KEY uq_employees_uuid (uuid),
+    UNIQUE KEY uq_employees_dni (dni),
+    UNIQUE KEY uq_employees_file_number (file_number),
+    KEY idx_employees_sector (sector_id),
+    KEY idx_employees_position (position_id),
+    KEY idx_employees_contractor (contractor_id),
+    KEY idx_employees_name (last_name, first_name),
+    KEY idx_employees_updated (updated_at),
+    CONSTRAINT fk_employees_position FOREIGN KEY (position_id) REFERENCES positions (id),
+    CONSTRAINT fk_employees_sector FOREIGN KEY (sector_id) REFERENCES sectors (id),
+    CONSTRAINT fk_employees_contractor FOREIGN KEY (contractor_id) REFERENCES contractors (id),
+    CONSTRAINT fk_employees_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

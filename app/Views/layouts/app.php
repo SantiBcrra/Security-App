@@ -6,9 +6,11 @@ $support = App\Services\Impersonation::active();
 $me = App\Services\UserAuth::user();
 $menu = array_filter([
     ['/panel', 'Inicio', true],
+    ['/panel/datos/empleados', 'Datos maestros', App\Services\UserAuth::can('datos_maestros', 'ver')],
     ['/panel/usuarios', 'Usuarios', App\Services\UserAuth::can('usuarios', 'ver')],
     ['/panel/roles', 'Roles', App\Services\UserAuth::can('roles', 'ver')],
 ], fn ($item) => $item[2]);
+$currentPath = '/' . trim((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/');
 ?>
 <!doctype html>
 <html lang="es">
@@ -43,7 +45,8 @@ $menu = array_filter([
         <div class="collapse navbar-collapse" id="panelnav">
             <ul class="navbar-nav me-auto">
                 <?php foreach ($menu as [$href, $label]): ?>
-                    <li class="nav-item"><a class="nav-link" href="<?= e(url($href)) ?>"><?= e($label) ?></a></li>
+                    <?php $active = $href === '/panel' ? str_ends_with($currentPath, '/panel') : str_contains($currentPath, explode('/', trim($href, '/'))[1] ?? '~'); ?>
+                    <li class="nav-item"><a class="nav-link <?= $active ? 'active fw-semibold' : '' ?>" href="<?= e(url($href)) ?>"><?= e($label) ?></a></li>
                 <?php endforeach; ?>
             </ul>
             <?php if ($me): ?>

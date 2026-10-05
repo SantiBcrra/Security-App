@@ -71,6 +71,9 @@ final class RequireTenant
             return Response::jsonError($message, 401, 'unauthenticated');
         }
         Flash::add('warning', $message);
+        if ($request->method === 'GET') {
+            Session::put('intended', $request->path); // volver acá después de ingresar
+        }
         return Response::redirect(AdminAuth::user() !== null && Session::get(UserAuth::USER_KEY) === null ? '/admin/empresas' : '/login');
     }
 }

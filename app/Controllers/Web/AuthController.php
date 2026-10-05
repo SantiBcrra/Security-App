@@ -7,6 +7,7 @@ use App\Core\App;
 use App\Core\Flash;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\Session;
 use App\Core\Tenant;
 use App\Core\TenantSuspended;
 use App\Core\View;
@@ -48,7 +49,7 @@ final class AuthController
 
         if ($status === 'ok' || $status === 'totp') {
             $this->rememberCompany($empresa);
-            return Response::redirect($status === 'ok' ? '/panel' : '/login/codigo');
+            return Response::redirect($status === 'ok' ? self::intended() : '/login/codigo');
         }
         Flash::add('danger', $status === 'locked'
             ? 'Demasiados intentos fallidos. Esperá ' . UserAuth::WINDOW_MINUTES . ' minutos y volvé a probar.'
@@ -69,7 +70,7 @@ final class AuthController
     {
         $result = UserAuth::verifyPending2fa((string) $request->input('code', ''), $request->ip());
         if ($result === 'ok') {
-            return Response::redirect('/panel');
+            return Response::redirect(self::intended());
         }
         if ($result === 'expired') {
             Flash::add('warning', 'El ingreso venció o tuvo demasiados intentos. Volvé a ingresar.');
@@ -132,6 +133,14 @@ final class AuthController
             return null;
         }
         return UserInvitation::findValid($token);
+    }
+
+    /** Adónde ir después de ingresar: la página que se pidió antes del login (ej: un QR) o el inicio. */
+    private static function intended(): string
+    {
+        $target = Session::get('intended');
+        Session::forget('intended');
+        return is_string($target) && str_starts_with($target, '/panel') ? $target : '/panel';
     }
 
     private function rememberCompany(string $slug): void
