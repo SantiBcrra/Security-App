@@ -9,7 +9,7 @@ namespace App\Core;
  */
 final class Storage
 {
-    private const DIRS = ['logs', 'sessions', 'cache', 'tenants'];
+    private const DIRS = ['logs', 'sessions', 'cache', 'tenants', 'mail'];
     private const DENY = "Require all denied\n<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n";
 
     private static ?string $root = null;

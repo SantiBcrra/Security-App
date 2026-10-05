@@ -8,11 +8,15 @@ use App\Controllers\Web\Admin\MigrationsController;
 use App\Controllers\Web\Admin\TenantsController;
 use App\Controllers\Web\App\HomeController as PanelHomeController;
 use App\Controllers\Web\AuthController;
+use App\Controllers\Web\Admin\PlatformSettingsController;
+use App\Controllers\Web\CronController;
 use App\Controllers\Web\DiagController;
 use App\Controllers\Web\HomeController;
 use App\Controllers\Web\InstallController;
 use App\Controllers\Web\Panel\ImportController;
 use App\Controllers\Web\Panel\MasterDataController;
+use App\Controllers\Web\Panel\NotificationRulesController;
+use App\Controllers\Web\Panel\NotificationsController;
 use App\Controllers\Web\Panel\ObservationsController;
 use App\Controllers\Web\Panel\SettingsController;
 use App\Controllers\Web\Panel\ProfileController;
@@ -70,6 +74,12 @@ return static function (Router $r): void {
         $r->post('/empresas/{uuid}/activar', [TenantsController::class, 'activate']);
         $r->post('/empresas/{uuid}/entrar', [TenantsController::class, 'impersonate']);
         $r->post('/empresas/{uuid}/administrador', [TenantsController::class, 'createAdmin']);
+
+        $r->get('/configuracion', [PlatformSettingsController::class, 'show']);
+        $r->post('/configuracion', [PlatformSettingsController::class, 'save']);
+        $r->post('/configuracion/prueba-email', [PlatformSettingsController::class, 'testMail']);
+        $r->get('/tareas', [PlatformSettingsController::class, 'tasks']);
+        $r->post('/tareas/ejecutar', [PlatformSettingsController::class, 'runNow']);
     });
 
     // Área de la empresa (/panel; NO puede ser /app: choca con la carpeta app/).
@@ -105,6 +115,17 @@ return static function (Router $r): void {
         $r->post('/observaciones/{uuid}/comentario', [ObservationsController::class, 'comment'], [$can('observaciones', 'crear')]);
         $r->post('/observaciones/{uuid}/correccion', [ObservationsController::class, 'correct'], [$can('observaciones', 'editar')]);
         $r->post('/observaciones/{uuid}/accion/{action}', [ObservationsController::class, 'transition'], [$can('observaciones', 'ver')]);
+
+        // Notificaciones (campanita) y "Recibido" de alertas críticas
+        $r->get('/notificaciones', [NotificationsController::class, 'index']);
+        $r->get('/notificaciones/recientes', [NotificationsController::class, 'recent']);
+        $r->post('/notificaciones/leer-todas', [NotificationsController::class, 'readAll']);
+        $r->get('/notificaciones/{uuid}', [NotificationsController::class, 'open']);
+        $r->post('/alertas/{uuid}/recibido', [NotificationsController::class, 'ack']);
+        $r->get('/configuracion/notificaciones', [NotificationRulesController::class, 'index'], [$can('configuracion', 'ver')]);
+        $r->post('/configuracion/notificaciones', [NotificationRulesController::class, 'save'], [$can('configuracion', 'editar')]);
+        $r->post('/configuracion/notificaciones/ajustes', [NotificationRulesController::class, 'saveSettings'], [$can('configuracion', 'editar')]);
+        $r->post('/perfil/notificaciones', [ProfileController::class, 'savePrefs']);
 
         $r->get('/configuracion', [SettingsController::class, 'show'], [$can('configuracion', 'ver')]);
         $r->post('/configuracion', [SettingsController::class, 'update'], [$can('configuracion', 'editar')]);
@@ -145,6 +166,9 @@ return static function (Router $r): void {
             $r->get('/me', [ApiAuthController::class, 'me']);
         });
     });
+
+    // Tareas programadas por URL (cron del hosting o cron-job.org), protegidas con clave.
+    $r->get('/cron/run', [CronController::class, 'run']);
 
     // QR de equipos: lo que lee la cámara del celular (con sesión abre la ficha; si no, login y vuelve)
     $r->get('/q/{uuid}', [QrController::class, 'resolve']);

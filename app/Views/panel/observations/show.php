@@ -7,8 +7,9 @@ $base = '/panel/observaciones/' . $obs['uuid'];
 $canEdit = UserAuth::can('observaciones', 'editar');
 $canAdd = UserAuth::can('observaciones', 'crear');
 $eventLabels = ['created' => 'Reporte creado', 'status' => 'Cambio de estado', 'comment' => 'Comentario', 'correction' => 'Corrección de clasificación',
-    'assignment' => 'Acción asignada', 'attachment' => 'Fotos agregadas', 'imminent_alert' => 'Alerta de riesgo inminente'];
-$eventIcons = ['created' => '●', 'status' => '↻', 'comment' => '✎', 'correction' => '✱', 'assignment' => '➜', 'attachment' => '▣', 'imminent_alert' => '⚠'];
+    'assignment' => 'Acción asignada', 'attachment' => 'Fotos agregadas', 'imminent_alert' => 'Alerta de riesgo inminente',
+    'escalation' => 'Alerta escalada', 'alert_ack' => 'Alerta confirmada (Recibido)'];
+$eventIcons = ['created' => '●', 'status' => '↻', 'comment' => '✎', 'correction' => '✱', 'assignment' => '➜', 'attachment' => '▣', 'imminent_alert' => '⚠', 'escalation' => '⇈', 'alert_ack' => '✓'];
 $openAction = $old['action'] ?? null;
 ?>
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -20,8 +21,15 @@ $openAction = $old['action'] ?? null;
     <a class="btn btn-sm btn-outline-secondary ms-auto" target="_blank" href="<?= e(url($base . '/imprimir')) ?>">Imprimir / PDF</a>
 </div>
 
-<?php if ($obs['imminent_risk'] && ObservationWorkflow::isOpen($obs['status'])): ?>
-    <div class="alert alert-danger fw-semibold">Riesgo inminente sin cerrar: verificá en el lugar que la tarea esté frenada y el riesgo controlado.</div>
+<?php if ($obs['imminent_risk'] && ObservationWorkflow::isOpen($obs['status'])): $alert = App\Models\Alerts::latestForObservation((int) $obs['id']); ?>
+    <div class="alert alert-danger d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span class="fw-semibold">Riesgo inminente sin cerrar: verificá en el lugar que la tarea esté frenada y el riesgo controlado.
+            <?php if ($alert && $alert['acked_at']): ?><br><span class="fw-normal">✓ Alerta confirmada por <?= e($alert['acked_name']) ?> (<?= e(fecha($alert['acked_at'], 'd/m H:i')) ?>).</span>
+            <?php elseif ($alert): ?><br><span class="fw-normal">Alerta SIN CONFIRMAR<?= (int) $alert['level'] > 0 ? ' — escalada a nivel ' . e($alert['level']) : '' ?>.</span><?php endif; ?></span>
+        <?php if ($alert && !$alert['acked_at'] && UserAuth::user()): ?>
+            <form method="post" action="<?= e(url('/panel/alertas/' . $alert['uuid'] . '/recibido')) ?>"><?= csrf_field() ?><button class="btn btn-danger">Recibido</button></form>
+        <?php endif; ?>
+    </div>
 <?php endif; ?>
 
 <div class="row g-3">
@@ -174,7 +182,7 @@ $openAction = $old['action'] ?? null;
             <div class="card-header"><strong>Línea de tiempo</strong></div>
             <ul class="list-group list-group-flush small">
                 <?php foreach (array_reverse($events) as $ev): $data = $ev['data'] ? json_decode($ev['data'], true) : null; ?>
-                    <li class="list-group-item <?= $ev['type'] === 'imminent_alert' ? 'list-group-item-danger' : '' ?>">
+                    <li class="list-group-item <?= in_array($ev['type'], ['imminent_alert', 'escalation'], true) ? 'list-group-item-danger' : ($ev['type'] === 'alert_ack' ? 'list-group-item-success' : '') ?>">
                         <div class="d-flex justify-content-between">
                             <span><span class="text-body-secondary me-1"><?= e($eventIcons[$ev['type']] ?? '•') ?></span><strong><?= e($eventLabels[$ev['type']] ?? $ev['type']) ?></strong>
                                 <?php if ($ev['type'] === 'status' || $ev['type'] === 'assignment'): ?>

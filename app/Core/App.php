@@ -34,6 +34,15 @@ final class App
         $router = new Router();
         (require BASE_PATH . '/app/routes.php')($router);
         $router->dispatch($request)->send();
+
+        // Respaldo del cron: solo en páginas (no API ni el propio cron) y si el servidor puede
+        // cerrar la respuesta antes de seguir trabajando (PHP-FPM).
+        if (self::isInstalled() && !$request->isApi() && !str_starts_with($request->path, '/cron')) {
+            try {
+                \App\Services\Notify\CronRunner::lazy();
+            } catch (\Throwable) {
+            }
+        }
     }
 
     /** El instalador crea este archivo al terminar; sin él, todo redirige a /install. */

@@ -107,6 +107,23 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   (aplica migraciones pendientes, solo agrega, links de activación en `storage/demo-links.txt`).
   `tools/` está bloqueado por web y excluido del deploy.
 
+## Notificaciones (Etapa 7)
+- Disparar SIEMPRE con `Notify\Notifier::dispatch($evento, $observacion)`: aplica las reglas de la
+  empresa (`notification_rules`), crea los avisos en la app (`notifications`) y encola email/push/
+  WhatsApp (`notification_queue`, también es el log). Nunca rompe la operación que lo llama.
+- Eventos en `Notify\Messages::EVENTS`; críticos (`CRITICAL`): no se pueden silenciar y se envían
+  en el mismo request. Quien hace la acción no recibe su propio aviso (salvo críticos).
+- Riesgo inminente → `Escalations::open()` crea la alerta (`alerts`); sin "Recibido" en N minutos
+  (setting `notif.escalation_minutes`, 15) sube a nivel 1 y 2 avisando a SyH + admins.
+- Sin workers: `/cron/run?key=…` (`CronRunner::key()` derivada de app.key; ver /admin/tareas)
+  corre cola, escalamientos, vencidas (una vez por día, `notification_marks`) y resúmenes
+  (diario 8 h, semanal lunes). Lock `GET_LOCK` por empresa. Lazy cron solo con PHP-FPM.
+- Email sin librerías: `Core\Smtp` + `Core\MailMessage`. Transporte "archivo" (por defecto,
+  `storage/mail/*.eml`, visible en /admin/tareas) o "smtp" (config en /admin/configuracion,
+  contraseña cifrada en `platform_settings`). Push = API HTTP de Expo; WhatsApp = Meta Cloud API
+  con plantilla de 2 parámetros (deshabilitado hasta configurarlo).
+- En tests: `MailTransport::$fake` y `Channels::$fakeExternal` (no sale nada a internet).
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.
@@ -163,6 +180,8 @@ tests/             run.php + *Test.php
   127.0.0.1; se saltean si no hay MySQL). Los tests usan un storage temporal, no el real.
 - En XAMPP Apache corre como `daemon`: `storage/` y `config/` necesitan permiso de escritura
   para todos (`chmod -R a+rwX storage && chmod a+rwx config`). En el hosting no hace falta.
+  Si una carpeta de `storage/` la crea un script de consola, Apache no puede escribir en ella
+  (pasó con `storage/mail`): darle `chmod a+rwx`.
 - Archivos/carpetas que crea Apache en `storage/` quedan a nombre de `daemon`: para borrarlos en
   local hace falta un script PHP servido por Apache (o `sudo`). Al limpiar pruebas, borrar SOLO
   la carpeta del uuid de prueba, nunca todo `storage/tenants/*` (ahí están las empresas reales).

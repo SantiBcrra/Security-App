@@ -34,6 +34,7 @@ final class ProfileController
             'title'       => 'Mi perfil',
             'user'        => $user,
             'devices'     => UserDevices::forUser((int) $user['id']),
+            'prefs'       => \App\Models\NotificationPrefs::forUser((int) $user['id']),
             'setupSecret' => is_string($setupSecret) ? $setupSecret : null,
             'setupUri'    => is_string($setupSecret) ? Totp::uri($setupSecret, $account, config('app.name') . ' · ' . Tenant::current()['name']) : null,
         ], 'layouts/app'));
@@ -94,6 +95,20 @@ final class ProfileController
         Users::update((int) $user['id'], ['totp_secret_enc' => null, 'totp_enabled' => 0, 'totp_last_step' => null]);
         Audit::tenant('user.2fa.disable', 'user', $user['uuid']);
         Flash::add('success', 'Verificación en dos pasos desactivada.');
+        return Response::redirect('/panel/perfil');
+    }
+
+    /** Canales para avisos NO críticos (los críticos llegan siempre). */
+    public function savePrefs(Request $request): Response
+    {
+        $user = UserAuth::user();
+        if ($user === null) {
+            return Response::redirect('/panel');
+        }
+        foreach (['email', 'push', 'whatsapp'] as $channel) {
+            \App\Models\NotificationPrefs::set((int) $user['id'], $channel, (bool) $request->input($channel));
+        }
+        Flash::add('success', 'Preferencias de notificación guardadas.');
         return Response::redirect('/panel/perfil');
     }
 

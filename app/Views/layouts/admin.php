@@ -20,6 +20,8 @@
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/admin')) ?>">Tablero</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/admin/empresas')) ?>">Empresas</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/admin/migraciones')) ?>">Base de datos</a></li>
+                <li class="nav-item"><a class="nav-link" href="<?= e(url('/admin/configuracion')) ?>">Configuración</a></li>
+                <li class="nav-item"><a class="nav-link" href="<?= e(url('/admin/tareas')) ?>">Tareas</a></li>
             </ul>
             <?php if ($admin): ?>
                 <span class="navbar-text me-3 small"><?= e($admin['name']) ?></span>

@@ -1,5 +1,8 @@
 <?php $canEdit = App\Services\UserAuth::can('configuracion', 'editar'); ?>
-<h1 class="h4 mb-3">Configuración</h1>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h4 m-0">Configuración</h1>
+    <a class="btn btn-outline-primary btn-sm" href="<?= e(url('/panel/configuracion/notificaciones')) ?>">Notificaciones y alertas →</a>
+</div>
 <form class="card shadow-sm" style="max-width: 640px" method="post" action="<?= e(url('/panel/configuracion')) ?>">
     <?= csrf_field() ?>
     <div class="card-header"><strong>Observaciones</strong></div>

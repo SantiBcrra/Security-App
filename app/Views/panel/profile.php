@@ -8,6 +8,19 @@
             </div>
         </div>
 
+        <form class="card shadow-sm mb-3" method="post" action="<?= e(url('/panel/perfil/notificaciones')) ?>">
+            <?= csrf_field() ?>
+            <div class="card-header"><strong>Notificaciones</strong></div>
+            <div class="card-body">
+                <p class="small text-body-secondary">Qué avisos no críticos querés recibir además de la campanita. Los de <strong>riesgo inminente</strong> llegan siempre.</p>
+                <?php foreach (['email' => 'Email', 'push' => 'Notificaciones en el celular (app)', 'whatsapp' => 'WhatsApp'] as $k => $l): ?>
+                    <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="<?= e($k) ?>" value="1" id="pref_<?= e($k) ?>" <?= ($prefs[$k] ?? true) ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="pref_<?= e($k) ?>"><?= e($l) ?></label></div>
+                <?php endforeach; ?>
+                <button class="btn btn-primary btn-sm mt-2">Guardar</button>
+            </div>
+        </form>
+
         <form class="card shadow-sm mb-3" method="post" action="<?= e(url('/panel/perfil/contrasena')) ?>">
             <?= csrf_field() ?>
             <div class="card-header"><strong>Cambiar contraseña</strong></div>

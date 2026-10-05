@@ -13,6 +13,8 @@ use App\Models\ObservationEvents;
 use App\Models\Observations;
 use App\Models\Sectors;
 use App\Models\Users;
+use App\Services\Notify\Escalations;
+use App\Services\Notify\Notifier;
 
 /**
  * Lógica de observaciones: alta (número correlativo + reporte original congelado con hash),
@@ -86,6 +88,8 @@ final class ObservationService
         }
         if (!empty($data['imminent_risk'])) {
             ObservationAlerts::imminent($obs);
+        } else {
+            Notifier::dispatch('observation.created', $obs);
         }
         return ['observation' => Observations::findById($id), 'photo_errors' => $photoErrors];
     }
@@ -172,6 +176,13 @@ final class ObservationService
             throw $e;
         }
         Audit::tenant('observation.' . $action, 'observation', $obs['uuid'], ['estado' => $obs['status']], ['estado' => $t['to']] + ($data ?? []));
+        $fresh = Observations::findById((int) $obs['id']);
+        if ($action === 'asignar') {
+            Notifier::dispatch('observation.assigned', $fresh);
+        } elseif (in_array($action, ['cerrar', 'descartar'], true)) {
+            Escalations::closeFor((int) $obs['id']);
+            Notifier::dispatch('observation.closed', $fresh, ['comment' => $comment]);
+        }
         return null;
     }
 
