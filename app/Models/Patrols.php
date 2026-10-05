@@ -44,6 +44,13 @@ final class Patrols
             FROM patrol_routes r WHERE r.deleted_at IS NULL ORDER BY r.is_active DESC, r.name')->fetchAll();
     }
 
+    public static function assignments(int $routeId): array
+    {
+        $s = DB::tenant()->prepare('SELECT u.uuid, u.name FROM patrol_route_assignments a JOIN users u ON u.id=a.user_id WHERE a.route_id=? AND a.is_active=1 ORDER BY u.name');
+        $s->execute([$routeId]);
+        return $s->fetchAll();
+    }
+
     public static function route(string $uuid): ?array
     {
         $stmt = DB::tenant()->prepare('SELECT * FROM patrol_routes WHERE uuid = ? LIMIT 1');
@@ -67,6 +74,9 @@ final class Patrols
             $id = (int) DB::tenant()->lastInsertId();
             foreach ((array) ($data['point_ids'] ?? []) as $i => $pointId) {
                 DB::tenant()->prepare('INSERT INTO patrol_route_points (route_id,point_id,sort_order) VALUES (?,?,?)')->execute([$id, (int) $pointId, $i + 1]);
+            }
+            foreach ((array) ($data['user_ids'] ?? []) as $userId) {
+                DB::tenant()->prepare('INSERT IGNORE INTO patrol_route_assignments (route_id,user_id,created_at,updated_at) VALUES (?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')->execute([$id, (int) $userId]);
             }
             DB::tenant()->commit();
             return $id;

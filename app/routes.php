@@ -125,6 +125,8 @@ return static function (Router $r): void {
         $r->post('/observaciones/{uuid}/accion/{action}', [ObservationsController::class, 'transition'], [$can('observaciones', 'ver')]);
 
         $r->get('/rondas', [RoundsController::class, 'index'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/rutas/nueva', [RoundsController::class, 'routeForm'], [$can('rondas', 'crear')]);
+        $r->post('/rondas/rutas', [RoundsController::class, 'routeStore'], [$can('rondas', 'crear')]);
         $r->get('/rondas/puntos/nuevo', [RoundsController::class, 'pointForm'], [$can('rondas', 'crear')]);
         $r->post('/rondas/puntos', [RoundsController::class, 'pointStore'], [$can('rondas', 'crear')]);
         $r->get('/rondas/puntos/{uuid}/qr', [RoundsController::class, 'qr'], [$can('rondas', 'ver')]);

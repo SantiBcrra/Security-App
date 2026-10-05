@@ -10,6 +10,7 @@ use App\Core\View;
 use App\Models\Patrols;
 use App\Models\Sectors;
 use App\Models\Sites;
+use App\Models\Users;
 
 final class RoundsController
 {
@@ -23,6 +24,22 @@ final class RoundsController
     public function pointForm(Request $request): Response
     {
         return Response::html(View::render('panel/rounds/point', ['title' => 'Nuevo punto de ronda', 'sites' => Sites::options(), 'sectors' => Sectors::options()], 'layouts/app'));
+    }
+
+    public function routeForm(Request $request): Response
+    {
+        return Response::html(View::render('panel/rounds/route', ['title' => 'Nueva ruta de ronda', 'points' => Patrols::points(), 'users' => array_filter(Users::all(), fn ($u) => (int) $u['is_active'] === 1)], 'layouts/app'));
+    }
+
+    public function routeStore(Request $request): Response
+    {
+        $p = $request->post;
+        $name = trim((string) ($p['name'] ?? ''));
+        $points = array_values(array_filter(array_map('intval', (array) ($p['points'] ?? []))));
+        if ($name === '' || !$points) { Flash::add('danger', 'La ruta necesita un nombre y al menos un punto.'); return Response::redirect('/panel/rondas/rutas/nueva'); }
+        Patrols::createRoute(['name' => $name, 'description' => $p['description'] ?? '', 'frequency' => $p['frequency'] ?? 'manual', 'expected_minutes' => (int) ($p['expected_minutes'] ?? 0), 'point_ids' => $points, 'user_ids' => array_values(array_filter(array_map('intval', (array) ($p['users'] ?? []))))]);
+        Flash::add('success', 'Ruta creada y asignada.');
+        return Response::redirect('/panel/rondas');
     }
 
     public function pointStore(Request $request): Response
