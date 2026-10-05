@@ -31,34 +31,57 @@ final class Migrator
     {
         $results = [];
         foreach (self::targets() as $target) {
-            $results[] = ['label' => $target['label']] + self::run($target['pdo'], $target['dir']);
-            if (end($results)['error'] !== null) {
-                break; // si falla una base, no sigo con las demás
+            try {
+                $pdo = ($target['connect'])();
+            } catch (\Throwable $e) {
+                $results[] = ['label' => $target['label'], 'applied' => [], 'error' => [
+                    'migration' => '', 'statement' => null, 'message' => 'No se pudo conectar: ' . $e->getMessage(),
+                ]];
+                continue; // una empresa caída no frena a las demás
+            }
+            $results[] = ['label' => $target['label']] + self::run($pdo, $target['dir']);
+            if ($target['master'] && end($results)['error'] !== null) {
+                break; // si falla la maestra, no se tocan las empresas
             }
         }
         return $results;
     }
 
-    /** @return list<array{label:string, pending:list<string>, applied:list<array>}> */
+    /** @return list<array{label:string, pending:list<string>, applied:list<array>, error:?string}> */
     public static function statusAll(): array
     {
         $status = [];
         foreach (self::targets() as $target) {
-            $status[] = [
-                'label'   => $target['label'],
-                'pending' => self::pending($target['pdo'], $target['dir']),
-                'applied' => self::appliedRows($target['pdo']),
-            ];
+            try {
+                $pdo = ($target['connect'])();
+                $status[] = [
+                    'label'   => $target['label'],
+                    'pending' => self::pending($pdo, $target['dir']),
+                    'applied' => self::appliedRows($pdo),
+                    'error'   => null,
+                ];
+            } catch (\Throwable $e) {
+                $status[] = ['label' => $target['label'], 'pending' => [], 'applied' => [], 'error' => $e->getMessage()];
+            }
         }
         return $status;
     }
 
-    /** Bases a migrar. Las de empresas se agregan en la Etapa 2 (registro de empresas). */
+    /** Bases a migrar: la maestra y la de cada empresa registrada (incluidas las suspendidas). */
     private static function targets(): array
     {
-        return [
-            ['label' => 'Base maestra', 'pdo' => DB::master(), 'dir' => BASE_PATH . self::MASTER_DIR],
-        ];
+        $targets = [[
+            'label' => 'Base maestra', 'master' => true, 'dir' => BASE_PATH . self::MASTER_DIR,
+            'connect' => fn () => DB::master(),
+        ]];
+        $hasTenants = (bool) DB::master()->query("SHOW TABLES LIKE 'tenants'")->fetchColumn();
+        foreach ($hasTenants ? \App\Models\Tenants::all() : [] as $tenant) {
+            $targets[] = [
+                'label' => 'Empresa: ' . $tenant['name'] . ' (' . $tenant['db_name'] . ')', 'master' => false,
+                'dir' => BASE_PATH . self::TENANT_DIR, 'connect' => fn () => Tenant::connect($tenant),
+            ];
+        }
+        return $targets;
     }
 
     /** @return list<string> nombres de archivo pendientes, en orden */

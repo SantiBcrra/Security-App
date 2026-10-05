@@ -1,1 +1,7 @@
 /* Estilos propios de Security App (encima de Bootstrap 5). */
+
+/* Alpine: ocultar hasta que inicialice */
+[x-cloak] { display: none !important; }
+
+/* Banner de modo soporte (super-admin dentro de una empresa) */
+.support-banner { background: #ffc107; color: #212529; font-size: .9rem; }

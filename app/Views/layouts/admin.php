@@ -18,6 +18,7 @@
         <div class="collapse navbar-collapse" id="nav">
             <ul class="navbar-nav me-auto">
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/admin')) ?>">Tablero</a></li>
+                <li class="nav-item"><a class="nav-link" href="<?= e(url('/admin/empresas')) ?>">Empresas</a></li>
                 <li class="nav-item"><a class="nav-link" href="<?= e(url('/admin/migraciones')) ?>">Base de datos</a></li>
             </ul>
             <?php if ($admin): ?>

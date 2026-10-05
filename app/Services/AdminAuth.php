@@ -57,6 +57,7 @@ final class AdminAuth
 
     public static function logout(): void
     {
+        Impersonation::stop(); // si estaba dentro de una empresa, se audita la salida
         Session::forget(self::SESSION_KEY);
         Session::regenerate();
         Csrf::rotate();

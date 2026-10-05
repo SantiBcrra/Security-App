@@ -49,6 +49,9 @@ final class App
      */
     public static function baseUrl(): string
     {
+        if (self::$baseUrl === null && PHP_SAPI === 'cli') {
+            self::$baseUrl = ''; // tests y scripts: no hay URL de instalación
+        }
         if (self::$baseUrl === null) {
             $dir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/'));
             $dir = rtrim($dir, '/.');

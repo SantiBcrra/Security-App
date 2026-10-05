@@ -13,6 +13,7 @@ use App\Core\Migrator;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Storage;
+use App\Core\Tenant;
 use App\Core\Validator;
 use App\Core\View;
 use App\Models\PlatformAdmin;
@@ -24,10 +25,7 @@ use App\Models\PlatformAdmin;
  */
 final class InstallController
 {
-    private const TIMEZONES = [
-        'America/Argentina/Buenos_Aires', 'America/Montevideo', 'America/Santiago',
-        'America/Asuncion', 'America/La_Paz', 'America/Lima', 'America/Bogota', 'America/Mexico_City', 'UTC',
-    ];
+    private const TIMEZONES = Tenant::TIMEZONES;
 
     private const LABELS = [
         'db_host' => 'Servidor', 'db_port' => 'Puerto', 'db_name' => 'Base de datos', 'db_user' => 'Usuario',

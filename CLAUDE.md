@@ -32,6 +32,23 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Super-admins de la plataforma (`platform_admins`, base maestra) son distintos de los usuarios
   de empresas (Etapa 3). Login con bloqueo: 5 fallos por email+IP o 20 por IP en 15 min.
 
+## Empresas (Etapa 2)
+- Registro en la maestra (`tenants`). Cada empresa: base propia (`securityapp_{slug}` en modo
+  automático, o una base creada en el panel del hosting). La contraseña de esa base se guarda
+  cifrada con `Crypto` (AES-256-GCM, clave `app.key`).
+- ⚠️ **Respaldar `config/config.local.php`**: sin su `app.key` no se pueden descifrar las
+  contraseñas de las bases de empresa ni validar links firmados.
+- Activar empresa = `Tenant::activate($row)` → conecta `DB::tenant()` a SU base. Empresa
+  suspendida → `TenantSuspended`. Las consultas de negocio usan `DB::tenant()`, nunca la maestra.
+- Área de empresa en **`/panel`** (middlewares `RequireTenant` + `ReadOnlyImpersonation`).
+- **URLs reservadas**: ninguna ruta puede empezar con `/app`, `/config`, `/database`, `/storage`,
+  `/tests` o `/vendor` (el `.htaccess` raíz las bloquea con 403 porque son carpetas internas).
+- Impersonación del super-admin ("Entrar como empresa"): solo lectura, auditada al entrar y salir.
+- Auditoría: `Audit::platform()` (maestra, `platform_audit_log`) y `Audit::tenant()` (base de la
+  empresa, `audit_log`). Solo inserción; guardar antes/después de lo que cambia.
+- Archivos de empresa: `TenantFiles` (storage/tenants/{uuid}/…, MIME real con finfo, nombre UUID).
+  Nunca se sirven directo: controlador con permisos o `SignedUrl::make()` (link temporal).
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.
@@ -63,11 +80,13 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 ```
 public/            docroot (index.php front controller, assets/, check.php)
 app/Core/          App, Router, Request, Response, View, DB, Config, ErrorHandler, Logger, Session,
-                   Storage, Migrator, Csrf, Flash, Validator, Uuid, EnvCheck, helpers
-app/Middleware/    RequireInstalled, VerifyCsrf (globales), RequireSuperAdmin
+                   Storage, Migrator, Csrf, Flash, Validator, Uuid, EnvCheck, Tenant, Crypto,
+                   SignedUrl, TenantFiles, Cuit, helpers
+app/Middleware/    RequireInstalled, VerifyCsrf (globales), RequireSuperAdmin, RequireTenant,
+                   ReadOnlyImpersonation
 app/Controllers/   Web/ (Install, Admin/*) y Api/
 app/Models/        acceso a datos (único lugar con SQL)
-app/Services/      lógica (AdminAuth)
+app/Services/      lógica (AdminAuth, Audit, TenantProvisioner, Impersonation)
 app/Views/         layouts/, errors/
 app/routes.php     declaración de rutas
 config/            config.php (git) + config.local.php (NO git, lo genera el instalador)
@@ -84,6 +103,8 @@ tests/             run.php + *Test.php
   127.0.0.1; se saltean si no hay MySQL). Los tests usan un storage temporal, no el real.
 - En XAMPP Apache corre como `daemon`: `storage/` y `config/` necesitan permiso de escritura
   para todos (`chmod -R a+rwX storage && chmod a+rwx config`). En el hosting no hace falta.
+- Archivos/carpetas que crea Apache en `storage/` quedan a nombre de `daemon`: para borrarlos en
+  local hace falta un script PHP servido por Apache (o `sudo`).
 - Base maestra local: `securityapp`. Reinstalar desde cero: borrar `storage/installed.lock` y
   `config/config.local.php`, vaciar la base y abrir `/install`.
 - Inicio: http://localhost/securityapp/

@@ -47,6 +47,18 @@ final class DB
         self::$tenant = self::connect($config);
     }
 
+    public static function clearTenant(): void
+    {
+        self::$tenant = null;
+    }
+
+    /** Solo para tests: olvidar las conexiones abiertas (ej: tras cambiar la config). */
+    public static function reset(): void
+    {
+        self::$master = null;
+        self::$tenant = null;
+    }
+
     public static function hasTenant(): bool
     {
         return self::$tenant !== null;

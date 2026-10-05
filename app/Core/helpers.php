@@ -30,13 +30,13 @@ function config(string $key, mixed $default = null): mixed
     return Config::get($key, $default);
 }
 
-/** Fecha UTC de la base → zona horaria de la empresa, para mostrar. */
+/** Fecha UTC de la base → zona horaria de la empresa activa (o la por defecto), para mostrar. */
 function fecha(?string $utc, string $format = 'd/m/Y H:i', ?string $timezone = null): string
 {
     if ($utc === null || $utc === '') {
         return '';
     }
-    $tz = new DateTimeZone($timezone ?? (string) Config::get('app.timezone', 'UTC'));
+    $tz = new DateTimeZone($timezone ?? \App\Core\Tenant::timezone() ?? (string) Config::get('app.timezone', 'UTC'));
     return (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->setTimezone($tz)->format($format);
 }
 
