@@ -16,7 +16,7 @@ final class QrController
     /** El QR apunta acá: con sesión abre la ficha; sin sesión pide login y vuelve. */
     public function resolve(Request $request, string $uuid): Response
     {
-        $target = '/panel/datos/equipos/' . rawurlencode($uuid);
+        $target = '/panel/equipo/' . rawurlencode($uuid); // ficha de campo: checklists, últimas inspecciones, reportar
         if (Session::get(UserAuth::USER_KEY) === null) {
             Session::put('intended', $target);
             return Response::redirect('/login');

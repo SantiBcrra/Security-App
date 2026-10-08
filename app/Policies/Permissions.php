@@ -134,7 +134,7 @@ final class Permissions
             'reportante' => [
                 'name'        => 'Reportante',
                 'description' => 'Operario o guardia: crea reportes y ve los propios.',
-                'permissions' => $grant(['observaciones', 'incidentes'], ['ver', 'crear'], 'propios')
+                'permissions' => $grant(['observaciones', 'incidentes', 'inspecciones'], ['ver', 'crear'], 'propios') // inspecciones: pre-uso
                     + $grant(['rondas'], ['ver', 'crear', 'cerrar'], 'propios')
                     + $grant(['acciones'], ['ver'], 'propios'), // como responsable igual toma y cierra las suyas
             ],

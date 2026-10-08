@@ -22,6 +22,8 @@ use App\Controllers\Web\InstallController;
 use App\Controllers\Web\MobileController;
 use App\Controllers\Web\Panel\ActionsController;
 use App\Controllers\Web\Panel\ImportController;
+use App\Controllers\Web\Panel\InspectionsController;
+use App\Controllers\Web\Panel\InspectionTemplatesController;
 use App\Controllers\Web\Panel\MasterDataController;
 use App\Controllers\Web\Panel\NotificationRulesController;
 use App\Controllers\Web\Panel\NotificationsController;
@@ -140,6 +142,23 @@ return static function (Router $r): void {
         $r->post('/acciones/{uuid}/comentario', [ActionsController::class, 'comment']);
         $r->post('/acciones/{uuid}/evidencia', [ActionsController::class, 'evidence']);
         $r->get('/acciones/{uuid}/archivos/{attachment}', [ActionsController::class, 'file']);
+
+        // Inspecciones y checklists (Etapa 11). Rutas fijas antes que /inspecciones/{uuid}.
+        $r->get('/inspecciones', [InspectionsController::class, 'index'], [$can('inspecciones', 'ver')]);
+        $r->get('/inspecciones/nueva', [InspectionsController::class, 'create'], [$can('inspecciones', 'crear')]);
+        $r->post('/inspecciones', [InspectionsController::class, 'store'], [$can('inspecciones', 'crear')]);
+        $r->get('/inspecciones/plantillas', [InspectionTemplatesController::class, 'index'], [$can('inspecciones', 'editar')]);
+        $r->get('/inspecciones/plantillas/nueva', [InspectionTemplatesController::class, 'create'], [$can('inspecciones', 'editar')]);
+        $r->post('/inspecciones/plantillas', [InspectionTemplatesController::class, 'save'], [$can('inspecciones', 'editar')]);
+        $r->post('/inspecciones/plantillas/precargadas', [InspectionTemplatesController::class, 'presets'], [$can('inspecciones', 'editar')]);
+        $r->get('/inspecciones/plantillas/{uuid}', [InspectionTemplatesController::class, 'edit'], [$can('inspecciones', 'editar')]);
+        $r->post('/inspecciones/plantillas/{uuid}/estado', [InspectionTemplatesController::class, 'toggle'], [$can('inspecciones', 'editar')]);
+        $r->get('/inspecciones/{uuid}', [InspectionsController::class, 'show'], [$can('inspecciones', 'ver')]);
+        $r->get('/inspecciones/{uuid}/imprimir', [InspectionsController::class, 'printable'], [$can('inspecciones', 'ver')]);
+        $r->post('/inspecciones/{uuid}/anular', [InspectionsController::class, 'annul'], [$can('inspecciones', 'cerrar')]);
+        $r->get('/inspecciones/{uuid}/fotos/{attachment}', [InspectionsController::class, 'photo'], [$can('inspecciones', 'ver')]);
+        // Ficha de campo de un equipo (adonde lleva su QR): cualquier usuario de la empresa
+        $r->get('/equipo/{uuid}', [InspectionsController::class, 'equipment']);
 
         $r->get('/rondas', [RoundsController::class, 'index'], [$can('rondas', 'ver')]);
         $r->get('/rondas/rutas/nueva', [RoundsController::class, 'routeForm'], [$can('rondas', 'crear')]);

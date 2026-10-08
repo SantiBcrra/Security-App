@@ -1,6 +1,6 @@
 # Etapa 11 — Inspecciones y checklists · Diseño
 
-Estado: **aprobado**. Decisiones del usuario: una acción por ítem; falla crítica = solo aviso (sin "fuera de
+Estado: **aprobado** · entrega 1 hecha. Decisiones del usuario: una acción por ítem; falla crítica = solo aviso (sin "fuera de
 servicio"); el operario hace el pre-uso; frecuencias diaria/semanal/mensual + manual (turnos más adelante).
 
 ## 1. Qué resuelve

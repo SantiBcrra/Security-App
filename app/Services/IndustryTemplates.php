@@ -7,7 +7,7 @@ use App\Models\CatalogItems;
 use App\Models\Positions;
 
 /**
- * Plantillas por rubro (database/seeds/templates/{clave}.php): precargan catálogos y puestos.
+ * Plantillas por rubro (database/seeds/templates/{clave}.php): precargan catálogos, puestos y checklists.
  * Aplicarlas es idempotente: agrega lo que falta por nombre y no modifica ni duplica nada.
  * Para sumar un rubro nuevo alcanza con agregar un archivo.
  */
@@ -24,6 +24,20 @@ final class IndustryTemplates
             $list[basename($file, '.php')] = $data['name'];
         }
         return $list;
+    }
+
+    /** Solo los checklists de un rubro (desde Inspecciones → Plantillas). @return array{created:int, existing:int} */
+    public static function applyInspections(string $key): array
+    {
+        if (!isset(self::available()[$key])) {
+            throw new \DomainException('Plantilla inexistente.');
+        }
+        $template = require BASE_PATH . self::DIR . '/' . $key . '.php';
+        $out = ['created' => 0, 'existing' => 0];
+        foreach ($template['inspections'] ?? [] as $slug => $def) {
+            InspectionTemplateService::importPreset($key . '/' . $slug, $def) ? $out['created']++ : $out['existing']++;
+        }
+        return $out;
     }
 
     /** @return array{created:int, existing:int} */
@@ -57,6 +71,9 @@ final class IndustryTemplates
             }
             Positions::create(['name' => $name]);
             $created++;
+        }
+        foreach ($template['inspections'] ?? [] as $slug => $def) {
+            InspectionTemplateService::importPreset($key . '/' . $slug, $def) ? $created++ : $existing++;
         }
         Audit::tenant('template.apply', 'template', null, null, ['plantilla' => $template['name'], 'creados' => $created]);
         return ['created' => $created, 'existing' => $existing];

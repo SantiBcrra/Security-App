@@ -81,7 +81,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Alcance por sector: `SectorScope::sectorIds($modulo)` → null (todo) o ids permitidos
   (sectores del usuario + descendientes). Asignación en el formulario de usuario (`user_sectors`).
 - Plantillas de rubro: `database/seeds/templates/{clave}.php`, idempotentes (`IndustryTemplates`).
-- QR de equipos: `/q/{uuid}` (con sesión → ficha; sin sesión → login y vuelve). Etiquetas A4 en
+- QR de equipos: `/q/{uuid}` (con sesión → ficha de campo `/panel/equipo/{uuid}`, Etapa 11; sin sesión → login y vuelve). Etiquetas A4 en
   `/panel/datos/equipos/etiquetas`. QR generado en el navegador con `qrcode.min.js` local.
 - Importación: `Core\Spreadsheet` (CSV y XLSX propios, sin librerías; `.xls` no) +
   `Services\Import\Importer` (subir → mapeo por sinónimos → vista previa → lotes de 100 por AJAX,
@@ -184,6 +184,23 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   operaciones `action.start` / `action.close` en `Sync\Push`, evidencia por partes con `POST /uploads` + `action_uuid`.
   En `sync.js` el cierre espera a que suban sus fotos (dos pasadas de `pushOps`); "Mis acciones" en la pestaña Reportes y
   detalle `#/accion/{uuid}`. Reintentar un envío rechazado genera otro op_id (el servidor recuerda la respuesta de cada uno).
+
+## Inspecciones y checklists (Etapa 11) — diseño en `docs/design/etapa-11-inspecciones.md`
+- Plantillas `inspection_templates` (alcance equipo [por tipo] / sector / general) con versiones
+  `inspection_template_versions.structure` (JSON: secciones → ítems con `key` UUID estable, type si_no | si_no_na |
+  numero | texto, `ok_when`, min/max, critical, photo). `InspectionTemplateService::save()`: si la versión vigente ya
+  se usó crea otra, si no la corrige. Precargadas por rubro en `database/seeds/templates/{rubro}.php` → `inspections`
+  ("*" = crítico), idempotentes por `preset_key` (`IndustryTemplates::applyInspections()`).
+- `InspectionStructure::evaluate()` calcula SIEMPRE en el servidor ok/resultado/score; comentario obligatorio si no
+  cumple; foto según `photo`. `InspectionService::create()`: número INS-000001, respuestas + `original_data`/hash
+  inmutables (solo se anula, con motivo), una acción CAPA por ítem que no cumple (`origin_type = inspeccion`; crítico
+  → prioridad crítica, plazo `inspecciones.plazo_critico_dias` 1; si no `inspecciones.plazo_dias` 7; responsable:
+  supervisor del sector, si no quien inspeccionó) y evento `inspection.critical_fail` (supervisores + SyH).
+  Idempotente por `uuid` (para la app de campo).
+- Decisiones del usuario: falla crítica = solo aviso (el equipo NO queda fuera de servicio), el operario (reportante)
+  hace el pre-uso (`inspecciones` ver + crear propios), sin turnos por ahora.
+- El QR `/q/{uuid}` lleva a la ficha de campo `/panel/equipo/{uuid}` (cualquier usuario): checklists de su tipo,
+  últimas inspecciones, reportar observación.
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

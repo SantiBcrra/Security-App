@@ -25,6 +25,8 @@ final class Messages
         'action.verified'          => 'Acción verificada',
         'action.rejected'          => 'Cierre rechazado (no fue eficaz)',
         'action.cancelled'         => 'Acción cancelada',
+        // Inspecciones (Etapa 11). Sujeto = la inspección: reporter = quien inspeccionó.
+        'inspection.critical_fail' => 'Inspección con falla en un ítem crítico',
     ];
 
     /** Eventos que no se eligen en las reglas (los dispara el sistema con destinatarios fijos). */
@@ -38,6 +40,9 @@ final class Messages
     {
         if (str_starts_with($event, 'action.')) {
             return self::forAction($event, $obs, $extra);
+        }
+        if (str_starts_with($event, 'inspection.')) {
+            return self::forInspection($event, $obs);
         }
         $num = Observations::format((int) $obs['number']);
         $where = trim(($obs['sector_name'] ?? '') . ($obs['equipment_code'] ? ' · ' . $obs['equipment_code'] : ''), ' ·');
@@ -79,6 +84,20 @@ final class Messages
             default                    => [self::EVENTS[$event] ?? $event, $what],
         };
         return ['title' => $title, 'body' => $body, 'url' => '/panel/acciones/' . $a['uuid'], 'critical' => false];
+    }
+
+    private static function forInspection(string $event, array $i): array
+    {
+        $num = \App\Models\Inspections::format((int) $i['number']);
+        $what = $i['equipment_code'] ? $i['equipment_code'] . ' · ' . $i['equipment_name'] : ($i['sector_name'] ?? '');
+        $failed = array_filter(\App\Models\Inspections::answers((int) $i['id']), fn ($a) => $a['ok'] !== null && (int) $a['ok'] === 0 && (int) $a['critical'] === 1);
+        $list = implode("\n", array_map(fn ($a) => '• ' . $a['item_text'] . ($a['comment'] ? ': ' . $a['comment'] : ''), $failed));
+        [$title, $body] = match ($event) {
+            'inspection.critical_fail' => ["⚠ Falla crítica · {$what} · {$num}", "{$i['template_name']} hecha por " . ($i['inspector_name'] ?? '—')
+                . " con fallas críticas:\n{$list}\nSe crearon las acciones correctivas. Verificá que el equipo no se use hasta resolverlo."],
+            default => [self::EVENTS[$event] ?? $event, $what],
+        };
+        return ['title' => $title, 'body' => $body, 'url' => '/panel/inspecciones/' . $i['uuid'], 'critical' => false];
     }
 
     /** Prioridad de una acción como "nivel" (para el filtro de severidad mínima de las reglas). */

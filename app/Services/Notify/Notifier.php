@@ -80,7 +80,7 @@ final class Notifier
                         'subject' => $message['title'], 'body_text' => self::text($message),
                         'body_html' => $channel === 'email' ? self::html($message, $user) : null,
                         'payload' => json_encode(['url' => $message['url'], 'event' => $event, $obs['_type'] => $obs['uuid'],
-                            'app_url' => absolute_url('/movil') . '#/' . ($obs['_type'] === 'action' ? 'accion' : 'observacion') . '/' . $obs['uuid']]),
+                            'app_url' => absolute_url('/movil') . '#/' . (['action' => 'accion', 'inspection' => 'inspeccion'][$obs['_type']] ?? 'observacion') . '/' . $obs['uuid']]),
                         'event' => $event, 'entity_uuid' => $obs['uuid'], 'is_critical' => $message['critical'] ? 1 : 0,
                     ]);
                 }
@@ -102,6 +102,11 @@ final class Notifier
             $a = Actions::findById((int) $row['id']) ?? $row;
             return $a + ['_type' => 'action', 'assigned_user_id' => $a['responsible_user_id'], 'reporter_user_id' => $a['created_by'],
                 'severity_level' => Messages::actionLevel((string) $a['priority'])];
+        }
+        if (str_starts_with($event, 'inspection.')) {
+            $i = \App\Models\Inspections::findById((int) $row['id']) ?? $row;
+            return $i + ['_type' => 'inspection', 'assigned_user_id' => null, 'reporter_user_id' => $i['inspector_user_id'],
+                'severity_level' => (int) $i['items_critical_fail'] > 0 ? 4 : 2];
         }
         return (Observations::findById((int) $row['id']) ?? $row) + ['_type' => 'observation'];
     }
