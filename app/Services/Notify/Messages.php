@@ -27,6 +27,8 @@ final class Messages
         'action.cancelled'         => 'Acción cancelada',
         // Inspecciones (Etapa 11). Sujeto = la inspección: reporter = quien inspeccionó.
         'inspection.critical_fail' => 'Inspección con falla en un ítem crítico',
+        'inspection.due'           => 'Inspección programada para hoy',
+        'inspection.overdue'       => 'Inspección programada vencida',
     ];
 
     /** Eventos que no se eligen en las reglas (los dispara el sistema con destinatarios fijos). */
@@ -88,6 +90,16 @@ final class Messages
 
     private static function forInspection(string $event, array $i): array
     {
+        if (in_array($event, ['inspection.due', 'inspection.overdue'], true)) { // sujeto: la programada
+            $what = $i['equipment_code'] ? $i['equipment_code'] . ' · ' . $i['equipment_name'] : ($i['sector_name'] ?? '');
+            $due = date('d/m/Y', strtotime((string) $i['due_on']));
+            [$title, $body] = $event === 'inspection.due'
+                ? ["Inspección para hoy · {$i['template_name']}", "{$what}\nPrograma: {$i['program_name']}. Hacela hoy (" . $due . ').']
+                : ["Inspección vencida · {$i['template_name']}", "{$what}\nVenció el {$due} y no se hizo. Programa: {$i['program_name']}."];
+            $url = '/panel/inspecciones/nueva?' . http_build_query(array_filter(['plantilla' => $i['template_uuid'], 'equipo' => $i['equipment_uuid'],
+                'sector' => $i['equipment_uuid'] ? null : $i['sector_uuid'], 'programada' => $i['uuid']]));
+            return ['title' => $title, 'body' => $body, 'url' => $url, 'critical' => false];
+        }
         $num = \App\Models\Inspections::format((int) $i['number']);
         $what = $i['equipment_code'] ? $i['equipment_code'] . ' · ' . $i['equipment_name'] : ($i['sector_name'] ?? '');
         $failed = array_filter(\App\Models\Inspections::answers((int) $i['id']), fn ($a) => $a['ok'] !== null && (int) $a['ok'] === 0 && (int) $a['critical'] === 1);

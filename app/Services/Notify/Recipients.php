@@ -45,7 +45,10 @@ final class Recipients
             case 'user':
                 $u = Users::findByUuid((string) ($r['value'] ?? ''));
                 return $u ? [(int) $u['id']] : [];
-            case 'assignee':
+            case 'assignee': // inspecciones programadas: puede haber varios a cargo (un rol, los supervisores)
+                if (isset($obs['assignee_ids'])) {
+                    return $obs['assignee_ids'];
+                }
                 return !empty($obs['assigned_user_id']) ? [(int) $obs['assigned_user_id']] : [];
             case 'reporter':
                 return !empty($obs['reporter_user_id']) ? [(int) $obs['reporter_user_id']] : [];

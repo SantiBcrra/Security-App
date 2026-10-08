@@ -9,6 +9,7 @@ $err = fn (string $k) => isset($errors[$k]) ? '<div class="text-danger small mt-
     <span class="small text-body-secondary">versión <?= e($version['version']) ?></span>
 </div>
 <?php if ($equipment): ?><p class="mb-3"><strong><?= e($equipment['code']) ?></strong> · <?= e($equipment['name']) ?></p><?php endif; ?>
+<?php if ($schedule): ?><div class="alert alert-info small py-2">Inspección programada: <?= e($schedule['program_name']) ?> · vence el <?= e(date('d/m/Y', strtotime($schedule['due_on']))) ?>.</div><?php endif; ?>
 <?php if ($template['description']): ?><div class="alert alert-secondary small"><?= e($template['description']) ?></div><?php endif; ?>
 
 <form method="post" enctype="multipart/form-data" action="<?= e(url('/panel/inspecciones')) ?>" style="max-width: 860px"
@@ -18,13 +19,14 @@ $err = fn (string $k) => isset($errors[$k]) ? '<div class="text-danger small mt-
     <input type="hidden" name="template" value="<?= e($template['uuid']) ?>">
     <input type="hidden" name="version" value="<?= e($version['uuid']) ?>">
     <input type="hidden" name="equipment" value="<?= e($equipment['uuid'] ?? '') ?>">
+    <input type="hidden" name="schedule" value="<?= e($schedule['uuid'] ?? '') ?>">
     <input type="hidden" name="lat" x-ref="lat"><input type="hidden" name="lng" x-ref="lng"><input type="hidden" name="gps_accuracy" x-ref="acc">
 
     <?php if ($template['scope'] === 'sector'): ?>
         <div class="card shadow-sm mb-3"><div class="card-body">
             <label class="form-label">Sector inspeccionado</label>
             <select class="form-select" name="sector" required><option value="">Elegí…</option>
-                <?php foreach ($sectors as $u => $n): ?><option value="<?= e($u) ?>" <?= ($old['sector'] ?? '') === $u ? 'selected' : '' ?>><?= e($n) ?></option><?php endforeach; ?>
+                <?php foreach ($sectors as $u => $n): ?><option value="<?= e($u) ?>" <?= ($old['sector'] ?? $preSector) === $u ? 'selected' : '' ?>><?= e($n) ?></option><?php endforeach; ?>
             </select><?= $err('sector') ?>
         </div></div>
     <?php endif; ?>

@@ -326,6 +326,128 @@ return [
         $_SESSION = [];
     },
 
+    'programas: fechas por período (diaria, semanal, mensual)' => function () {
+        $weekly = App\Services\InspectionPlanner::periods(['frequency' => 'semanal', 'weekday' => 3, 'monthday' => null], '2026-10-01', '2026-10-31');
+        assert_same(['2026-10-07', '2026-10-14', '2026-10-21', '2026-10-28'], array_column($weekly, 2), 'los miércoles');
+        assert_same(['2026-W41', '2026-10-05'], [$weekly[0][0], $weekly[0][1]], 'la ventana empieza el lunes');
+        $monthly = App\Services\InspectionPlanner::periods(['frequency' => 'mensual', 'weekday' => null, 'monthday' => 31], '2027-02-01', '2027-03-31');
+        assert_same([['2027-02', '2027-02-01', '2027-02-28'], ['2027-03', '2027-03-01', '2027-03-31']], $monthly, 'día 31 en febrero = último día');
+        assert_same(3, count(App\Services\InspectionPlanner::periods(['frequency' => 'diaria', 'weekday' => null, 'monthday' => null], '2026-10-01', '2026-10-03')));
+    },
+
+    'programas: validación, generación idempotente y equipos nuevos' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $tpl = InspectionTemplates::findById((int) $st['tplAe']['id']);
+        [, $errors] = App\Services\InspectionPlanner::save(null, ['template' => $tpl['uuid'], 'target_type' => 'sector', 'sector' => Sectors::findById($st['nave1'])['uuid']]);
+        assert_true(str_contains(implode(' ', $errors), 'es de equipos'));
+        [$p, $errors] = App\Services\InspectionPlanner::save(null, ['template' => $tpl['uuid'], 'frequency' => 'diaria', 'target_type' => 'tipo',
+            'assignee_type' => 'sector_supervisors', 'action_responsible' => $st['sup2']['uuid']]);
+        assert_same([], $errors);
+        assert_same('Pre-uso autoelevador', $p['name'], 'sin nombre: el del checklist');
+        $count = fn () => (int) DB::tenant()->query('SELECT COUNT(*) FROM inspection_schedule')->fetchColumn();
+        assert_same(7, $count(), 'hoy + 6 días para el único autoelevador (al guardar ya se generan)');
+        assert_same(0, App\Services\InspectionPlanner::generate(ActionService::today()), 'correrlo de nuevo no duplica');
+        $site = (int) $st['ae']['site_id'];
+        $st['ae2'] = Equipment::findById(Equipment::create(['code' => 'AE-02', 'name' => 'Autoelevador Hyster', 'site_id' => $site, 'sector_id' => $st['nave1'],
+            'type_id' => (int) $st['ae']['type_id']]));
+        assert_same(7, App\Services\InspectionPlanner::generate(ActionService::today()), 'el equipo nuevo entra solo');
+        $st['program'] = $p;
+    },
+
+    'programadas: la inspección marca la de hoy y las acciones van al responsable del programa' => function () use ($setup, &$st, $keys, $allOk) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['rep']);
+        $tpl = InspectionTemplates::findById((int) $st['tplAe']['id']);
+        $r = InspectionService::create(['template' => $tpl['uuid'], 'equipment' => $st['ae']['uuid'],
+            'answers' => $allOk($keys($tpl), ['Luces delanteras y traseras funcionan' => ['value' => 'no', 'comment' => 'Faro trasero quemado']])]);
+        assert_same([], $r['errors']);
+        $today = ActionService::today();
+        $sched = App\Models\InspectionSchedules::search(['equipment_id' => (int) $st['ae']['id'], 'due_on_from' => $today, 'due_on_to' => $today], null)[0];
+        assert_same(['hecha', 1, (int) $r['inspection']['id']], [$sched['status'], (int) $sched['on_time'], (int) $sched['inspection_id']]);
+        $action = Actions::forOrigin('inspeccion', (int) $r['inspection']['id'])[0];
+        assert_same((int) $st['sup2']['id'], (int) $action['responsible_user_id'], 'responsable de acciones del programa');
+    },
+
+    'recordatorios: para hoy y vencida, una sola vez; omitir con motivo' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent(null);
+        $today = ActionService::today();
+        $tomorrow = (new DateTimeImmutable($today))->modify('+1 day')->format('Y-m-d');
+        $inbox = fn (array $u, string $prefix) => count(array_filter(array_column(DB::tenant()->query('SELECT title FROM notifications WHERE user_id = '
+            . (int) $u['id'])->fetchAll(), 'title'), fn ($t) => str_starts_with($t, $prefix)));
+        $r = App\Services\Notify\InspectionReminders::run($today);
+        assert_same(1, $r['due'], 'solo AE-02 (AE-01 ya está hecha)');
+        assert_same(1, $inbox($st['sup'], 'Inspección para hoy'), 'al supervisor del sector (a cargo)');
+        assert_same(0, App\Services\Notify\InspectionReminders::run($today)['due'], 'no se repite');
+        // AE-02 de mañana: se omite (rep no puede, SyH sí)
+        $ae2Tomorrow = App\Models\InspectionSchedules::search(['equipment_id' => (int) $st['ae2']['id'], 'due_on_from' => $tomorrow, 'due_on_to' => $tomorrow], null)[0];
+        UserAuth::setCurrent($st['rep']);
+        assert_true(str_contains((string) App\Services\InspectionPlanner::skip($ae2Tomorrow, 'en reparación'), 'permiso'));
+        UserAuth::setCurrent($st['hys']);
+        assert_true(str_contains((string) App\Services\InspectionPlanner::skip($ae2Tomorrow, 'x'), 'motivo'));
+        assert_same(null, App\Services\InspectionPlanner::skip($ae2Tomorrow, 'Equipo en el taller'));
+        UserAuth::setCurrent(null);
+        $r = App\Services\Notify\InspectionReminders::run($tomorrow);
+        assert_same(1, $r['overdue'], 'la de hoy de AE-02 quedó vencida');
+        assert_same(1, $inbox($st['sup'], 'Inspección vencida'));
+        assert_same(1, $r['due'], 'mañana: solo AE-01 (la de AE-02 se omitió)');
+    },
+
+    'cumplimiento: a tiempo / (vencidas - omitidas), por programa y por equipo' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $today = ActionService::today();
+        $after = (new DateTimeImmutable($today))->modify('+2 days')->format('Y-m-d'); // hoy y mañana ya "vencieron"
+        $rows = App\Models\InspectionSchedules::compliance($today, (new DateTimeImmutable($today))->modify('+1 day')->format('Y-m-d'), $after, 'program', null);
+        assert_same(1, count($rows));
+        assert_same([4, 1, 0, 2, 1], [(int) $rows[0]['total'], (int) $rows[0]['on_time'], (int) $rows[0]['late'], (int) $rows[0]['missed'], (int) $rows[0]['skipped']]);
+        assert_same(33, App\Controllers\Web\Panel\InspectionsController::percent($rows[0]), '1 a tiempo de 3 (la omitida no cuenta)');
+        $byEq = array_column(App\Models\InspectionSchedules::compliance($today, $after, $after, 'equipment', null), null, 'label');
+        assert_same(1, (int) $byEq['AE-01 · Autoelevador Toyota']['on_time']);
+        UserAuth::setCurrent($st['sup2']);
+        assert_same([], App\Models\InspectionSchedules::compliance($today, $after, $after, 'program', App\Services\InspectionPlanner::scope()),
+            'el supervisor de otra nave no ve estas');
+    },
+
+    'HTTP: programadas, cumplimiento, programas, CSV e inicio' => function () use ($setup, &$st) {
+        $setup();
+        $call = function (array $user, string $path) use (&$st) {
+            UserAuth::setCurrent(null);
+            Tenant::deactivate();
+            $_SESSION = [];
+            \App\Core\Session::put(\App\Services\Impersonation::TENANT_KEY, $st['a']['uuid']);
+            \App\Core\Session::put(UserAuth::USER_KEY, $user['uuid']);
+            [$p, $q] = array_pad(explode('?', $path, 2), 2, '');
+            parse_str($q, $query);
+            $router = new \App\Core\Router();
+            (require BASE_PATH . '/app/routes.php')($router);
+            return $router->dispatch(new \App\Core\Request('GET', $p, $query));
+        };
+        $page = $call($st['sup'], '/panel/inspecciones/programadas?ver=hoy');
+        assert_same(200, $page->status);
+        assert_true(str_contains($page->body, 'AE-0'), 'lista las programadas de su nave');
+        assert_same(200, $call($st['sup'], '/panel/inspecciones/programadas?ver=vencidas&mias=1')->status);
+        assert_same(200, $call($st['hys'], '/panel/inspecciones/cumplimiento?por=sector')->status);
+        $csv = $call($st['hys'], '/panel/inspecciones/cumplimiento?csv=1');
+        assert_true(str_contains($csv->body, 'Programadas;"A tiempo"'), 'csv cumplimiento: ' . substr($csv->body, 0, 120));
+        assert_same(200, $call($st['hys'], '/panel/inspecciones/programas')->status);
+        assert_same(200, $call($st['hys'], '/panel/inspecciones/programas/' . $st['program']['uuid'])->status);
+        assert_same(200, $call($st['hys'], '/panel/inspecciones/programas/nuevo')->status);
+        assert_same(403, $call($st['rep'], '/panel/inspecciones/programas')->status);
+        $exp = $call($st['hys'], '/panel/inspecciones/exportar');
+        assert_true(str_contains($exp->body, 'Número;Fecha;Checklist'), 'csv inspecciones: ' . substr($exp->body, 0, 120));
+        $home = $call($st['sup'], '/panel');
+        assert_true(str_contains($home->body, 'Inspecciones de hoy'), 'recuadro en el inicio');
+        $form = $call($st['sup'], '/panel/inspecciones/nueva?plantilla=' . $st['tplAe']['uuid'] . '&equipo=' . $st['ae2']['uuid'] . '&programada=x');
+        assert_same(200, $form->status);
+        $_SESSION = [];
+    },
+
     'aislamiento: la empresa B no ve plantillas ni inspecciones de A' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['b']);

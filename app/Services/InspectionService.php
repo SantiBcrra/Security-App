@@ -7,6 +7,7 @@ use App\Core\DB;
 use App\Core\Tenant;
 use App\Core\Uuid;
 use App\Models\Equipment;
+use App\Models\InspectionSchedules;
 use App\Models\InspectionTemplates;
 use App\Models\Inspections;
 use App\Models\Sectors;
@@ -109,6 +110,19 @@ final class InspectionService
         }
         $eval = InspectionStructure::evaluate($version['structure'], (array) ($in['answers'] ?? []), array_map('count', $photos));
         $errors += $eval['errors'];
+        // Programada que cumple esta inspección: la indicada (desde el aviso / la lista) o la que corresponda.
+        $schedule = null;
+        if (!$errors) {
+            $localDate = fecha($doneAt, 'Y-m-d');
+            if (($in['schedule'] ?? '') !== '') {
+                $schedule = InspectionSchedules::findByUuid((string) $in['schedule']);
+                $matches = $schedule && $schedule['status'] === 'pendiente' && (int) $schedule['template_id'] === (int) $template['id']
+                    && ($equipment ? (int) $schedule['equipment_id'] === (int) $equipment['id'] : (int) $schedule['sector_id'] === (int) ($sector['id'] ?? 0));
+                $schedule = $matches ? $schedule : null;
+            }
+            $schedule ??= InspectionSchedules::matchFor((int) $template['id'], $equipment ? (int) $equipment['id'] : null,
+                $equipment ? null : ($sector ? (int) $sector['id'] : null), $localDate);
+        }
         if ($errors) {
             return ['inspection' => null, 'errors' => $errors];
         }
@@ -131,7 +145,7 @@ final class InspectionService
             $json = json_encode($original, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $id = Inspections::create(array_filter([
                 'uuid' => $uuid ?: null, 'number' => $number, 'template_id' => (int) $template['id'], 'template_version_id' => (int) $version['id'],
-                'schedule_id' => isset($in['schedule_id']) ? (int) $in['schedule_id'] : null,
+                'schedule_id' => $schedule ? (int) $schedule['id'] : null,
                 'equipment_id' => $equipment ? (int) $equipment['id'] : null,
                 'sector_id' => $sector ? (int) $sector['id'] : null,
                 'site_id' => $sector ? (int) $sector['site_id'] : ($equipment && $equipment['site_id'] ? (int) $equipment['site_id'] : null),
@@ -147,6 +161,9 @@ final class InspectionService
                 $answerIds[$row['key']] = Inspections::addAnswer($id, $row);
             }
             Inspections::addEvent($id, 'created', ['data' => ['resultado' => $eval['result'], 'cumplimiento' => $eval['score']]] + self::actor());
+            if ($schedule) {
+                InspectionSchedules::markDone((int) $schedule['id'], $id, $localDate, $localDate <= $schedule['due_on']);
+            }
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollBack();
@@ -156,7 +173,8 @@ final class InspectionService
         $inspection = Inspections::findById($id);
         $photoErrors = self::storePhotos($inspection, $photos);
         Audit::tenant('inspection.create', 'inspection', $inspection['uuid'], null, ['numero' => Inspections::format($number), 'resultado' => $eval['result']]);
-        self::createActions($inspection, $eval['rows'], $answerIds, $in);
+        $program = $schedule ? \App\Models\InspectionPrograms::findById((int) $schedule['program_id']) : self::programFor($template, $equipment, $sector);
+        self::createActions($inspection, $eval['rows'], $answerIds, ['action_responsible_id' => $program['action_responsible_user_id'] ?? null]);
         if ($eval['critical_fail'] > 0) {
             Notifier::dispatch('inspection.critical_fail', $inspection);
         }
@@ -194,6 +212,19 @@ final class InspectionService
             $created[] = \App\Models\Actions::format((int) $action['number']);
         }
         Inspections::addEvent((int) $inspection['id'], 'action_created', ['data' => ['acciones' => $created], 'actor_name' => 'Sistema']);
+    }
+
+    /** Sin programada: el programa activo de esa plantilla que cubre al equipo / sector (para el responsable de acciones). */
+    private static function programFor(array $template, ?array $equipment, ?array $sector): ?array
+    {
+        foreach (\App\Models\InspectionPrograms::forTemplate((int) $template['id']) as $p) {
+            foreach (InspectionPlanner::targets($p) as [$eqId, $secId]) {
+                if ($equipment ? $eqId === (int) $equipment['id'] : ($eqId === null && $secId === (int) ($sector['id'] ?? 0))) {
+                    return $p;
+                }
+            }
+        }
+        return null;
     }
 
     /**

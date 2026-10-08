@@ -8,8 +8,13 @@ $query = fn (array $over) => '?' . http_build_query(array_filter(array_merge($fo
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <h1 class="h4 m-0">Inspecciones</h1>
     <div class="d-flex gap-2">
+        <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/panel/inspecciones/programadas')) ?>">Programadas</a>
+        <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/panel/inspecciones/cumplimiento')) ?>">Cumplimiento</a>
         <?php if (UserAuth::can('inspecciones', 'editar')): ?>
             <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/panel/inspecciones/plantillas')) ?>">Plantillas</a>
+        <?php endif; ?>
+        <?php if (UserAuth::can('inspecciones', 'exportar')): ?>
+            <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/panel/inspecciones/exportar' . $query([]))) ?>">CSV</a>
         <?php endif; ?>
         <a class="btn btn-sm <?= $form['mias'] === '1' ? 'btn-primary' : 'btn-outline-primary' ?>" href="<?= e($query(['mias' => $form['mias'] === '1' ? '' : '1'])) ?>">Mis inspecciones</a>
         <?php if (UserAuth::can('inspecciones', 'crear')): ?>

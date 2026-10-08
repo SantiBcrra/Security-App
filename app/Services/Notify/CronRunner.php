@@ -42,6 +42,7 @@ final class CronRunner
                     $summary[$tenant['slug']] = [
                         'escalated' => Escalations::run(),
                         'actions'   => ActionReminders::run(),
+                        'inspections' => InspectionReminders::run(),
                         'digests'   => Digests::run(),
                         'queue'     => QueueRunner::run($remaining, 100),
                     ];

@@ -80,7 +80,7 @@ final class Notifier
                         'subject' => $message['title'], 'body_text' => self::text($message),
                         'body_html' => $channel === 'email' ? self::html($message, $user) : null,
                         'payload' => json_encode(['url' => $message['url'], 'event' => $event, $obs['_type'] => $obs['uuid'],
-                            'app_url' => absolute_url('/movil') . '#/' . (['action' => 'accion', 'inspection' => 'inspeccion'][$obs['_type']] ?? 'observacion') . '/' . $obs['uuid']]),
+                            'app_url' => absolute_url('/movil') . '#/' . (['action' => 'accion', 'inspection' => 'inspeccion', 'schedule' => 'programada'][$obs['_type']] ?? 'observacion') . '/' . $obs['uuid']]),
                         'event' => $event, 'entity_uuid' => $obs['uuid'], 'is_critical' => $message['critical'] ? 1 : 0,
                     ]);
                 }
@@ -102,6 +102,10 @@ final class Notifier
             $a = Actions::findById((int) $row['id']) ?? $row;
             return $a + ['_type' => 'action', 'assigned_user_id' => $a['responsible_user_id'], 'reporter_user_id' => $a['created_by'],
                 'severity_level' => Messages::actionLevel((string) $a['priority'])];
+        }
+        if (in_array($event, ['inspection.due', 'inspection.overdue'], true)) {
+            $s = \App\Models\InspectionSchedules::findById((int) $row['id']) ?? $row;
+            return $s + ['_type' => 'schedule', 'assignee_ids' => \App\Services\InspectionPlanner::assignees($s), 'reporter_user_id' => null, 'severity_level' => 2];
         }
         if (str_starts_with($event, 'inspection.')) {
             $i = \App\Models\Inspections::findById((int) $row['id']) ?? $row;

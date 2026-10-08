@@ -5,6 +5,20 @@
         <a class="btn btn-primary" href="<?= e(url('/panel/observaciones/nueva')) ?>">+ Reportar observación</a>
     <?php endif; ?>
 </div>
+<?php if ($myInspections): ?>
+    <div class="card shadow-sm mb-3 border-info">
+        <div class="card-header d-flex justify-content-between"><strong>Inspecciones de hoy</strong><a class="small" href="<?= e(url('/panel/inspecciones/programadas?mias=1')) ?>">Ver todas</a></div>
+        <div class="list-group list-group-flush">
+            <?php foreach ($myInspections as $s): $late = $s['due_on'] < $today; ?>
+                <a class="list-group-item list-group-item-action d-flex justify-content-between gap-2" href="<?= e(url('/panel/inspecciones/nueva?' . http_build_query(array_filter([
+                    'plantilla' => $s['template_uuid'], 'equipo' => $s['equipment_uuid'], 'sector' => $s['equipment_uuid'] ? null : $s['sector_uuid'], 'programada' => $s['uuid']])))) ?>">
+                    <span><?= e($s['equipment_code'] ? $s['equipment_code'] . ' · ' . $s['equipment_name'] : $s['sector_name']) ?> <span class="small text-body-secondary">· <?= e($s['template_name']) ?></span></span>
+                    <span class="small text-nowrap <?= $late ? 'text-danger fw-semibold' : 'text-body-secondary' ?>"><?= $late ? 'vencida ' . e(date('d/m', strtotime($s['due_on']))) : ($s['due_on'] === $today ? 'hoy' : 'hasta el ' . e(date('d/m', strtotime($s['due_on'])))) ?></span>
+                </a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+<?php endif; ?>
 <?php if ($myActions): require BASE_PATH . '/app/Views/panel/actions/_badges.php'; ?>
     <div class="card shadow-sm mb-3 border-warning">
         <div class="card-header d-flex justify-content-between"><strong>Mis acciones pendientes</strong><a class="small" href="<?= e(url('/panel/acciones?estado=pendientes&mias=1')) ?>">Ver todas</a></div>

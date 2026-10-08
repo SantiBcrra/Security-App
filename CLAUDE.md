@@ -201,6 +201,16 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   hace el pre-uso (`inspecciones` ver + crear propios), sin turnos por ahora.
 - El QR `/q/{uuid}` lleva a la ficha de campo `/panel/equipo/{uuid}` (cualquier usuario): checklists de su tipo,
   últimas inspecciones, reportar observación.
+- Programas (`inspection_programs`, servicio `InspectionPlanner`): checklist + objetivo (un equipo / todos los de un
+  tipo, opcionalmente de un sector / un sector) + frecuencia (diaria, semanal con día, mensual con día; manual = sin
+  programar) + a cargo (usuario / rol / supervisores del sector) + responsable de las acciones. El cron
+  (`Notify\InspectionReminders::run()` en `CronRunner`) genera `inspection_schedule` de hace 2 días a +6 (único por
+  programa + `target_key` + `period_key`: idempotente; equipos nuevos entran solos) y avisa `inspection.due` el día
+  que vence y `inspection.overdue` una vez al vencer (destinatario `assignee` = `assignee_ids` de la programada).
+- Al guardar una inspección se marca la programada indicada (`schedule` uuid) o la que corresponda
+  (`InspectionSchedules::matchFor`: misma plantilla y objetivo, ventana habilitada, la más vieja); `on_time` = hecha
+  hasta `due_on`. Omitir con motivo (permiso cerrar). Cumplimiento = a tiempo / (vencidas − omitidas), por mes y por
+  programa / sector / equipo / inspector (`/panel/inspecciones/cumplimiento`, CSV). "Inspecciones de hoy" en el inicio.
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

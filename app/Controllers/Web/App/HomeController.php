@@ -42,10 +42,22 @@ final class HomeController
         } catch (\PDOException) {
             $myActions = []; // base sin la migración de la Etapa 10 todavía
         }
+        // "Inspecciones de hoy": programadas a mi cargo para hoy y vencidas (Etapa 11).
+        $myInspections = [];
+        if (UserAuth::user() && UserAuth::can('inspecciones', 'crear')) {
+            try {
+                $today = \App\Services\ActionService::today();
+                $myInspections = \App\Models\InspectionSchedules::search(['status' => 'pendiente', 'due_from_max' => $today,
+                    'mine' => \App\Services\InspectionPlanner::mine()], null, 10);
+            } catch (\PDOException) {
+                $myInspections = [];
+            }
+        }
         return Response::html(View::render('app/home', [
             'title'   => 'Inicio',
             'obs'     => $obs,
             'myActions' => $myActions,
+            'myInspections' => $myInspections,
             'today'   => \App\Services\ActionService::today(),
             'tenant'  => $tenant,
             'dbName'  => UserAuth::user() === null ? (string) DB::tenant()->query('SELECT DATABASE()')->fetchColumn() : null,
