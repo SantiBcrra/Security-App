@@ -9,7 +9,7 @@ use App\Models\Users;
 
 /**
  * Resuelve los destinatarios de una regla para una observación.
- * Tipos: role (slug), user (uuid), assignee, reporter, sector_supervisors (usuarios con un
+ * Tipos: role (slug), user (uuid), assignee, reporter, verifiers (permiso acciones.verificar), sector_supervisors (usuarios con un
  * sector asignado igual o por encima del sector de la observación).
  */
 final class Recipients
@@ -49,6 +49,15 @@ final class Recipients
                 return !empty($obs['assigned_user_id']) ? [(int) $obs['assigned_user_id']] : [];
             case 'reporter':
                 return !empty($obs['reporter_user_id']) ? [(int) $obs['reporter_user_id']] : [];
+            case 'verifiers': // quienes pueden verificar acciones (permiso acciones.verificar)
+                $ids = [];
+                $rows = $db->query('SELECT u.id, ro.permissions FROM users u JOIN roles ro ON ro.id = u.role_id WHERE u.is_active = 1')->fetchAll();
+                foreach ($rows as $row) {
+                    if (\App\Policies\Permissions::can(\App\Policies\Permissions::decode($row['permissions']), 'acciones', 'verificar')) {
+                        $ids[] = (int) $row['id'];
+                    }
+                }
+                return $ids;
             case 'sector_supervisors':
                 $sector = !empty($obs['sector_id']) ? Sectors::findById((int) $obs['sector_id']) : null;
                 if ($sector === null) {

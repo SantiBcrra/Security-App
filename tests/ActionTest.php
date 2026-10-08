@@ -336,6 +336,13 @@ return [
         $show = $call($st['hys'], 'GET', '/panel/acciones/' . $a['uuid']);
         assert_same(200, $show->status, substr($show->body, 0, 300));
         assert_same(200, $call($st['hys'], 'GET', '/panel/acciones/nueva')->status);
+        assert_same(200, $call($st['hys'], 'GET', '/panel/acciones/tablero')->status, 'la ruta del tablero no la toma {uuid}');
+        $csv = $call($st['hys'], 'GET', '/panel/acciones/exportar');
+        assert_same([200, 'text/csv; charset=utf-8'], [$csv->status, $csv->headers['Content-Type']]);
+        assert_same(403, $call($st['rep'], 'GET', '/panel/acciones/exportar')->status);
+        assert_same(200, $call($st['hys'], 'GET', '/panel/acciones/' . $st['other']['uuid'] . '/imprimir')->status);
+        $home = $call($st['rep'], 'GET', '/panel');
+        assert_true(str_contains($home->body, 'Mis acciones pendientes') || !Actions::count(['status' => Actions::OPEN], ['responsible' => (int) $st['rep']['id']]));
         assert_same(403, $call($st['rep'], 'GET', '/panel/acciones/nueva')->status, 'el reportante no crea acciones sueltas');
         assert_same(404, $call($st['rep2'], 'GET', '/panel/acciones/' . $a['uuid'])->status, 'fuera de su alcance');
         Tenant::activate($st['a']);
@@ -351,6 +358,95 @@ return [
         Tenant::activate($st['a']);
         assert_same('comment', array_values(array_slice(ActionEvents::forAction((int) $a['id']), -1))[0]['type']);
         $_SESSION = [];
+    },
+
+    'avisos: asignar, cerrar (a quienes verifican) y rechazar' => function () use ($setup, &$st, $newAction, $photo, $fresh) {
+        $setup();
+        $inbox = fn (array $u) => array_column(DB::tenant()->query('SELECT title FROM notifications WHERE user_id = ' . (int) $u['id'] . ' ORDER BY id')->fetchAll(), 'title');
+        $a = $newAction($st['hys'], $st['sup'], $st['nave1']);
+        $num = Actions::format((int) $a['number']);
+        assert_true(in_array("Te asignaron una acción · {$num}", $inbox($st['sup']), true), 'el responsable recibe la asignación');
+        assert_true(!in_array("Te asignaron una acción · {$num}", $inbox($st['hys']), true), 'quien la creó no se avisa a sí mismo');
+        UserAuth::setCurrent($st['sup']);
+        ActionService::transition($a, 'cerrar', ['closure_text' => 'Se reparó la baranda del entrepiso'], [$photo()]);
+        assert_true(in_array("Acción para verificar · {$num}", $inbox($st['hys2']), true), 'les llega a quienes verifican');
+        assert_true(!in_array("Acción para verificar · {$num}", $inbox($st['sup']), true), 'el supervisor no verifica');
+        UserAuth::setCurrent($st['hys2']);
+        ActionService::transition($fresh($a), 'rechazar', ['comment' => 'La baranda sigue floja']);
+        assert_true(in_array("Cierre rechazado · {$num}", $inbox($st['sup']), true));
+        // Reasignar avisa al nuevo responsable
+        UserAuth::setCurrent($st['hys']);
+        $cur = $fresh($a);
+        ActionService::update(Actions::findByUuid($cur['uuid']), ['title' => $cur['title'], 'responsible' => $st['rep2']['uuid'], 'due_on' => $cur['due_on'],
+            'priority' => $cur['priority'], 'type' => $cur['type'], 'comment' => 'Pasa a mantenimiento']);
+        assert_true(in_array("Te asignaron una acción · {$num}", $inbox($st['rep2']), true));
+        $st['notified'] = $a;
+    },
+
+    'recordatorios: por vencer, vencida una vez por día, escalamiento y verificación atrasada' => function () use ($setup, &$st, $newAction, $fresh, $photo) {
+        $setup();
+        $inbox = fn (array $u, string $prefix) => count(array_filter(array_column(DB::tenant()->query('SELECT title FROM notifications WHERE user_id = '
+            . (int) $u['id'])->fetchAll(), 'title'), fn ($t) => str_starts_with($t, $prefix)));
+        $today = ActionService::today();
+        $soon = $newAction($st['hys'], $st['rep'], $st['nave1'], ['due_on' => (new DateTimeImmutable($today))->modify('+2 days')->format('Y-m-d')]);
+        $late = $newAction($st['hys'], $st['rep'], $st['nave1']);
+        DB::tenant()->prepare('UPDATE actions SET due_on = ? WHERE id = ?')->execute([(new DateTimeImmutable($today))->modify('-4 days')->format('Y-m-d'), (int) $late['id']]);
+        UserAuth::setCurrent(null);
+        $r1 = \App\Services\Notify\ActionReminders::run($today);
+        assert_true($r1['due_soon'] >= 1 && $r1['overdue'] >= 1 && $r1['escalated'] >= 1, json_encode($r1));
+        $r2 = \App\Services\Notify\ActionReminders::run($today);
+        assert_same(['due_soon' => 0, 'overdue' => 0, 'escalated' => 0, 'verify_overdue' => 0], $r2, 'el mismo día no se repite nada');
+        $tomorrow = (new DateTimeImmutable($today))->modify('+1 day')->format('Y-m-d');
+        $r3 = \App\Services\Notify\ActionReminders::run($tomorrow);
+        assert_true($r3['overdue'] >= 1 && $r3['escalated'] === 0, 'al otro día: vencida otra vez, escalamiento no');
+        assert_same(1, $inbox($st['rep'], 'Acción por vencer · ' . Actions::format((int) $soon['number'])), 'por vencer, una vez');
+        assert_same(2, $inbox($st['rep'], 'Acción vencida · ' . Actions::format((int) $late['number'])));
+        assert_same(1, $inbox($st['sup'], 'Acción vencida hace 4 días · ' . Actions::format((int) $late['number'])), 'escala al supervisor del sector');
+        assert_same(1, $inbox($st['hys2'], 'Acción vencida hace 4 días'), 'y a SyH');
+        // Verificación atrasada: se cierra una y se vence su plazo de verificación
+        UserAuth::setCurrent($st['rep']);
+        assert_same(null, ActionService::transition($fresh($soon), 'cerrar', ['closure_text' => 'Se ordenó el depósito completo'], [$photo()]));
+        UserAuth::setCurrent(null);
+        DB::tenant()->prepare("UPDATE actions SET verify_due_on = '2020-01-01' WHERE id = ?")->execute([(int) $soon['id']]);
+        $r4 = \App\Services\Notify\ActionReminders::run($tomorrow);
+        assert_true($r4['verify_overdue'] >= 1, 'verificación atrasada ' . json_encode($r4) . ' cerradas: ' . Actions::count(['status' => 'cerrada'], null));
+    },
+
+    'tablero y CSV: vencidas por sector y responsable, con alcance' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        $today = ActionService::today();
+        UserAuth::setCurrent($st['hys']);
+        $b = Actions::board(null, $today);
+        $late = array_sum(array_column($b['bySector'], 'late'));
+        assert_same(Actions::count(['overdue' => $today], null), $late, 'la suma por sector coincide con la lista de vencidas');
+        assert_same($late, array_sum(array_column($b['byResponsible'], 'late')));
+        $rep = array_values(array_filter($b['byResponsible'], fn ($r) => $r['uuid'] === $st['rep']['uuid']))[0];
+        assert_true((int) $rep['max_late'] >= 4);
+        UserAuth::setCurrent($st['sup']);
+        $mine = Actions::board(ActionService::scope(), $today);
+        assert_same([(int) $st['nave1']], array_values(array_unique(array_map(fn ($r) => (int) $r['k'], array_filter($mine['bySector'], fn ($r) => $r['k'] !== null)))),
+            'el supervisor solo ve su nave en el tablero');
+        UserAuth::setCurrent($st['hys']);
+        $csv = ActionService::csv(Actions::search(['overdue' => $today], null, 100), $today);
+        assert_true(str_starts_with($csv, "\xEF\xBB\xBF") && str_contains($csv, 'Número;Acción;Estado;Vencida'));
+        assert_true(str_contains($csv, ';Sí;'), 'marca las vencidas');
+        $html = View::render('panel/actions/board', ['b' => $b, 'sectors' => Sectors::labelMap(), 'today' => $today], null);
+        assert_true(str_contains($html, 'Por sector') && str_contains($html, 'Nave 1'));
+    },
+
+    'reglas: migración de eventos viejos y reglas nuevas (idempotente)' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        $events = fn () => DB::tenant()->query('SELECT event, COUNT(*) n FROM notification_rules GROUP BY event')->fetchAll(PDO::FETCH_KEY_PAIR);
+        $e = $events();
+        assert_true(!isset($e['observation.assigned']) && !isset($e['observation.overdue']), 'ya no quedan eventos viejos');
+        foreach (['action.assigned', 'action.due_soon', 'action.overdue', 'action.overdue_escalated', 'action.closed', 'action.verify_overdue',
+            'action.verified', 'action.rejected', 'action.cancelled'] as $ev) {
+            assert_same(1, (int) ($e[$ev] ?? 0), $ev);
+        }
+        (require BASE_PATH . '/database/migrations/tenant/0041_action_notification_rules.php')(DB::tenant());
+        assert_same($e, $events(), 'correrla de nuevo no duplica');
     },
 
     'aislamiento: la empresa B no ve acciones de A' => function () use ($setup, &$st) {

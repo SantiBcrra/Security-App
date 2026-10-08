@@ -6,6 +6,7 @@ namespace App\Services\Notify;
 use App\Core\DB;
 use App\Core\Logger;
 use App\Core\View;
+use App\Models\Actions;
 use App\Models\Employees;
 use App\Models\NotificationPrefs;
 use App\Models\NotificationQueue;
@@ -39,10 +40,7 @@ final class Notifier
 
     private static function run(string $event, array $obs, array $extra, ?array $forceRecipients, ?array $forceChannels): array
     {
-        $obs = Observations::findById((int) $obs['id']) ?? $obs; // siempre con los nombres actualizados
-        if (!empty($extra['obs_override'])) {
-            $obs = array_merge($obs, $extra['obs_override']); // ej. la acción recién asignada, no la que vence primero
-        }
+        $obs = self::subject($event, $obs); // siempre con los nombres actualizados
         $message = Messages::for($event, $obs, $extra);
         $targets = []; // user_id => [user, canales]
         if ($forceRecipients !== null) {
@@ -81,8 +79,8 @@ final class Notifier
                         'channel' => $channel, 'user_id' => $userId, 'to_address' => $address,
                         'subject' => $message['title'], 'body_text' => self::text($message),
                         'body_html' => $channel === 'email' ? self::html($message, $user) : null,
-                        'payload' => json_encode(['url' => $message['url'], 'event' => $event, 'observation' => $obs['uuid'],
-                            'app_url' => absolute_url('/movil') . '#/observacion/' . $obs['uuid']]),
+                        'payload' => json_encode(['url' => $message['url'], 'event' => $event, $obs['_type'] => $obs['uuid'],
+                            'app_url' => absolute_url('/movil') . '#/' . ($obs['_type'] === 'action' ? 'accion' : 'observacion') . '/' . $obs['uuid']]),
                         'event' => $event, 'entity_uuid' => $obs['uuid'], 'is_critical' => $message['critical'] ? 1 : 0,
                     ]);
                 }
@@ -92,6 +90,20 @@ final class Notifier
             QueueRunner::run(20, 15, $queued); // en el mismo request, con timeouts cortos
         }
         return ['users' => count($targets), 'queued' => count($queued)];
+    }
+
+    /**
+     * El "sujeto" del aviso, releído de la base y con los campos comunes que usan reglas y destinatarios:
+     * assigned_user_id (responsable), reporter_user_id (quien reportó o creó), sector_id, severity_level.
+     */
+    private static function subject(string $event, array $row): array
+    {
+        if (str_starts_with($event, 'action.')) {
+            $a = Actions::findById((int) $row['id']) ?? $row;
+            return $a + ['_type' => 'action', 'assigned_user_id' => $a['responsible_user_id'], 'reporter_user_id' => $a['created_by'],
+                'severity_level' => Messages::actionLevel((string) $a['priority'])];
+        }
+        return (Observations::findById((int) $row['id']) ?? $row) + ['_type' => 'observation'];
     }
 
     private static function ruleMatches(array $rule, array $obs): bool

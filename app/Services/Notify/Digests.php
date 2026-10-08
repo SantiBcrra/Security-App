@@ -5,33 +5,21 @@ namespace App\Services\Notify;
 
 use App\Core\Tenant;
 use App\Core\View;
+use App\Models\Actions;
 use App\Models\NotificationMarks;
 use App\Models\NotificationPrefs;
 use App\Models\NotificationQueue;
 use App\Models\Observations;
 use App\Models\Settings;
+use App\Services\ActionService;
 
 /**
- * Recordatorios de acciones vencidas (una vez por día por observación) y resúmenes por email
- * (diario y semanal) a responsables SyH y administradores. Corre desde el cron.
+ * Resúmenes por email (diario y semanal) a responsables SyH y administradores. Corre desde el cron.
+ * Los recordatorios de acciones están en ActionReminders.
  */
 final class Digests
 {
     public const HOUR = 8; // hora local desde la que se mandan los resúmenes del día
-
-    /** @return int recordatorios enviados */
-    public static function overdue(): int
-    {
-        $today = self::localDate();
-        $count = 0;
-        foreach (Observations::search(['status' => 'accion_asignada'], null, 500) as $obs) {
-            if ($obs['action_due_on'] !== null && $obs['action_due_on'] < $today && NotificationMarks::claim("overdue:{$obs['id']}:{$today}")) {
-                Notifier::dispatch('observation.overdue', $obs);
-                $count++;
-            }
-        }
-        return $count;
-    }
 
     /** @return list<string> resúmenes generados ('daily', 'weekly') */
     public static function run(?\DateTimeImmutable $now = null): array
@@ -62,8 +50,8 @@ final class Digests
             'new'      => Observations::count(['from' => $since], null),
             'pending'  => Observations::count($pending, null),
             'imminent' => Observations::count($pending + ['imminent' => 1], null),
-            'overdue'  => array_values(array_filter(Observations::search(['status' => 'accion_asignada'], null, 200),
-                fn ($o) => $o['action_due_on'] !== null && $o['action_due_on'] < self::localDate())),
+            'overdue'  => Actions::search(['overdue' => ActionService::today()], null, 200),
+            'toVerify' => Actions::count(['status' => 'cerrada'], null),
             'latest'   => Observations::search(['from' => $since], null, 15),
         ];
         $subject = ($kind === 'daily' ? 'Resumen diario' : 'Resumen semanal') . ' de seguridad · ' . $data['tenant']['name'];
@@ -74,15 +62,10 @@ final class Digests
             NotificationQueue::add([
                 'channel' => 'email', 'user_id' => $userId, 'to_address' => $user['email'], 'subject' => $subject,
                 'body_text' => "Observaciones nuevas: {$data['new']}\nPendientes: {$data['pending']}\nRiesgos inminentes sin cerrar: {$data['imminent']}\n"
-                    . 'Acciones vencidas: ' . count($data['overdue']) . "\n\n" . absolute_url('/panel/observaciones'),
+                    . 'Acciones vencidas: ' . count($data['overdue']) . "\nAcciones para verificar: {$data['toVerify']}\n\n" . absolute_url('/panel/acciones/tablero'),
                 'body_html' => View::render('emails/digest', $data + ['user' => $user], null),
                 'event' => 'digest.' . $kind,
             ]);
         }
-    }
-
-    private static function localDate(): string
-    {
-        return (new \DateTimeImmutable('now', new \DateTimeZone(Tenant::timezone() ?? 'UTC')))->format('Y-m-d');
     }
 }

@@ -188,13 +188,8 @@ final class ObservationService
             ActionService::afterCreate(\App\Models\Actions::findById($actionId));
         }
         $fresh = Observations::findById((int) $obs['id']);
-        if ($action === 'asignar') {
-            // El aviso habla de la acción recién creada (aunque la observación tenga otras abiertas).
-            Notifier::dispatch('observation.assigned', $fresh, ['obs_override' => [
-                'assigned_user_id' => $actionData['responsible_user_id'], 'assigned_name' => $data['responsable'],
-                'action_text' => $actionData['title'], 'action_due_on' => $actionData['due_on'],
-            ]]);
-        } elseif (in_array($action, ['cerrar', 'descartar'], true)) {
+        // "asignar": el aviso al responsable lo manda la acción creada (action.assigned).
+        if (in_array($action, ['cerrar', 'descartar'], true)) {
             Escalations::closeFor((int) $obs['id']);
             Notifier::dispatch('observation.closed', $fresh, ['comment' => $comment]);
         }

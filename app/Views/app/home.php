@@ -5,6 +5,22 @@
         <a class="btn btn-primary" href="<?= e(url('/panel/observaciones/nueva')) ?>">+ Reportar observación</a>
     <?php endif; ?>
 </div>
+<?php if ($myActions): require BASE_PATH . '/app/Views/panel/actions/_badges.php'; ?>
+    <div class="card shadow-sm mb-3 border-warning">
+        <div class="card-header d-flex justify-content-between"><strong>Mis acciones pendientes</strong><a class="small" href="<?= e(url('/panel/acciones?estado=pendientes&mias=1')) ?>">Ver todas</a></div>
+        <div class="list-group list-group-flush">
+            <?php foreach ($myActions as $act): ?>
+                <a class="list-group-item list-group-item-action" href="<?= e(url('/panel/acciones/' . $act['uuid'])) ?>">
+                    <div class="d-flex justify-content-between gap-2">
+                        <span><span class="small text-body-secondary"><?= e(App\Models\Actions::format((int) $act['number'])) ?></span> <?= e($act['title']) ?></span>
+                        <span class="text-nowrap"><?= $priorityBadge($act['priority']) ?></span>
+                    </div>
+                    <div class="small"><?= $dueLabel($act, $today) ?></div>
+                </a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+<?php endif; ?>
 <?php if ($obs !== null): require BASE_PATH . '/app/Views/panel/observations/_badges.php'; ?>
     <div class="row g-3 mb-3">
         <?php foreach ([

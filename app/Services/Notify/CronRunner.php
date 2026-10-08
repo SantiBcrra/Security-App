@@ -41,7 +41,7 @@ final class CronRunner
                     $remaining = max(2, (int) ($deadline - microtime(true)));
                     $summary[$tenant['slug']] = [
                         'escalated' => Escalations::run(),
-                        'overdue'   => Digests::overdue(),
+                        'actions'   => ActionReminders::run(),
                         'digests'   => Digests::run(),
                         'queue'     => QueueRunner::run($remaining, 100),
                     ];

@@ -28,6 +28,7 @@ $late = ActionWorkflow::isOverdue($a, $today);
     <h1 class="h4 m-0"><?= e(Actions::format((int) $a['number'])) ?></h1>
     <?= $actionBadge($a['status']) ?> <?= $priorityBadge($a['priority']) ?>
     <?php if ($late): ?><span class="badge text-bg-danger">Vencida</span><?php endif; ?>
+    <a class="btn btn-sm btn-outline-secondary ms-auto" target="_blank" href="<?= e(url($base . '/imprimir')) ?>">Imprimir / PDF</a>
 </div>
 <h2 class="h5 mb-3"><?= e($a['title']) ?></h2>
 

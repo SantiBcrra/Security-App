@@ -108,7 +108,8 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   `tools/` está bloqueado por web y excluido del deploy.
 
 ## Notificaciones (Etapa 7)
-- Disparar SIEMPRE con `Notify\Notifier::dispatch($evento, $observacion)`: aplica las reglas de la
+- Disparar SIEMPRE con `Notify\Notifier::dispatch($evento, $sujeto)` (`$sujeto` = fila de observación, o de acción
+  si el evento empieza con `action.`; `Notifier::subject()` la relee y normaliza responsable/creador/sector/nivel): aplica las reglas de la
   empresa (`notification_rules`), crea los avisos en la app (`notifications`) y encola email/push/
   WhatsApp (`notification_queue`, también es el log). Nunca rompe la operación que lo llama.
 - Eventos en `Notify\Messages::EVENTS`; críticos (`CRITICAL`): no se pueden silenciar y se envían
@@ -171,6 +172,14 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Observaciones: "Asignar acción" crea una acción (puede haber varias). `assigned_user_id`/`action_text`/`action_due_on`
   de la observación son ahora un **resumen** de la acción abierta que vence primero (`ObservationService::syncActions()`);
   no escribirlos a mano. Cuando todas quedan verificadas/canceladas, la observación se cierra sola (evento "Sistema").
+- Avisos de acciones (`Messages::EVENTS` `action.*`; destinatario nuevo `verifiers` = permiso acciones.verificar):
+  los dispara `ActionService` (asignar/reasignar, cerrar, verificar, rechazar, cancelar) y el cron con
+  `Notify\ActionReminders::run()` (por vencer N días antes, vencida 1 vez por día, escalamiento a supervisores del
+  sector + SyH al cumplir M días, verificación atrasada). Settings `acciones.aviso_dias`, `acciones.escalar_dias`,
+  `acciones.dias_verificacion` en /panel/configuracion/notificaciones. Los eventos viejos `observation.assigned/overdue`
+  ya no existen (migración 0041).
+- Tablero `/panel/acciones/tablero` (`Actions::board()`, con alcance), CSV `/panel/acciones/exportar` (";" + BOM,
+  permiso exportar), imprimible `/panel/acciones/{uuid}/imprimir`, "Mis acciones pendientes" en el inicio.
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

@@ -35,9 +35,18 @@ final class HomeController
                 'latest'    => Observations::search([], $scope, 6),
             ];
         }
+        // "Mis acciones pendientes": las que tengo como responsable (con o sin permiso del módulo).
+        try {
+            $myActions = UserAuth::user() ? \App\Models\Actions::search(['status' => \App\Models\Actions::OPEN],
+                ['responsible' => (int) UserAuth::user()['id']], 8) : [];
+        } catch (\PDOException) {
+            $myActions = []; // base sin la migración de la Etapa 10 todavía
+        }
         return Response::html(View::render('app/home', [
             'title'   => 'Inicio',
             'obs'     => $obs,
+            'myActions' => $myActions,
+            'today'   => \App\Services\ActionService::today(),
             'tenant'  => $tenant,
             'dbName'  => UserAuth::user() === null ? (string) DB::tenant()->query('SELECT DATABASE()')->fetchColumn() : null,
             'events'  => $isManager ? TenantAudit::latest(DB::tenant(), 10) : null,

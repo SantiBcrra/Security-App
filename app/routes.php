@@ -129,6 +129,9 @@ return static function (Router $r): void {
         // el alcance y lo que se puede hacer los decide ActionService.
         $r->get('/acciones', [ActionsController::class, 'index']);
         $r->get('/acciones/nueva', [ActionsController::class, 'create'], [$can('acciones', 'crear')]);
+        $r->get('/acciones/tablero', [ActionsController::class, 'board'], [$can('acciones', 'ver')]);
+        $r->get('/acciones/exportar', [ActionsController::class, 'export'], [$can('acciones', 'exportar')]);
+        $r->get('/acciones/{uuid}/imprimir', [ActionsController::class, 'printable']);
         $r->post('/acciones', [ActionsController::class, 'store'], [$can('acciones', 'crear')]);
         $r->get('/acciones/{uuid}', [ActionsController::class, 'show']);
         $r->post('/acciones/{uuid}/accion/{key}', [ActionsController::class, 'transition']);

@@ -36,6 +36,9 @@ final class NotificationRulesController
                 'escalation' => Settings::get('notif.escalation_minutes') ?? '15',
                 'daily'      => Settings::get('notif.digest_daily', '1') === '1',
                 'weekly'     => Settings::get('notif.digest_weekly', '1') === '1',
+                'soon'       => Settings::get('acciones.aviso_dias', '3'),
+                'escalate'   => Settings::get('acciones.escalar_dias', '3'),
+                'verify'     => Settings::get('acciones.dias_verificacion', '15'),
             ],
             'queue'    => NotificationQueue::recent(30),
             'stats'    => NotificationQueue::stats(),
@@ -55,7 +58,7 @@ final class NotificationRulesController
                 $recipients[] = ['type' => 'role', 'value' => (string) $slug];
             }
         }
-        foreach (['sector_supervisors', 'assignee', 'reporter'] as $type) {
+        foreach (['sector_supervisors', 'assignee', 'reporter', 'verifiers'] as $type) {
             if ($request->input('r_' . $type)) {
                 $recipients[] = ['type' => $type];
             }
@@ -66,7 +69,7 @@ final class NotificationRulesController
             }
         }
         $errors = [];
-        if (!isset(Messages::EVENTS[$event]) || $event === 'observation.escalated') {
+        if (!isset(Messages::EVENTS[$event]) || in_array($event, Messages::INTERNAL, true)) {
             $errors[] = 'Elegí el evento.';
         }
         if ($name === '') {
@@ -102,7 +105,13 @@ final class NotificationRulesController
         Settings::set('notif.escalation_minutes', (string) max(1, min(240, $minutes)));
         Settings::set('notif.digest_daily', $request->input('daily') ? '1' : '0');
         Settings::set('notif.digest_weekly', $request->input('weekly') ? '1' : '0');
-        Audit::tenant('settings.update', 'settings', null, null, ['escalamiento_min' => $minutes, 'resumen_diario' => (bool) $request->input('daily'), 'resumen_semanal' => (bool) $request->input('weekly')]);
+        $days = fn (string $k, int $def, int $max) => (string) max(1, min($max, (int) $request->input($k, $def)));
+        Settings::set('acciones.aviso_dias', $days('soon_days', 3, 30));
+        Settings::set('acciones.escalar_dias', $days('escalate_days', 3, 60));
+        Settings::set('acciones.dias_verificacion', $days('verify_days', 15, 180));
+        Audit::tenant('settings.update', 'settings', null, null, ['escalamiento_min' => $minutes, 'resumen_diario' => (bool) $request->input('daily'), 'resumen_semanal' => (bool) $request->input('weekly'),
+            'acciones_aviso_dias' => Settings::get('acciones.aviso_dias'), 'acciones_escalar_dias' => Settings::get('acciones.escalar_dias'),
+            'acciones_dias_verificacion' => Settings::get('acciones.dias_verificacion')]);
         Flash::add('success', 'Configuración guardada.');
         return Response::redirect('/panel/configuracion/notificaciones');
     }

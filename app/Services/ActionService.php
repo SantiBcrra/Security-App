@@ -14,6 +14,7 @@ use App\Models\Sequences;
 use App\Models\Settings;
 use App\Models\Users;
 use App\Resources\Resource;
+use App\Services\Notify\Notifier;
 
 /**
  * Acciones correctivas y preventivas (CAPA): alta desde cualquier origen, flujo
@@ -198,6 +199,7 @@ final class ActionService
             'origen' => $action['origin_type'], 'fecha_limite' => $action['due_on'],
         ]);
         self::syncOrigin($action);
+        Notifier::dispatch('action.assigned', $action);
     }
 
     /**
@@ -276,7 +278,12 @@ final class ActionService
             throw $e;
         }
         Audit::tenant('action.' . $key, 'action', $a['uuid'], ['estado' => $a['status']], ['estado' => $t['to']] + ($data ?? []));
-        self::syncOrigin(Actions::findById((int) $a['id']));
+        $fresh = Actions::findById((int) $a['id']);
+        self::syncOrigin($fresh);
+        $event = ['cerrar' => 'action.closed', 'verificar' => 'action.verified', 'rechazar' => 'action.rejected', 'cancelar' => 'action.cancelled'][$key] ?? null;
+        if ($event !== null) {
+            Notifier::dispatch($event, $fresh, ['comment' => $key === 'cerrar' ? '' : $comment]);
+        }
         return null;
     }
 
@@ -319,7 +326,11 @@ final class ActionService
         Actions::update((int) $a['id'], $changes);
         ActionEvents::add((int) $a['id'], 'updated', ['comment' => $comment ?: null, 'data' => ['antes' => $before, 'despues' => $after]] + self::actor());
         Audit::tenant('action.update', 'action', $a['uuid'], $before, $after);
-        self::syncOrigin(Actions::findById((int) $a['id']));
+        $fresh = Actions::findById((int) $a['id']);
+        self::syncOrigin($fresh);
+        if (isset($changes['responsible_user_id'])) {
+            Notifier::dispatch('action.assigned', $fresh); // al nuevo responsable
+        }
         return null;
     }
 
@@ -371,6 +382,33 @@ final class ActionService
             ActionEvents::add((int) $a['id'], 'evidence', ['data' => ['archivos' => $saved, 'tipo' => $kind]] + self::actor());
         }
         return $errors;
+    }
+
+    /**
+     * CSV para Excel (separador ";" y BOM UTF-8, como lo abre Excel en español).
+     * @param list<array> $rows filas de Actions::search()
+     */
+    public static function csv(array $rows, string $today): string
+    {
+        $out = fopen('php://temp', 'r+');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, ['Número', 'Acción', 'Estado', 'Vencida', 'Días de atraso', 'Prioridad', 'Tipo', 'Origen', 'Sector', 'Responsable',
+            'Fecha límite', 'Creada', 'Cerrada', 'Verificada', 'Cierre'], ';');
+        foreach ($rows as $a) {
+            $late = ActionWorkflow::isOverdue($a, $today);
+            fputcsv($out, [
+                Actions::format((int) $a['number']), $a['title'], ActionWorkflow::label($a['status']), $late ? 'Sí' : 'No',
+                $late ? (int) (new \DateTimeImmutable($a['due_on']))->diff(new \DateTimeImmutable($today))->format('%a') : '',
+                ActionWorkflow::PRIORITIES[$a['priority']] ?? $a['priority'], ActionWorkflow::TYPES[$a['type']] ?? $a['type'],
+                ActionWorkflow::ORIGINS[$a['origin_type']] ?? $a['origin_type'], $a['sector_name'] ?? '', $a['responsible_name'],
+                date('d/m/Y', strtotime($a['due_on'])), fecha($a['created_at'], 'd/m/Y'), fecha($a['closed_at'], 'd/m/Y'),
+                fecha($a['verified_at'], 'd/m/Y'), (string) ($a['closure_text'] ?? ''),
+            ], ';');
+        }
+        rewind($out);
+        $csv = (string) stream_get_contents($out);
+        fclose($out);
+        return $csv;
     }
 
     /** Mantiene al día el origen (hoy: la observación) después de cualquier cambio en la acción. */

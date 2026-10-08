@@ -11,6 +11,12 @@ $tabs = ['pendientes' => ['Pendientes', ($byStatus['abierta'] ?? 0) + ($byStatus
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <h1 class="h4 m-0">Acciones correctivas y preventivas</h1>
     <div class="d-flex gap-2">
+        <?php if (UserAuth::can('acciones', 'ver')): ?>
+            <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/panel/acciones/tablero')) ?>">Tablero</a>
+        <?php endif; ?>
+        <?php if (UserAuth::can('acciones', 'exportar')): ?>
+            <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/panel/acciones/exportar' . $query([]))) ?>">Exportar CSV</a>
+        <?php endif; ?>
         <a class="btn btn-sm <?= $form['mias'] === '1' ? 'btn-primary' : 'btn-outline-primary' ?>" href="<?= e($query(['mias' => $form['mias'] === '1' ? '' : '1'])) ?>">Mis acciones</a>
         <?php if (UserAuth::can('acciones', 'crear')): ?>
             <a class="btn btn-primary btn-sm" href="<?= e(url('/panel/acciones/nueva')) ?>">+ Nueva acción</a>

@@ -44,6 +44,45 @@ final class ActionsController
         ], 'layouts/app'));
     }
 
+    /** Tablero: vencidas por sector y por responsable, prioridades, verificación y tiempos de cierre. */
+    public function board(Request $request): Response
+    {
+        $today = ActionService::today();
+        return Response::html(View::render('panel/actions/board', [
+            'title'   => 'Tablero de acciones',
+            'b'       => Actions::board(ActionService::scope(), $today),
+            'sectors' => Sectors::labelMap(),
+            'today'   => $today,
+        ], 'layouts/app'));
+    }
+
+    /** CSV con los mismos filtros que la lista (máx. 5000 filas). */
+    public function export(Request $request): Response
+    {
+        [$filters] = $this->filters($request);
+        $rows = Actions::search($filters, ActionService::scope(), 5000);
+        \App\Services\Audit::tenant('action.export', 'action', null, null, ['filas' => count($rows)]);
+        return new Response(ActionService::csv($rows, ActionService::today()), 200, [
+            'Content-Type'        => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="acciones-' . fecha(gmdate('Y-m-d H:i:s'), 'Y-m-d') . '.csv"',
+        ]);
+    }
+
+    public function printable(Request $request, string $uuid): Response
+    {
+        $a = $this->find($uuid);
+        if ($a === null) {
+            return self::notFound();
+        }
+        return Response::html(View::render('panel/actions/print', [
+            'a'      => $a,
+            'origin' => $this->origin($a),
+            'events' => ActionEvents::forAction((int) $a['id']),
+            'files'  => ActionAttachments::forAction((int) $a['id']),
+            'today'  => ActionService::today(),
+        ], null));
+    }
+
     public function create(Request $request): Response
     {
         [$old, $errors] = Flash::pullInput();

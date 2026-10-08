@@ -11,15 +11,17 @@
             <tr><td style="border:1px solid #e9ecef"><strong style="font-size:20px"><?= e($new) ?></strong><br>nuevas <?= $kind === 'daily' ? 'en las últimas 24 h' : 'en la semana' ?></td>
                 <td style="border:1px solid #e9ecef"><strong style="font-size:20px"><?= e($pending) ?></strong><br>pendientes</td>
                 <td style="border:1px solid #e9ecef;<?= $imminent ? 'color:#dc3545' : '' ?>"><strong style="font-size:20px"><?= e($imminent) ?></strong><br>riesgo inminente sin cerrar</td>
-                <td style="border:1px solid #e9ecef;<?= $overdue ? 'color:#dc3545' : '' ?>"><strong style="font-size:20px"><?= e(count($overdue)) ?></strong><br>acciones vencidas</td></tr>
+                <td style="border:1px solid #e9ecef;<?= $overdue ? 'color:#dc3545' : '' ?>"><strong style="font-size:20px"><?= e(count($overdue)) ?></strong><br>acciones vencidas</td>
+                <td style="border:1px solid #e9ecef"><strong style="font-size:20px"><?= e($toVerify) ?></strong><br>acciones para verificar</td></tr>
         </table>
         <?php if ($overdue): ?>
             <h2 style="font-size:15px;margin:0 0 6px">Acciones vencidas</h2>
             <ul style="font-size:13px;padding-left:18px;margin:0 0 16px">
-                <?php foreach ($overdue as $o): ?>
-                    <li><a href="<?= e(absolute_url('/panel/observaciones/' . $o['uuid'])) ?>"><?= e(App\Models\Observations::format((int) $o['number'])) ?></a>
-                        · <?= e($o['assigned_name'] ?? '—') ?> · venció <?= e(date('d/m/Y', strtotime($o['action_due_on']))) ?></li>
+                <?php foreach (array_slice($overdue, 0, 20) as $o): ?>
+                    <li><a href="<?= e(absolute_url('/panel/acciones/' . $o['uuid'])) ?>"><?= e(App\Models\Actions::format((int) $o['number'])) ?></a>
+                        · <?= e(mb_strimwidth($o['title'], 0, 70, '…')) ?> · <?= e($o['responsible_name']) ?> · venció <?= e(date('d/m/Y', strtotime($o['due_on']))) ?></li>
                 <?php endforeach; ?>
+                <?php if (count($overdue) > 20): ?><li><a href="<?= e(absolute_url('/panel/acciones/tablero')) ?>">y <?= e(count($overdue) - 20) ?> más…</a></li><?php endif; ?>
             </ul>
         <?php endif; ?>
         <?php if ($latest): ?>

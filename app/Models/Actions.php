@@ -61,6 +61,47 @@ final class Actions
         return $out;
     }
 
+    /**
+     * Números del tablero (con el alcance del usuario). Las fechas límite se comparan con $today
+     * (fecha local de la empresa). Sin CTE ni funciones de ventana: MySQL 5.7.
+     */
+    public static function board(?array $scope, string $today): array
+    {
+        $db = DB::tenant();
+        [$where, $params] = self::where(['status' => self::OPEN], $scope);
+        $w = implode(' AND ', $where);
+        $group = function (string $col, string $extra = '') use ($db, $w, $params, $today): array {
+            $stmt = $db->prepare("SELECT {$col} AS k{$extra}, COUNT(*) AS open, SUM(a.due_on < ?) AS late,
+                    MAX(CASE WHEN a.due_on < ? THEN DATEDIFF(?, a.due_on) END) AS max_late,
+                    AVG(CASE WHEN a.due_on < ? THEN DATEDIFF(?, a.due_on) END) AS avg_late
+                FROM actions a" . ($extra ? ' JOIN users u ON u.id = a.responsible_user_id' : '') . " WHERE {$w}
+                GROUP BY {$col} ORDER BY late DESC, open DESC");
+            $stmt->execute([$today, $today, $today, $today, $today, ...$params]);
+            return $stmt->fetchAll();
+        };
+        $byPriority = $db->prepare("SELECT a.priority AS k, COUNT(*) AS open, SUM(a.due_on < ?) AS late FROM actions a WHERE {$w} GROUP BY a.priority");
+        $byPriority->execute([$today, ...$params]);
+
+        [$vw, $vp] = self::where(['status' => 'cerrada'], $scope);
+        $verify = $db->prepare('SELECT COUNT(*) AS n, SUM(a.verify_due_on < ?) AS late FROM actions a WHERE ' . implode(' AND ', $vw));
+        $verify->execute([$today, ...$vp]);
+
+        [$cw, $cp] = self::where([], $scope);
+        $since = (new \DateTimeImmutable($today))->modify('-90 days')->format('Y-m-d');
+        $closing = $db->prepare('SELECT COUNT(*) AS n, AVG(DATEDIFF(a.closed_at, a.created_at)) AS avg_days,
+                SUM(DATE(a.closed_at) <= a.due_on) AS on_time
+            FROM actions a WHERE ' . implode(' AND ', $cw) . ' AND a.closed_at IS NOT NULL AND a.closed_at >= ?');
+        $closing->execute([...$cp, $since]);
+
+        return [
+            'bySector'      => $group('a.sector_id'),
+            'byResponsible' => $group('a.responsible_user_id', ', MAX(u.name) AS name, MAX(u.uuid) AS uuid'),
+            'byPriority'    => array_column($byPriority->fetchAll(), null, 'k'),
+            'verify'        => $verify->fetch(),
+            'closing'       => $closing->fetch(),
+        ];
+    }
+
     private static function where(array $f, ?array $scope): array
     {
         $where = ['a.deleted_at IS NULL'];

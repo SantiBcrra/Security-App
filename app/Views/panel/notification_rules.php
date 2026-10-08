@@ -8,7 +8,8 @@ $recipientLabel = function (array $r) use ($roles, $users): string {
         'user' => 'Usuario: ' . (array_column($users, 'name', 'uuid')[$r['value']] ?? '?'),
         'sector_supervisors' => 'Supervisores del sector',
         'assignee' => 'Responsable asignado',
-        'reporter' => 'Quien reportó',
+        'reporter' => 'Quien reportó / creó',
+        'verifiers' => 'Quienes verifican acciones',
         default => $r['type'],
     };
 };
@@ -29,21 +30,21 @@ $has = fn (string $type, ?string $value = null) => $form && (bool) array_filter(
             <div class="col-md-6"><label class="form-label">Nombre</label><input class="form-control" name="name" value="<?= e($form['name']) ?>" required maxlength="120"></div>
             <div class="col-md-6"><label class="form-label">Evento</label>
                 <select class="form-select" name="event">
-                    <?php foreach (Messages::EVENTS as $k => $label): if ($k === 'observation.escalated') continue; ?>
+                    <?php foreach (Messages::EVENTS as $k => $label): if (in_array($k, Messages::INTERNAL, true)) continue; ?>
                         <option value="<?= e($k) ?>" <?= $form['event'] === $k ? 'selected' : '' ?>><?= e($label) ?></option>
                     <?php endforeach; ?>
                 </select></div>
             <div class="col-md-6"><label class="form-label">Severidad mínima</label>
                 <select class="form-select" name="min_level"><option value="">Cualquiera</option>
                     <?php foreach ($levels as $l): ?><option value="<?= e($l['level']) ?>" <?= (string) $form['min_severity_level'] === (string) $l['level'] ? 'selected' : '' ?>><?= e($l['name']) ?> o más</option><?php endforeach; ?>
-                </select></div>
+                </select><div class="form-text">En los avisos de acciones se compara con la prioridad (Baja = 1 … Crítica = 4).</div></div>
             <div class="col-md-6"><label class="form-label">Solo en el sector (incluye los de abajo)</label>
                 <select class="form-select" name="sector"><option value="">Toda la empresa</option>
                     <?php $currentSector = $form['sector_id'] ? (App\Models\Sectors::findById((int) $form['sector_id'])['uuid'] ?? '') : '';
                     foreach ($sectors as $u => $n): ?><option value="<?= e($u) ?>" <?= $currentSector === $u ? 'selected' : '' ?>><?= e($n) ?></option><?php endforeach; ?>
                 </select></div>
             <div class="col-md-6"><label class="form-label d-block">Avisar a</label>
-                <?php foreach (['sector_supervisors' => 'Supervisores del sector', 'assignee' => 'Responsable asignado', 'reporter' => 'Quien reportó'] as $t => $l): ?>
+                <?php foreach (['sector_supervisors' => 'Supervisores del sector', 'assignee' => 'Responsable asignado', 'reporter' => 'Quien reportó / creó', 'verifiers' => 'Quienes verifican acciones'] as $t => $l): ?>
                     <div class="form-check"><input class="form-check-input" type="checkbox" name="r_<?= e($t) ?>" value="1" id="r_<?= e($t) ?>" <?= $has($t) ? 'checked' : '' ?>><label class="form-check-label" for="r_<?= e($t) ?>"><?= e($l) ?></label></div>
                 <?php endforeach; ?>
                 <?php foreach ($roles as $r): ?>
@@ -96,6 +97,12 @@ $has = fn (string $type, ?string $value = null) => $form && (bool) array_filter(
                 <div class="form-text mb-3">Nivel 1 y nivel 2: avisa a todos los responsables SyH y administradores por todos los canales.</div>
                 <div class="form-check"><input class="form-check-input" type="checkbox" name="daily" value="1" id="daily" <?= $settings['daily'] ? 'checked' : '' ?>><label class="form-check-label" for="daily">Resumen diario por email (8 h)</label></div>
                 <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="weekly" value="1" id="weekly" <?= $settings['weekly'] ? 'checked' : '' ?>><label class="form-check-label" for="weekly">Resumen semanal (lunes)</label></div>
+                <div class="fw-semibold small mb-2">Acciones correctivas</div>
+                <div class="row g-2 mb-3 small">
+                    <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">Avisar</span><input class="form-control" type="number" name="soon_days" min="1" max="30" value="<?= e($settings['soon']) ?>"><span class="input-group-text">días antes de que venza</span></div></div>
+                    <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">Escalar con</span><input class="form-control" type="number" name="escalate_days" min="1" max="60" value="<?= e($settings['escalate']) ?>"><span class="input-group-text">días de atraso</span></div></div>
+                    <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">Verificar dentro de</span><input class="form-control" type="number" name="verify_days" min="1" max="180" value="<?= e($settings['verify']) ?>"><span class="input-group-text">días del cierre</span></div></div>
+                </div>
                 <?php if ($canEdit): ?><button class="btn btn-primary btn-sm">Guardar</button><?php endif; ?>
             </fieldset>
         </form>
