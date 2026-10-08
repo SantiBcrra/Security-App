@@ -280,6 +280,15 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   `WorkPermits::conflicts()` (otro permiso vigente o pedido en el mismo equipo/sector y franja): aviso en el detalle y al solicitar.
 - `/panel/permisos/historial` (filtros estado/tipo/planta/sector/fechas/texto/míos) y `/panel/permisos/exportar`
   (CSV, permiso exportar). "Mis permisos de trabajo" en el inicio (activos propios + para autorizar).
+- App de campo (entrega 3, `WorkPermitApi`): pull `work_permits` (los que `canView`: vigentes, para autorizar y terminados
+  hace ≤ 3 días; con ejecutores, últimas mediciones, bloqueos y `can` {approve, start, close, work, stop}) + `meta.gases`.
+  Push `permit.start` (firmas de los ejecutores como data URL), `permit.measure` (uuid + hora del celular; la suspensión
+  automática cuenta desde `measured_at`), `permit.isolate` / `permit.release` (uuid del bloqueo), `permit.suspend` /
+  `resume` / `close`: idempotentes (si ya está hecho → ok `duplicate`), responden el permiso actualizado. Autorizar /
+  rechazar solo con conexión (`POST /api/v1/permits/{uuid}/approve|reject`); QR → `GET /permits/{uuid}/verify` (cualquier
+  usuario). PWA: "Permisos de trabajo" en Reportes, detalle `#/permiso/{uuid}` (firmas con `signature-pad.js`, evaluación
+  de gases local con alerta "salir del espacio", `pending` hasta que el servidor confirma; si rechaza, se vuelve a pedir el
+  permiso con `GET /permits/{uuid}`). El escáner reconoce el QR del permiso. Extender y recibir el área: solo web.
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

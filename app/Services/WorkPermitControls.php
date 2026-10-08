@@ -100,7 +100,8 @@ final class WorkPermitControls
         $suspended = false;
         if ($out) {
             if ($p['status'] === 'en_ejecucion') {
-                $suspended = self::suspend($p, 'Medición de gases fuera de rango: ' . implode('; ', $out), true) === null;
+                // La suspensión cuenta desde la medición (puede venir del celular, cargada sin señal).
+                $suspended = self::suspend($p, 'Medición de gases fuera de rango: ' . implode('; ', $out), true, gmdate('Y-m-d H:i:s', $at)) === null;
             }
             Notifier::dispatch('permit.gas_alarm', WorkPermits::findById((int) $p['id']), ['out' => $out]);
         }
@@ -183,7 +184,7 @@ final class WorkPermitControls
     }
 
     /** Frenar el trabajo (alarma, cambio de condiciones). Lo puede hacer el equipo, el autorizante o SyH. */
-    public static function suspend(array $p, string $reason, bool $system = false): ?string
+    public static function suspend(array $p, string $reason, bool $system = false, ?string $at = null): ?string
     {
         if (!$system && !(self::canWork($p) || UserAuth::can(WorkPermitService::MODULE, 'aprobar'))) {
             return 'No tenés permiso para suspender este permiso.';
@@ -194,7 +195,7 @@ final class WorkPermitControls
         if (mb_strlen(trim($reason)) < 5) {
             return 'Escribí el motivo (mínimo 5 caracteres).';
         }
-        $error = self::changeStatus($p, 'suspendido', ['suspended_at' => gmdate('Y-m-d H:i:s'), 'status_reason' => trim($reason)], trim($reason), $system);
+        $error = self::changeStatus($p, 'suspendido', ['suspended_at' => $at ?? gmdate('Y-m-d H:i:s'), 'status_reason' => trim($reason)], trim($reason), $system);
         if ($error === null && !$system) {
             Notifier::dispatch('permit.suspended', WorkPermits::findById((int) $p['id']), ['comment' => trim($reason)]);
         }

@@ -20,7 +20,8 @@ use App\Services\UserAuth;
 final class Push
 {
     public const MAX_OPS = 50;
-    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'action.start', 'action.close', 'inspection.create', 'incident.create'];
+    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'action.start', 'action.close', 'inspection.create', 'incident.create',
+        'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
     public static function run(array $operations): array
@@ -67,6 +68,9 @@ final class Push
                 'action.close'           => self::actionStep($data, 'cerrar'),
                 'inspection.create'      => self::inspectionCreate($data),
                 'incident.create'        => self::incidentCreate($data),
+                'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close'
+                                         => ['status' => 'ok', 'data' => \App\Services\WorkPermitApi::apply($type, $data,
+                                                ['ip' => $_SERVER['REMOTE_ADDR'] ?? null, 'user_agent' => 'App de campo'])],
                 default                  => self::error('Tipo de operación desconocido: ' . $type),
             };
         } catch (UserError $e) {

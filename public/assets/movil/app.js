@@ -89,6 +89,18 @@ document.addEventListener('alpine:init', () => {
         incDetail: null,
         incTypes: { accidente_con_baja: 'Accidente con baja', accidente_sin_baja: 'Accidente sin baja', in_itinere: 'Accidente in itinere',
             enfermedad_profesional: 'Enfermedad profesional', incidente: 'Incidente (daño material)', casi_accidente: 'Casi-accidente' },
+        permits: [],
+        permitUuid: null,
+        permit: null,            // permiso abierto (copia local, con lo hecho offline)
+        permitRemote: null,      // detalle con conexión (checklists, firmas, línea de tiempo)
+        permitVerify: null,      // QR de un permiso que no está en el celular (consulta con conexión)
+        permitLoading: false,
+        permitBusy: false,
+        approveComment: '',
+        gasForm: { o2: '', lel: '', co: '', h2s: '', instrument: '' },
+        isoForm: { open: false },
+        closeForm: { open: false, comment: '' },
+        energies: { electrica: 'Eléctrica', neumatica: 'Neumática', hidraulica: 'Hidráulica', mecanica: 'Mecánica', termica: 'Térmica', quimica: 'Química', gravitatoria: 'Gravitatoria' },
         detailUuid: null,
         toast: null,
         meta: null,
@@ -207,6 +219,12 @@ document.addEventListener('alpine:init', () => {
                 this.openDetail(id);
                 return;
             }
+            if (section === 'permiso' && id) {
+                this.detailUuid = null; this.actionUuid = null; this.inspDetailUuid = null; this.incDetailUuid = null;
+                this.tab = 'reportes'; this.openPermit(id.toLowerCase());
+                return;
+            }
+            this.permitUuid = null;
             if (section === 'incidente' && id) {
                 this.detailUuid = null; this.actionUuid = null; this.inspDetailUuid = null;
                 this.tab = 'reportes'; this.openIncident(id);
@@ -260,6 +278,9 @@ document.addEventListener('alpine:init', () => {
             this.patrolScans = await db.all('patrol_scans');
             const order = { abierta: 0, en_curso: 0, cerrada: 1, verificada: 2, cancelada: 3 };
             this.employees = (await db.all('employees')).sort((a, b) => a.name.localeCompare(b.name));
+            const pOrder = { suspendido: 0, en_ejecucion: 1, solicitado: 2, aprobado: 3 };
+            this.permits = (await db.all('work_permits')).sort((a, b) => ((pOrder[a.status] ?? 9) - (pOrder[b.status] ?? 9)) || (a.ends_at || '').localeCompare(b.ends_at || ''));
+            if (this.permitUuid) this.permit = this.permits.find((x) => x.uuid === this.permitUuid) || this.permit;
             this.incidents = (await db.all('incidents')).sort((a, b) => (b.occurred_at || '').localeCompare(a.occurred_at || ''));
             this.inspTemplates = (await db.all('inspection_templates')).sort((a, b) => a.name.localeCompare(b.name));
             this.inspSchedule = (await db.all('inspection_schedule')).sort((a, b) => a.due_on.localeCompare(b.due_on));
@@ -374,6 +395,185 @@ document.addEventListener('alpine:init', () => {
             this.incDetail = { local: await db.get('incidents', uuid), remote: null, loading: true };
             try { this.incDetail.remote = await request('GET', '/incidents/' + uuid); } catch (e) { /* sin red o todavía no enviado */ }
             this.incDetail.loading = false;
+        },
+
+        // ── permisos de trabajo ─────────────────────────────────────────
+        /** Vigentes, para autorizar y los terminados hace poco (el historial está en la web). */
+        get myPermits() {
+            const recent = Date.now() - 2 * 86400000;
+            return this.permits.filter((p) => ['solicitado', 'aprobado', 'en_ejecucion', 'suspendido'].includes(p.status) || p.pending
+                || new Date(p.updated_at || 0).getTime() > recent);
+        },
+        get permitsToApprove() { return this.permits.filter((p) => p.status === 'solicitado' && p.can?.approve).length; },
+        permitBadge(p) {
+            return { solicitado: 'text-bg-warning', aprobado: 'text-bg-primary', en_ejecucion: 'text-bg-success', suspendido: 'text-bg-danger',
+                cerrado: 'text-bg-dark', vencido: 'text-bg-danger', rechazado: 'text-bg-secondary', cancelado: 'text-bg-secondary' }[p.status] || 'text-bg-secondary';
+        },
+        minutesLeft(p) { return Math.floor((new Date(p.ends_at) - Date.now()) / 60000); },
+        has(p, type) { return (p?.types || []).includes(type); },
+        get placedIsolations() { return (this.permit?.isolations || []).filter((i) => !i.removed_at); },
+        get pendingSigners() { return (this.permit?.workers || []).filter((w) => !w.signed); },
+        /** Mismo control que el servidor (WorkPermitControls::readyToWork), para avisar antes de intentar sin señal. */
+        permitNotReady(p) {
+            if (!p) return null;
+            const g = this.meta?.gases || { vigencia_min: 60 };
+            if (this.has(p, 'espacio_confinado')) {
+                const last = (p.measurements || [])[0];
+                const since = p.status === 'suspendido' ? p.suspended_at : null;
+                if (!last || !last.ok || Date.now() - new Date(last.measured_at).getTime() > g.vigencia_min * 60000 || (since && last.measured_at < since)) {
+                    return 'Espacio confinado: falta una medición de gases en rango de los últimos ' + g.vigencia_min + ' min' + (since ? ' (posterior a la suspensión)' : '') + '.';
+                }
+            }
+            if (this.has(p, 'loto')) {
+                const placed = (p.isolations || []).filter((i) => !i.removed_at);
+                if (!placed.length) return 'LOTO: registrá los puntos de bloqueo antes de empezar.';
+                if (placed.some((i) => !i.zero_verified)) return 'LOTO: falta verificar energía cero en algún punto.';
+            }
+            return null;
+        },
+        /** Límites de la empresa (bajan con la sync). Sirve sin señal: el aviso de "salir" es inmediato. */
+        gasOut(m) {
+            const g = this.meta?.gases;
+            if (!g) return [];
+            const out = [];
+            if (m.o2 !== null && (m.o2 < g.o2_min || m.o2 > g.o2_max)) out.push('O₂ ' + m.o2 + ' %');
+            if (m.lel !== null && m.lel > g.lel_max) out.push('LIE ' + m.lel + ' %');
+            if (m.co !== null && m.co > g.co_max) out.push('CO ' + m.co + ' ppm');
+            if (m.h2s !== null && m.h2s > g.h2s_max) out.push('H₂S ' + m.h2s + ' ppm');
+            return out;
+        },
+        async openPermit(uuid) {
+            this.permitUuid = uuid;
+            this.permit = (await db.get('work_permits', uuid)) || null;
+            this.permitRemote = null;
+            this.permitVerify = null;
+            this.gasForm = { o2: '', lel: '', co: '', h2s: '', instrument: this.gasForm.instrument };
+            this.isoForm = { open: false };
+            this.closeForm = { open: false, comment: '' };
+            this.approveComment = '';
+            this.permitLoading = true;
+            try {
+                if (this.permit) {
+                    this.permitRemote = await request('GET', '/permits/' + uuid);
+                    if (!this.permit.pending) { await db.put('work_permits', { ...this.permitRemote, pending: false }); this.permit = await db.get('work_permits', uuid); }
+                } else {
+                    this.permitVerify = await request('GET', '/permits/' + uuid + '/verify'); // QR de un permiso ajeno: solo si está vigente
+                }
+            } catch (e) { /* sin red: queda lo del celular */ }
+            this.permitLoading = false;
+        },
+        /** Guarda en el celular lo hecho offline y encola la operación. */
+        async permitOp(type, data, changes, message) {
+            const p = { ...this.permit, ...changes, pending: true, sync_error: null };
+            await enqueue(type, { uuid: p.uuid, ...data });
+            await db.put('work_permits', JSON.parse(JSON.stringify(p)));
+            this.permit = p;
+            await this.reloadLocal();
+            this.flash(message + ((await isOnline()) ? ' Enviando…' : ' Se envía cuando haya señal.'));
+            syncNow('save');
+        },
+        signatureOf(name) { return document.querySelector('#permit-detail input[name="' + name + '"]')?.value || ''; },
+        async startPermit() {
+            const ready = this.permitNotReady(this.permit);
+            if (ready) { alert(ready); return; }
+            const sigs = {};
+            const missing = [];
+            for (const w of this.pendingSigners) {
+                const v = this.signatureOf('sig-' + w.uuid);
+                if (v) sigs[w.uuid] = v; else missing.push(w.name);
+            }
+            if (missing.length) { alert('Falta la firma de: ' + missing.join(', ') + '.'); return; }
+            await this.permitOp('permit.start', { worker_signatures: sigs }, { status: 'en_ejecucion', status_label: 'En ejecución',
+                workers: this.permit.workers.map((w) => ({ ...w, signed: true })) }, 'Trabajo iniciado.');
+        },
+        async measureGas() {
+            const n = (v) => (String(v).trim() === '' || isNaN(parseFloat(String(v).replace(',', '.')))) ? null : parseFloat(String(v).replace(',', '.'));
+            const m = { o2: n(this.gasForm.o2), lel: n(this.gasForm.lel), co: n(this.gasForm.co), h2s: n(this.gasForm.h2s) };
+            if (m.o2 === null || m.lel === null) { alert('Cargá al menos O₂ y explosividad (LIE).'); return; }
+            const out = this.gasOut(m);
+            const at = new Date().toISOString();
+            const uuid = crypto.randomUUID();
+            const p = this.permit;
+            const changes = { measurements: [{ uuid, measured_at: at, ...m, ok: !out.length, out_of_range: out.join('; ') || null, measured_by: this.meta?.usuario?.nombre }, ...(p.measurements || [])] };
+            if (out.length && p.status === 'en_ejecucion') {
+                Object.assign(changes, { status: 'suspendido', status_label: 'Suspendido', suspended_at: at, status_reason: 'Medición de gases fuera de rango: ' + out.join('; ') });
+            }
+            await this.permitOp('permit.measure', { measurement_uuid: uuid, measured_at: at, ...m, instrument: this.gasForm.instrument.trim() || undefined },
+                changes, out.length ? 'Medición fuera de rango registrada.' : 'Medición en rango registrada.');
+            this.gasForm = { o2: '', lel: '', co: '', h2s: '', instrument: this.gasForm.instrument };
+            if (out.length) alert('⚠ FUERA DE RANGO: ' + out.join(', ') + '\n\nSALIR DEL ESPACIO YA. No ingresar hasta ventilar y tener una medición en rango.'
+                + (changes.status === 'suspendido' ? '\nEl permiso quedó SUSPENDIDO.' : ''));
+        },
+        newIsolation() { this.isoForm = { open: true, point: '', energy: '', device: '', lock_number: '', zero_verified: false }; },
+        async saveIsolation() {
+            const f = this.isoForm;
+            if (f.point.trim().length < 3) { alert('Indicá el punto de bloqueo.'); return; }
+            if (!f.energy) { alert('Elegí el tipo de energía.'); return; }
+            const uuid = crypto.randomUUID();
+            const iso = { uuid, point: f.point.trim(), energy: f.energy, energy_label: this.energies[f.energy], device: f.device.trim() || null, lock_number: f.lock_number.trim() || null,
+                placed_by: this.meta?.usuario?.nombre || '', placed_at: new Date().toISOString(), zero_verified: f.zero_verified, removed_at: null, removed_by: null };
+            await this.permitOp('permit.isolate', { isolation_uuid: uuid, point: iso.point, energy: iso.energy, device: iso.device || undefined,
+                lock_number: iso.lock_number || undefined, zero_verified: f.zero_verified ? 1 : 0 }, { isolations: [...(this.permit.isolations || []), iso] }, 'Bloqueo registrado.');
+            this.isoForm = { open: false };
+        },
+        async releaseIsolation(iso) {
+            const by = prompt('¿Retirar el bloqueo "' + iso.point + '"? Confirmá que no queda nadie expuesto.\n\nQuién lo retira (vacío = vos):', '');
+            if (by === null) return;
+            await this.permitOp('permit.release', { isolation_uuid: iso.uuid, removed_by: by.trim() || undefined },
+                { isolations: this.permit.isolations.map((i) => i.uuid === iso.uuid ? { ...i, removed_at: new Date().toISOString(), removed_by: by.trim() || this.meta?.usuario?.nombre } : i) },
+                'Bloqueo retirado.');
+        },
+        async suspendPermit() {
+            const reason = prompt('Suspender el trabajo: motivo (alarma, viento, cambio de condiciones…)');
+            if (reason === null) return;
+            if (reason.trim().length < 5) { alert('Escribí el motivo (mínimo 5 letras).'); return; }
+            await this.permitOp('permit.suspend', { comment: reason.trim() }, { status: 'suspendido', status_label: 'Suspendido',
+                suspended_at: new Date().toISOString(), status_reason: reason.trim() }, 'Trabajo suspendido.');
+        },
+        async resumePermit() {
+            const ready = this.permitNotReady(this.permit);
+            if (ready) { alert(ready); return; }
+            const reason = prompt('Reanudar: ¿qué se verificó para seguir?');
+            if (reason === null) return;
+            if (reason.trim().length < 5) { alert('Contá qué se verificó (mínimo 5 letras).'); return; }
+            await this.permitOp('permit.resume', { comment: reason.trim() }, { status: 'en_ejecucion', status_label: 'En ejecución', status_reason: null }, 'Trabajo reanudado.');
+        },
+        async closePermit() {
+            const f = this.closeForm;
+            if (this.placedIsolations.length) { alert('Quedan ' + this.placedIsolations.length + ' bloqueo(s) puestos: retiralos antes de cerrar.'); return; }
+            if (f.comment.trim().length < 5) { alert('Contá cómo quedó el área (mínimo 5 letras).'); return; }
+            const sig = this.signatureOf('sig-close');
+            if (!sig) { alert('Falta la firma de cierre.'); return; }
+            await this.permitOp('permit.close', { comment: f.comment.trim(), signature: sig }, { status: 'cerrado', status_label: 'Cerrado', status_reason: f.comment.trim() }, 'Permiso cerrado.');
+            this.closeForm = { open: false, comment: '' };
+            if (this.has(this.permit, 'caliente')) alert('Trabajo en caliente: la guardia de fuego sigue después del cierre. El vigía se queda controlando el área.');
+        },
+        /** Autorizar o rechazar: solo con conexión (quien autoriza tiene que ver el permiso actualizado). */
+        async decidePermit(approve) {
+            if (!(await isOnline())) { alert('Para autorizar o rechazar necesitás conexión.'); return; }
+            let body;
+            if (approve) {
+                const sig = this.signatureOf('sig-approve');
+                if (!sig) { alert('Falta tu firma.'); return; }
+                body = { signature: sig, comment: this.approveComment.trim() };
+            } else {
+                const reason = prompt('Rechazar: ¿qué hay que corregir?');
+                if (reason === null) return;
+                body = { comment: reason.trim() };
+            }
+            this.permitBusy = true;
+            try {
+                const fresh = await request('POST', '/permits/' + this.permit.uuid + (approve ? '/approve' : '/reject'), { json: body });
+                await db.put('work_permits', { ...fresh, pending: false });
+                this.permitRemote = fresh;
+                this.permit = await db.get('work_permits', fresh.uuid);
+                await this.reloadLocal();
+                this.flash(approve ? 'Permiso autorizado.' : 'Permiso rechazado: se avisó al solicitante.');
+            } catch (e) {
+                alert(e instanceof OfflineError ? 'Sin conexión: probá de nuevo con señal.' : e.message);
+            } finally {
+                this.permitBusy = false;
+            }
         },
 
         // ── inspecciones (checklists) ───────────────────────────────────
@@ -668,6 +868,8 @@ document.addEventListener('alpine:init', () => {
                     if (!this.scanner.open) { stream.getTracks().forEach((t) => t.stop()); return; }
                     try {
                         const codes = await detector.detect(video);
+                        const permitQr = codes.map((c) => c.rawValue.match(/\/permisos\/([0-9a-f-]{36})\/verificar/i)).find(Boolean);
+                        if (permitQr) { this.scanner.open = false; stream.getTracks().forEach((t) => t.stop()); location.hash = '#/permiso/' + permitQr[1].toLowerCase(); return; }
                         const patrol = codes.map((c) => c.rawValue.match(/\/ronda\/punto\/([0-9a-f-]{36})/i)).find(Boolean);
                         if (patrol) { this.scanner.open = false; stream.getTracks().forEach((t) => t.stop()); location.hash = '#/ronda/punto/' + patrol[1].toLowerCase(); return; }
                         const m = codes.map((c) => c.rawValue.match(/\/q\/([0-9a-f-]{36})/i)).find(Boolean);
@@ -883,6 +1085,9 @@ document.addEventListener('alpine:init', () => {
             if (!confirm('¿Descartar este envío? No se va a mandar.')) return;
             await db.del('outbox', op.op_id);
             if (op.type === 'observation.create') await db.del('observations', op.data.uuid);
+            if (op.type.startsWith('permit.')) { // vuelve a lo que diga el servidor
+                try { const remote = await request('GET', '/permits/' + op.data.uuid); await db.put('work_permits', { ...remote, pending: false }); } catch (e) { /* sin red */ }
+            }
             if (op.type.startsWith('action.')) { // vuelve a mostrar lo que diga el servidor en la próxima sync
                 const local = await db.get('actions', op.data.uuid);
                 if (local) await db.put('actions', { ...local, pending: false });

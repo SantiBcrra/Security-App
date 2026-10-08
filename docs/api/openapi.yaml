@@ -25,7 +25,7 @@ components:
       required: [op_id, type, data]
       properties:
         op_id: { type: string, format: uuid, description: "Generado en el celular. Reenviar el mismo op_id devuelve el mismo resultado (idempotente)." }
-        type: { type: string, enum: [observation.create, observation.comment, observation.transition, round.start, round.scan, round.finish, action.start, action.close, inspection.create, incident.create] }
+        type: { type: string, enum: [observation.create, observation.comment, observation.transition, round.start, round.scan, round.finish, action.start, action.close, inspection.create, incident.create, permit.start, permit.measure, permit.isolate, permit.release, permit.suspend, permit.resume, permit.close] }
         data:
           type: object
           description: |
@@ -44,6 +44,14 @@ components:
             incident.create: uuid, type, occurred_at, sector (opcional en in itinere), equipment, location_text, lat, lng, description,
               immediate_actions, people [{ employee (uuid) | external_name, role (lesionado|testigo|involucrado), injury_description, statement }].
               Fotos después con POST /uploads + incident_uuid. Respuesta: code, status, status_label, duplicate.
+            permit.* (permisos de trabajo; todas llevan uuid del permiso y responden { permit (como en el pull), duplicate }):
+              permit.start: worker_signatures { uuid del ejecutor: data URL PNG } (todos los que no firmaron).
+              permit.measure: measurement_uuid, measured_at (ISO del celular, hasta 12 h atrás), o2, lel (obligatorios), co, h2s,
+                instrument, measured_by. Fuera de rango con el trabajo en curso → suspensión desde measured_at + aviso crítico;
+                responde además measurement { ok, out, suspended }.
+              permit.isolate: isolation_uuid, point, energy, device, lock_number, zero_verified. permit.release: isolation_uuid, removed_by.
+              permit.suspend / permit.resume: comment. permit.close: comment, signature (data URL).
+              Si lo pedido ya está hecho (reenvío con otro op_id) responde ok con duplicate = true.
 security: [{ bearer: [] }]
 paths:
   /auth/login:
@@ -75,6 +83,9 @@ paths:
         inspection_templates (activas, con structure de la versión vigente; solo si puede hacer inspecciones) e
         inspection_schedule (pendientes a su cargo: template_uuid, equipment_uuid, sector_uuid, due_from, due_on).
         incidents (solo los que reportó el usuario, últimos 180 días, sin datos de salud).
+        work_permits (los que el usuario puede ver: vigentes, para autorizar y terminados en los últimos 3 días): code, types,
+        status, sector, equipment, task, valid_from, ends_at, workers [{ uuid, name, role, signed }], measurements (últimas 10),
+        isolations, can { approve, start, close, work, stop }. `meta.gases` trae los límites para evaluar mediciones sin señal.
         `deleted` trae los uuid dados de baja. Paginado: repetir con el cursor devuelto mientras `has_more` sea true.
         El cliente hace upsert por uuid (puede recibir algo dos veces sin duplicar).
       parameters:
@@ -116,6 +127,14 @@ paths:
     get: { summary: Miniatura de una foto, parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }, { name: photo, in: path, required: true, schema: { type: string } }], responses: { "200": { description: imagen } } }
   /inspections/{uuid}:
     get: { summary: "Detalle de una inspección: resultado y respuestas (con la acción creada por ítem)", parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+  /permits/{uuid}:
+    get: { summary: "Permiso de trabajo: lo del pull + checklists, firmas y línea de tiempo", parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok }, "404": { description: sin acceso } } }
+  /permits/{uuid}/approve:
+    post: { summary: "Autorizar (solo con conexión; quien tiene aprobar y no es el solicitante)", requestBody: { content: { application/json: { schema: { type: object, required: [signature], properties: { signature: { type: string, description: data URL PNG }, comment: { type: string } } } } } }, responses: { "200": { description: permiso actualizado }, "422": { description: motivo } } }
+  /permits/{uuid}/reject:
+    post: { summary: Rechazar con motivo, requestBody: { content: { application/json: { schema: { type: object, required: [comment], properties: { comment: { type: string } } } } } }, responses: { "200": { description: permiso actualizado }, "422": { description: motivo } } }
+  /permits/{uuid}/verify:
+    get: { summary: "QR colgado en el lugar: vigente o no y quién trabaja (cualquier usuario de la empresa)", parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok }, "404": { description: no es de esta empresa } } }
   /incidents/{uuid}:
     get: { summary: "Detalle de un incidente (sin datos de salud)", parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
   /actions/{uuid}:

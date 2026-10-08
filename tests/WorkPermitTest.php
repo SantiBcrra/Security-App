@@ -29,7 +29,7 @@ use App\Services\WorkPermitControls;
 use App\Services\WorkPermitService;
 
 /**
- * Etapa 13 (entregas 1 y 2): permisos de trabajo y sus controles (gases, LOTO, vigía, suspensión, extensión). Maestra `securityapp_test_ptw`.
+ * Etapa 13: permisos de trabajo, controles (gases, LOTO, vigía, suspensión, extensión) y app de campo (sync + API). Maestra `securityapp_test_ptw`.
  */
 $server = [
     'host' => getenv('TEST_DB_HOST') ?: '127.0.0.1', 'port' => 3306,
@@ -446,6 +446,90 @@ return [
         $settings = $call($st['admin'], '/panel/configuracion');
         assert_true(str_contains($settings->body, 'Límites de gases'));
         $_SESSION = [];
+    },
+
+    'app de campo: pull según alcance, operaciones offline idempotentes (firmas, gases, LOTO, cierre)' => function () use ($setup, &$st, $request, $sign, $okAnswers) {
+        $setup();
+        $p = $request($st['sup'], ['types' => ['espacio_confinado', 'loto'], 'task' => 'Limpiar tolva 3 por dentro',
+            'checklists' => ['espacio_confinado' => $okAnswers('espacio_confinado'), 'loto' => $okAnswers('loto')],
+            'workers' => [['employee' => $st['emp']['uuid'], 'role' => 'ejecutor'], ['external_name' => 'Sosa Ana', 'external_dni' => '35111222', 'role' => 'vigia']]])['permit'];
+        UserAuth::setCurrent($st['hys']);
+        WorkPermitService::approve($p, $sign());
+        DB::tenant()->exec('UPDATE work_permits SET updated_at = UTC_TIMESTAMP() - INTERVAL 1 MINUTE');
+        $pulled = function (array $user) {
+            UserAuth::setCurrent($user);
+            $page = App\Services\Sync\Pull::run(null, 1000);
+            return [array_column((array) ($page['changes']->work_permits ?? []), null, 'uuid'), $page];
+        };
+        [$mine, $page] = $pulled($st['sup']);
+        $row = $mine[$p['uuid']] ?? null;
+        assert_true($row !== null && $row['can']['start'] && !$row['can']['approve'] && count($row['workers']) === 2);
+        assert_true(isset($page['meta']['gases']['o2_min']), 'límites de gases para evaluar sin señal');
+        [$repView] = $pulled($st['rep']);
+        assert_true(!isset($repView[$p['uuid']]), 'el operario sin el módulo no lo recibe');
+        // Todo hecho sin señal y enviado junto (en orden)
+        UserAuth::setCurrent($st['sup']);
+        $workers = WorkPermits::workers((int) $p['id']);
+        $iso = App\Core\Uuid::v4();
+        $op = fn (string $type, array $data) => ['op_id' => App\Core\Uuid::v4(), 'type' => $type, 'data' => ['uuid' => $p['uuid']] + $data];
+        $badAt = gmdate('Y-m-d\TH:i:s\Z', time() - 120);
+        $ops = [
+            $op('permit.isolate', ['isolation_uuid' => $iso, 'point' => 'Seccionador motor tolva', 'energy' => 'electrica', 'zero_verified' => 1]),
+            $op('permit.measure', ['measurement_uuid' => App\Core\Uuid::v4(), 'o2' => 20.9, 'lel' => 0, 'measured_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 300)]),
+            $op('permit.start', ['worker_signatures' => [$workers[0]['uuid'] => $sign(), $workers[1]['uuid'] => $sign()]]),
+            $op('permit.measure', ['measurement_uuid' => App\Core\Uuid::v4(), 'o2' => 17.5, 'lel' => 0, 'measured_at' => $badAt]),
+            $op('permit.measure', ['measurement_uuid' => App\Core\Uuid::v4(), 'o2' => 20.8, 'lel' => 1, 'measured_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 30)]),
+            $op('permit.resume', ['comment' => 'Se ventiló y se volvió a medir']),
+            $op('permit.release', ['isolation_uuid' => $iso, 'removed_by' => 'Pérez']),
+            $op('permit.close', ['comment' => 'Tolva limpia, tapa colocada', 'signature' => $sign()]),
+        ];
+        $results = App\Services\Sync\Push::run($ops);
+        foreach ($results as $i => $r) {
+            assert_same('ok', $r['status'], ($ops[$i]['type']) . ': ' . ($r['error'] ?? ''));
+        }
+        assert_same(true, $results[3]['data']['measurement']['suspended'], 'fuera de rango → suspendido');
+        $fresh = WorkPermits::findById((int) $p['id']);
+        assert_same('cerrado', $fresh['status']);
+        assert_same(gmdate('Y-m-d H:i:s', strtotime($badAt)), $fresh['suspended_at'], 'la suspensión cuenta desde la medición del celular');
+        assert_same('cerrado', $results[7]['data']['permit']['status']);
+        // Reenvíos: mismo op_id = misma respuesta; otro op_id = ok sin repetir nada
+        $replay = App\Services\Sync\Push::run($ops);
+        assert_same(array_map(fn ($r) => [$r['op_id'], $r['status'], $r['data']['permit']['status']], $results),
+            array_map(fn ($r) => [$r['op_id'], $r['status'], $r['data']['permit']['status']], $replay));
+        $again = App\Services\Sync\Push::run([$op('permit.close', ['comment' => 'otra vez', 'signature' => $sign()]),
+            $op('permit.isolate', ['isolation_uuid' => $iso, 'point' => 'Seccionador motor tolva', 'energy' => 'electrica'])]);
+        assert_same([true, true], [$again[0]['data']['duplicate'], $again[1]['data']['duplicate']]);
+        assert_same(3, count(WorkPermits::measurements((int) $p['id'])));
+        assert_same(1, count(WorkPermits::isolations((int) $p['id'])));
+        // Rechazos con motivo
+        UserAuth::setCurrent($st['rep']);
+        $err = App\Services\Sync\Push::run([$op('permit.suspend', ['comment' => 'Probando'])])[0];
+        assert_true($err['status'] === 'error' && str_contains($err['error'], 'no tenés acceso'));
+        UserAuth::setCurrent($st['sup']);
+        $err = App\Services\Sync\Push::run([$op('permit.measure', ['measurement_uuid' => App\Core\Uuid::v4(), 'o2' => 20, 'lel' => 0])])[0];
+        assert_true($err['status'] === 'error' && str_contains($err['error'], 'no está activo'), (string) ($err['error'] ?? ''));
+    },
+
+    'API: autorizar y rechazar con conexión, detalle con checklist y verificación por QR' => function () use ($setup, &$st, $request, $sign) {
+        $setup();
+        $p = $request($st['sup'])['permit'];
+        $bad = $request($st['sup'])['permit'];
+        $api = new App\Controllers\Api\WorkPermitsController();
+        $json = fn ($res) => json_decode($res->body, true);
+        UserAuth::setCurrent($st['sup']);
+        assert_same(422, $api->approve(new App\Core\Request('POST', '/', [], ['signature' => $sign()]), $p['uuid'])->status, 'el solicitante no autoriza');
+        UserAuth::setCurrent($st['hys']);
+        $detail = $json($api->show(new App\Core\Request('GET', '/'), $p['uuid']));
+        assert_true($detail['ok'] && $detail['data']['can']['approve'] && count($detail['data']['checklists']) === 2);
+        $ok = $json($api->approve(new App\Core\Request('POST', '/', [], ['signature' => $sign(), 'comment' => 'Con línea de vida']), $p['uuid']));
+        assert_same('aprobado', $ok['data']['status']);
+        $no = $json($api->reject(new App\Core\Request('POST', '/', [], ['comment' => 'Falta el vigía']), $bad['uuid']));
+        assert_same('rechazado', $no['data']['status']);
+        UserAuth::setCurrent($st['rep']);
+        assert_same(404, $api->show(new App\Core\Request('GET', '/'), $p['uuid'])->status, 'sin acceso al detalle');
+        $v = $json($api->verify(new App\Core\Request('GET', '/'), $p['uuid']));
+        assert_true($v['ok'] && $v['data']['valid'] === false && $v['data']['status'] === 'aprobado' && count($v['data']['workers']) === 3, 'el QR lo ve cualquiera');
+        assert_same(404, $api->verify(new App\Core\Request('GET', '/'), App\Core\Uuid::v4())->status);
     },
 
     'aislamiento: la empresa B no ve permisos de A' => function () use ($setup, &$st) {

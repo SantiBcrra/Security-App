@@ -17,7 +17,7 @@ final class MobileController
     /** Archivos que el service worker guarda para abrir la app sin conexión. */
     private const ASSETS = [
         'css/bootstrap.min.css', 'js/alpine.min.js', 'movil/movil.css', 'movil/app.js', 'movil/db.js', 'movil/api.js',
-        'movil/sync.js', 'movil/icon-192.png', 'movil/icon-512.png', 'movil/apple-touch-icon.png',
+        'movil/sync.js', 'js/signature-pad.js', 'movil/icon-192.png', 'movil/icon-512.png', 'movil/apple-touch-icon.png',
     ];
 
     public function shell(Request $request): Response

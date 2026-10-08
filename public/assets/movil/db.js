@@ -2,7 +2,7 @@
 // hasta que se sincroniza: catálogos, sectores, equipos, empleados, observaciones, cola de envío
 // (outbox) y fotos pendientes.
 const NAME = 'secapp-movil';
-const VERSION = 5;
+const VERSION = 6;
 const STORES = {
     kv: { keyPath: 'key' },
     catalog_items: { keyPath: 'uuid', indexes: ['catalog'] },
@@ -20,6 +20,7 @@ const STORES = {
     inspection_schedule: { keyPath: 'uuid' },
     inspections: { keyPath: 'uuid' },   // las hechas en este celular (pendientes de enviar y enviadas)
     incidents: { keyPath: 'uuid' },     // los que reporté (los del servidor + los pendientes de enviar)
+    work_permits: { keyPath: 'uuid' },  // permisos de trabajo vigentes que puedo ver (con lo hecho offline encima: pending)
     outbox: { keyPath: 'op_id' },
     uploads: { keyPath: 'upload_uuid', indexes: ['observation_uuid'] },
 };

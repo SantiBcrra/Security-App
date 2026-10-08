@@ -23,7 +23,7 @@ use App\Services\UserAuth;
  */
 final class Pull
 {
-    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'actions', 'inspection_templates', 'inspection_schedule', 'incidents'];
+    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'actions', 'inspection_templates', 'inspection_schedule', 'incidents', 'work_permits'];
     private const OVERLAP_SECONDS = 5;
     private const OBS_HISTORY_DAYS = 180;
 
@@ -55,7 +55,9 @@ final class Pull
                     || ($entity === 'inspection_templates' && (!UserAuth::can('inspecciones', 'crear') || $row['version_uuid'] === null || $row['scope'] === 'permiso'))
                     || ($entity === 'inspection_schedule' && ($row['status'] !== 'pendiente' || !self::scheduleIsMine($row)))
                     // Incidentes: al celular solo llegan los que reportó el usuario (sin datos de salud).
-                    || ($entity === 'incidents' && (int) $row['reported_by'] !== (int) (UserAuth::user()['id'] ?? 0));
+                    || ($entity === 'incidents' && (int) $row['reported_by'] !== (int) (UserAuth::user()['id'] ?? 0))
+                    // Permisos de trabajo: los que el usuario puede ver según su alcance (solicitante, autorizante o sector).
+                    || ($entity === 'work_permits' && !\App\Services\WorkPermitService::canView($row));
                 if ($gone) {
                     $deleted[$entity][] = $row['uuid'];
                 } else {
@@ -79,6 +81,7 @@ final class Pull
                 'empresa'           => ['nombre' => Tenant::current()['name'], 'zona_horaria' => Tenant::timezone()],
                 'anonimo_habilitado'=> Settings::bool('observaciones.anonimo_habilitado'),
                 'permisos'          => UserAuth::permissions(),
+                'gases'             => \App\Services\WorkPermitControls::gasLimits() + ['vigencia_min' => \App\Services\WorkPermitControls::MEASUREMENT_VALID_MINUTES],
                 'usuario'           => $user ? ['uuid' => $user['uuid'], 'nombre' => $user['name'], 'rol' => $user['role_name']] : null,
             ],
         ];
@@ -163,6 +166,10 @@ final class Pull
                 return ["SELECT t.id, t.uuid, t.number, t.type, t.status, t.occurred_at, t.description, t.reported_by, t.updated_at, t.deleted_at,
                         se.uuid AS sector_uuid FROM incidents t LEFT JOIN sectors se ON se.id = t.sector_id
                     WHERE {$after} AND t.occurred_at > UTC_TIMESTAMP() - INTERVAL 180 DAY{$order}", $params];
+            case 'work_permits':
+                // Vigentes o para autorizar, y los terminados de los últimos 3 días (el historial está en la web).
+                return ["SELECT t.id, t.uuid, t.status, t.requested_by, t.approved_by, t.sector_id, t.updated_at, t.deleted_at FROM work_permits t
+                    WHERE {$after} AND (t.status IN ('solicitado', 'aprobado', 'en_ejecucion', 'suspendido') OR t.updated_at > UTC_TIMESTAMP() - INTERVAL 3 DAY){$order}", $params];
             case 'inspection_templates':
                 return ["SELECT t.*, v.uuid AS version_uuid, v.structure, ty.uuid AS type_uuid FROM inspection_templates t
                     LEFT JOIN inspection_template_versions v ON v.id = t.current_version_id LEFT JOIN catalog_items ty ON ty.id = t.equipment_type_id
@@ -234,6 +241,7 @@ final class Pull
                 'status_label' => \App\Services\IncidentService::STATES[$r['status']]['label'], 'sector_uuid' => $r['sector_uuid'],
                 'occurred_at' => str_replace(' ', 'T', $r['occurred_at']) . 'Z', 'description' => mb_strimwidth((string) $r['description'], 0, 300, '…'),
             ],
+            'work_permits' => \App\Services\WorkPermitApi::shape(\App\Models\WorkPermits::findById((int) $r['id'])),
             'inspection_templates' => [
                 'uuid' => $r['uuid'], 'name' => $r['name'], 'description' => $r['description'], 'scope' => $r['scope'], 'type_uuid' => $r['type_uuid'],
                 'version_uuid' => $r['version_uuid'], 'structure' => json_decode((string) $r['structure'], true) ?: ['sections' => []],

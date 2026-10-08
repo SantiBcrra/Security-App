@@ -107,6 +107,7 @@ async function pushOps() {
                     const local = await db.get('incidents', op.data.uuid);
                     if (local) await db.put('incidents', { ...local, local: false, code: r.data.code, status: r.data.status, status_label: r.data.status_label, sync_error: null });
                 }
+                if (op.type.startsWith('permit.')) await settlePermit(op, r.data.permit, null);
             } else {
                 // Error de validación: no se reintenta solo (el servidor explicó por qué); queda visible.
                 await db.put('outbox', { ...op, status: 'failed', error: r.error });
@@ -126,9 +127,26 @@ async function pushOps() {
                     const local = await db.get('incidents', op.data.uuid);
                     if (local) await db.put('incidents', { ...local, sync_error: r.error });
                 }
+                if (op.type.startsWith('permit.')) await settlePermit(op, null, r.error);
             }
         }
     }
+}
+
+/**
+ * Después de cada operación de un permiso: si no quedan otras pendientes, el celular toma lo que dice el servidor.
+ * Si el servidor la rechazó, se vuelve a pedir el permiso (lo hecho offline se descarta) y se muestra el motivo.
+ */
+async function settlePermit(op, fresh, error) {
+    const others = (await db.all('outbox')).some((o) => o.op_id !== op.op_id && o.status === 'pending' && o.type.startsWith('permit.') && o.data.uuid === op.data.uuid);
+    const local = await db.get('work_permits', op.data.uuid);
+    if (fresh) {
+        if (!others) await db.put('work_permits', { ...fresh, pending: false, sync_error: null });
+        return;
+    }
+    let remote = null;
+    try { remote = await request('GET', '/permits/' + op.data.uuid); } catch (e) { /* sin acceso o sin red: queda lo local */ }
+    if (remote || local) await db.put('work_permits', { ...(remote || local), pending: others, sync_error: error });
 }
 
 async function pushUploads() {
@@ -194,6 +212,14 @@ async function pull() {
                     merged.push(local?.pending ? { ...row, status: local.status, status_label: local.status_label, closure_text: local.closure_text, pending: true } : row);
                 }
                 await db.putMany('actions', merged);
+            } else if (entity === 'work_permits') {
+                // Lo hecho en el celular que todavía no se envió (firmas, mediciones, bloqueos) no se pisa.
+                const merged = [];
+                for (const row of rows) {
+                    const local = await db.get('work_permits', row.uuid);
+                    merged.push(local?.pending ? local : row);
+                }
+                await db.putMany('work_permits', merged);
             } else if (entity === 'incidents') {
                 // Los que todavía no se enviaron no se pisan (y se conservan sus datos locales).
                 const merged = [];

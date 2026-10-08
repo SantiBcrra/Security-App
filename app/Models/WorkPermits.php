@@ -11,7 +11,7 @@ final class WorkPermits
 {
     public const ACTIVE = ['aprobado', 'en_ejecucion', 'suspendido'];
 
-    private const SELECT = 'SELECT w.*, si.name AS site_name, si.uuid AS site_uuid, se.name AS sector_name, eq.code AS equipment_code, eq.name AS equipment_name,
+    private const SELECT = 'SELECT w.*, si.name AS site_name, si.uuid AS site_uuid, se.name AS sector_name, se.uuid AS sector_uuid, eq.code AS equipment_code, eq.name AS equipment_name,
             co.name AS contractor_name, ru.name AS requested_by_name, au.name AS approved_by_name, cu.name AS closed_by_name,
             COALESCE(w.extended_until, w.valid_until) AS ends_at
         FROM work_permits w

@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="<?= e($base) ?>/assets/css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= e($base) ?>/assets/movil/movil.css?v=<?= e($version) ?>">
     <script type="module" src="<?= e($base) ?>/assets/movil/app.js?v=<?= e($version) ?>"></script>
+    <script src="<?= e($base) ?>/assets/js/signature-pad.js?v=<?= e($version) ?>"></script>
     <script defer src="<?= e($base) ?>/assets/js/alpine.min.js"></script>
 </head>
 <body x-data="movil" x-cloak>
@@ -528,6 +529,172 @@
 
     <!-- Mis reportes -->
     <main class="app-main" x-show="!detailUuid && !actionUuid && tab === 'reportes'">
+        <template x-if="permitUuid">
+            <div id="permit-detail">
+                <button class="btn btn-link px-0 mb-2" @click="history.length > 1 ? history.back() : go('reportes')">← Volver</button>
+                <div class="text-center py-4" x-show="permitLoading && !permit"><div class="spinner-border text-secondary"></div></div>
+                <!-- QR de un permiso que no está en el celular -->
+                <template x-if="!permit && permitVerify">
+                    <div>
+                        <div class="alert text-center fs-4 fw-bold" :class="permitVerify.valid ? 'alert-success' : 'alert-danger'" x-text="permitVerify.valid ? '✓ VIGENTE' : '✗ NO VIGENTE'"></div>
+                        <h2 class="h5 mb-1" x-text="permitVerify.code + ' · ' + permitVerify.type_labels.join(' + ')"></h2>
+                        <div class="small text-body-secondary mb-2" x-text="permitVerify.status_label + ' · vence ' + fmtDate(permitVerify.ends_at)"></div>
+                        <div class="mb-2" x-text="(permitVerify.sector || '') + (permitVerify.location_text ? ' · ' + permitVerify.location_text : '')"></div>
+                        <p class="small" x-text="permitVerify.task"></p>
+                        <ul class="list-group small"><template x-for="w in permitVerify.workers"><li class="list-group-item d-flex justify-content-between">
+                            <span x-text="w.name + (w.role === 'vigia' ? ' (vigía)' : '')"></span><span :class="w.signed ? 'text-success' : 'text-body-secondary'" x-text="w.signed ? '✓ firmó' : 'sin firmar'"></span></li></template></ul>
+                    </div>
+                </template>
+                <template x-if="!permit && !permitVerify && !permitLoading">
+                    <div class="alert alert-secondary small">Ese permiso no está en el celular. Con conexión se puede verificar escaneando su QR.</div>
+                </template>
+
+                <template x-if="permit">
+                    <div>
+                        <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
+                            <h2 class="h5 m-0" x-text="permit.code"></h2>
+                            <template x-for="t in permit.type_labels"><span class="badge text-bg-dark" x-text="t"></span></template>
+                            <span class="badge" :class="permitBadge(permit)" x-text="permit.status_label"></span>
+                            <span class="badge text-bg-warning" x-show="permit.pending">Sin enviar</span>
+                        </div>
+                        <div class="alert alert-danger small py-2" x-show="permit.sync_error" x-text="'El servidor no aceptó lo último: ' + permit.sync_error"></div>
+                        <div class="alert alert-danger small py-2" x-show="permit.status === 'suspendido'"><strong>SUSPENDIDO.</strong> <span x-text="permit.status_reason"></span> Nadie trabaja hasta reanudarlo.</div>
+                        <div class="alert alert-warning small py-2" x-show="permit.status === 'cerrado' && permit.fire_watch_until && new Date(permit.fire_watch_until) > new Date()"
+                             x-text="'🔥 Guardia de fuego hasta las ' + fmtDate(permit.fire_watch_until).slice(-5) + ': el vigía se queda en el área.'"></div>
+                        <div class="fw-semibold" x-text="(permit.sector || '') + (permit.equipment ? ' · ' + permit.equipment : '') + (permit.location_text ? ' · ' + permit.location_text : '')"></div>
+                        <div class="small mb-1" :class="['aprobado','en_ejecucion','suspendido'].includes(permit.status) && minutesLeft(permit) < 30 ? 'text-danger fw-semibold' : 'text-body-secondary'"
+                             x-text="fmtDate(permit.valid_from) + ' → ' + fmtDate(permit.ends_at) + (permit.extended ? ' (extendido)' : '') + (permit.contractor ? ' · ' + permit.contractor : '')"></div>
+                        <p class="small mb-2" style="white-space: pre-wrap" x-text="permit.task"></p>
+                        <div class="small text-body-secondary mb-3" x-text="'Solicitó ' + (permit.requested_by || '—') + (permit.approved_by ? ' · autorizó ' + permit.approved_by : '')"></div>
+
+                        <h3 class="h6">Ejecutores</h3>
+                        <ul class="list-group small mb-3"><template x-for="w in permit.workers" :key="w.uuid"><li class="list-group-item d-flex justify-content-between gap-2">
+                            <span x-text="w.name + (w.role === 'vigia' ? ' (vigía)' : '') + (w.dni ? ' · DNI ' + w.dni : '')"></span>
+                            <span class="text-nowrap" :class="w.signed ? 'text-success' : 'text-body-secondary'" x-text="w.signed ? '✓ firmó' : 'firma al iniciar'"></span></li></template></ul>
+
+                        <!-- Autorizar (con conexión) -->
+                        <template x-if="permit.can.approve && !permit.pending">
+                            <div class="card mb-3"><div class="card-body">
+                                <h3 class="h6">Autorizar</h3>
+                                <div class="alert alert-danger small" x-show="permit.critical_fails" x-text="'Hay ' + permit.critical_fails + ' ítem(s) crítico(s) sin cumplir: no se puede autorizar. Rechazalo.'"></div>
+                                <template x-if="permitRemote && permitRemote.checklists">
+                                    <div class="mb-2"><template x-for="c in permitRemote.checklists"><div class="mb-2">
+                                        <div class="small fw-semibold" x-text="c.type + (c.fails ? ' · ' + c.fails + ' no cumple(n)' : ' · todo en orden')"></div>
+                                        <template x-for="a in c.answers.filter((x) => x.ok === false)"><div class="small text-danger" x-text="'✗ ' + a.text + (a.comment ? ': ' + a.comment : '')"></div></template>
+                                    </div></template></div>
+                                </template>
+                                <div class="small text-body-secondary mb-2" x-show="!permitRemote">Necesitás conexión para ver el checklist y autorizar.</div>
+                                <template x-if="permitRemote && !permit.critical_fails">
+                                    <div>
+                                        <div data-signature class="sig-box mb-1"><canvas></canvas><input type="hidden" name="sig-approve"><button type="button" class="btn btn-sm btn-link" data-clear>Borrar firma</button></div>
+                                        <input class="form-control form-control-sm mb-2" x-model="approveComment" placeholder="Condiciones (opcional)">
+                                        <button class="btn btn-success w-100 mb-2" :disabled="permitBusy" @click="decidePermit(true)">Firmar y autorizar</button>
+                                    </div>
+                                </template>
+                                <button class="btn btn-outline-danger btn-sm" :disabled="permitBusy || !permitRemote" @click="decidePermit(false)">Rechazar</button>
+                            </div></div>
+                        </template>
+
+                        <div class="alert alert-warning small" x-show="['aprobado','suspendido'].includes(permit.status) && permitNotReady(permit)" x-text="permitNotReady(permit)"></div>
+
+                        <!-- Iniciar: firma de cada ejecutor en el celular -->
+                        <template x-if="permit.can.start && permit.status === 'aprobado'">
+                            <div class="card mb-3"><div class="card-body">
+                                <h3 class="h6">Iniciar el trabajo</h3>
+                                <p class="small text-body-secondary">Cada ejecutor firma que fue informado de los riesgos y de las medidas del permiso.</p>
+                                <template x-for="w in pendingSigners" :key="w.uuid">
+                                    <div class="mb-2"><div class="small fw-semibold" x-text="'Firma de ' + w.name + (w.role === 'vigia' ? ' (vigía)' : '')"></div>
+                                        <div data-signature class="sig-box"><canvas></canvas><input type="hidden" :name="'sig-' + w.uuid"><button type="button" class="btn btn-sm btn-link" data-clear>Borrar</button></div></div>
+                                </template>
+                                <button class="btn btn-success w-100" @click="startPermit()">Iniciar</button>
+                            </div></div>
+                        </template>
+
+                        <!-- Mediciones de gases -->
+                        <template x-if="has(permit, 'espacio_confinado')">
+                            <div class="card mb-3"><div class="card-body">
+                                <h3 class="h6">Mediciones de gases</h3>
+                                <div class="small text-body-secondary mb-2" x-show="meta?.gases" x-text="'O₂ ' + meta?.gases?.o2_min + '–' + meta?.gases?.o2_max + ' % · LIE ≤ ' + meta?.gases?.lel_max + ' % · CO ≤ ' + meta?.gases?.co_max + ' · H₂S ≤ ' + meta?.gases?.h2s_max + ' ppm'"></div>
+                                <template x-if="permit.can.work">
+                                    <div class="mb-2">
+                                        <div class="row g-2">
+                                            <div class="col-3"><input class="form-control" inputmode="decimal" placeholder="O₂ %" x-model="gasForm.o2"></div>
+                                            <div class="col-3"><input class="form-control" inputmode="decimal" placeholder="LIE %" x-model="gasForm.lel"></div>
+                                            <div class="col-3"><input class="form-control" inputmode="decimal" placeholder="CO" x-model="gasForm.co"></div>
+                                            <div class="col-3"><input class="form-control" inputmode="decimal" placeholder="H₂S" x-model="gasForm.h2s"></div>
+                                            <div class="col-12"><input class="form-control form-control-sm" placeholder="Instrumento (opcional)" x-model="gasForm.instrument"></div>
+                                        </div>
+                                        <button class="btn btn-primary w-100 mt-2" @click="measureGas()">Registrar medición</button>
+                                    </div>
+                                </template>
+                                <template x-for="m in permit.measurements" :key="m.uuid">
+                                    <div class="small border-top py-1 d-flex justify-content-between" :class="m.ok ? '' : 'text-danger fw-semibold'">
+                                        <span x-text="fmtDate(m.measured_at).slice(-5) + ' · O₂ ' + m.o2 + ' · LIE ' + m.lel + (m.co !== null ? ' · CO ' + m.co : '') + (m.h2s !== null ? ' · H₂S ' + m.h2s : '')"></span>
+                                        <span x-text="m.ok ? '✓' : '✗ fuera'"></span></div>
+                                </template>
+                                <div class="small text-body-secondary" x-show="!permit.measurements.length">Sin mediciones todavía.</div>
+                            </div></div>
+                        </template>
+
+                        <!-- Bloqueos LOTO -->
+                        <template x-if="has(permit, 'loto')">
+                            <div class="card mb-3"><div class="card-body">
+                                <h3 class="h6">Bloqueos (LOTO) <span class="badge" :class="placedIsolations.length ? 'text-bg-danger' : 'text-bg-secondary'" x-text="placedIsolations.length + ' puesto(s)'"></span></h3>
+                                <template x-for="i in permit.isolations" :key="i.uuid">
+                                    <div class="small border-top py-2 d-flex justify-content-between gap-2 align-items-center" :class="i.removed_at ? 'text-body-secondary' : ''">
+                                        <span><span x-text="(i.removed_at ? '🔓 ' : '🔒 ') + i.point + ' · ' + i.energy_label + (i.lock_number ? ' · candado ' + i.lock_number : '')"></span><br>
+                                            <span :class="i.zero_verified ? 'text-success' : 'text-danger'" x-text="i.zero_verified ? 'energía cero verificada' : 'energía cero SIN verificar'"></span>
+                                            <span x-show="i.removed_at" x-text="' · retiró ' + (i.removed_by || '')"></span></span>
+                                        <button class="btn btn-sm btn-outline-secondary" x-show="!i.removed_at && permit.can.work" @click="releaseIsolation(i)">Retirar</button>
+                                    </div>
+                                </template>
+                                <template x-if="permit.can.work && !isoForm.open"><button class="btn btn-outline-primary w-100 mt-2" @click="newIsolation()">+ Punto de bloqueo</button></template>
+                                <template x-if="isoForm.open">
+                                    <div class="mt-2">
+                                        <input class="form-control mb-2" placeholder="Punto (ej. seccionador TG-2)" x-model="isoForm.point">
+                                        <select class="form-select mb-2" x-model="isoForm.energy"><option value="">Tipo de energía…</option>
+                                            <template x-for="en in Object.keys(energies)"><option :value="en" x-text="energies[en]"></option></template></select>
+                                        <div class="row g-2 mb-2"><div class="col-6"><input class="form-control" placeholder="Dispositivo" x-model="isoForm.device"></div>
+                                            <div class="col-6"><input class="form-control" placeholder="N.º candado" x-model="isoForm.lock_number"></div></div>
+                                        <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="iso-zero" x-model="isoForm.zero_verified"><label class="form-check-label small" for="iso-zero">Energía cero verificada</label></div>
+                                        <div class="d-flex gap-2"><button class="btn btn-primary flex-fill" @click="saveIsolation()">Registrar</button><button class="btn btn-outline-secondary" @click="isoForm = { open: false }">Cancelar</button></div>
+                                    </div>
+                                </template>
+                            </div></div>
+                        </template>
+
+                        <!-- Suspender / reanudar -->
+                        <div class="d-flex gap-2 mb-3" x-show="permit.can.stop">
+                            <button class="btn btn-outline-danger flex-fill" x-show="permit.status === 'en_ejecucion'" @click="suspendPermit()">Suspender</button>
+                            <button class="btn btn-success flex-fill" x-show="permit.status === 'suspendido'" @click="resumePermit()">Reanudar</button>
+                        </div>
+
+                        <!-- Cerrar -->
+                        <template x-if="permit.can.close && ['en_ejecucion','suspendido'].includes(permit.status)">
+                            <div class="mb-3">
+                                <button class="btn btn-dark w-100" x-show="!closeForm.open" @click="closeForm = { open: true, comment: '' }">Cerrar el permiso</button>
+                                <template x-if="closeForm.open">
+                                    <div class="card"><div class="card-body">
+                                        <h3 class="h6">Cerrar</h3>
+                                        <textarea class="form-control mb-2" rows="2" placeholder="Cómo quedó el área" x-model="closeForm.comment"></textarea>
+                                        <div data-signature class="sig-box mb-2"><canvas></canvas><input type="hidden" name="sig-close"><button type="button" class="btn btn-sm btn-link" data-clear>Borrar firma</button></div>
+                                        <div class="d-flex gap-2"><button class="btn btn-dark flex-fill" @click="closePermit()">Firmar y cerrar</button><button class="btn btn-outline-secondary" @click="closeForm = { open: false, comment: '' }">Cancelar</button></div>
+                                    </div></div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <template x-if="permitRemote && permitRemote.events">
+                            <div><h3 class="h6 text-body-secondary">Línea de tiempo</h3>
+                                <template x-for="ev in permitRemote.events.slice(0, 10)"><div class="small border-top py-1">
+                                    <span class="text-body-secondary" x-text="fmtDate(ev.at) + ' · ' + (ev.actor || '')"></span><div x-text="ev.comment || ev.to || ev.type"></div></div></template>
+                            </div>
+                        </template>
+                        <div class="small text-body-secondary mt-3">La extensión y la recepción del área se hacen desde la web.</div>
+                    </div>
+                </template>
+            </div>
+        </template>
         <template x-if="inspDetailUuid && inspDetail">
             <div>
                 <button class="btn btn-link px-0 mb-2" @click="history.length > 1 ? history.back() : go('reportes')">← Volver</button>
@@ -579,7 +746,20 @@
                 </template>
             </div>
         </template>
-        <div x-show="!inspDetailUuid && !incDetailUuid">
+        <div x-show="!inspDetailUuid && !incDetailUuid && !permitUuid">
+        <template x-if="myPermits.length">
+            <div class="mb-4">
+                <h2 class="h6 text-body-secondary">Permisos de trabajo <span class="badge text-bg-warning" x-show="permitsToApprove" x-text="permitsToApprove + ' para autorizar'"></span></h2>
+                <template x-for="p in myPermits" :key="p.uuid">
+                    <a class="obs-card" :href="'#/permiso/' + p.uuid" :class="p.status === 'suspendido' || (['aprobado','en_ejecucion'].includes(p.status) && minutesLeft(p) < 30) ? 'obs-imminent' : ''">
+                        <div class="d-flex justify-content-between gap-2"><strong x-text="p.code + ' · ' + p.type_labels.join(' + ')"></strong>
+                            <span class="badge" :class="p.pending ? 'text-bg-warning' : permitBadge(p)" x-text="p.pending ? 'Sin enviar' : (p.status === 'solicitado' && p.can.approve ? 'Para autorizar' : p.status_label)"></span></div>
+                        <div class="small" x-text="(p.sector || '') + (p.equipment ? ' · ' + p.equipment : '')"></div>
+                        <div class="small text-body-secondary text-truncate" x-text="'Vence ' + fmtDate(p.ends_at) + ' · ' + p.task"></div>
+                    </a>
+                </template>
+            </div>
+        </template>
         <template x-if="incidents.length">
             <div class="mb-4">
                 <h2 class="h6 text-body-secondary">Mis incidentes reportados</h2>
@@ -680,6 +860,7 @@
                     <a class="btn btn-outline-secondary btn-sm" x-show="n.action_uuid" :href="'#/accion/' + n.action_uuid">Ver acción</a>
                     <a class="btn btn-outline-secondary btn-sm" x-show="n.inspection_uuid" :href="'#/inspeccion/' + n.inspection_uuid">Ver inspección</a>
                     <a class="btn btn-outline-secondary btn-sm" x-show="n.incident_uuid" :href="'#/incidente/' + n.incident_uuid">Ver incidente</a>
+                    <a class="btn btn-outline-secondary btn-sm" x-show="n.permit_uuid" :href="'#/permiso/' + n.permit_uuid">Ver permiso</a>
                     <a class="btn btn-primary btn-sm" x-show="n.schedule_uuid" :href="'#/programada/' + n.schedule_uuid">Hacer</a>
                 </div>
             </div>
@@ -730,7 +911,7 @@
 
     <nav class="tabbar">
         <a :class="{ active: tab === 'reportar' && !detailUuid }" href="#/reportar"><span>➕</span>Nuevo</a>
-        <a :class="{ active: tab === 'reportes' && !detailUuid }" href="#/reportes"><span>📋</span>Reportes<b class="tab-badge" x-show="myOverdueActions" x-text="myOverdueActions"></b></a>
+        <a :class="{ active: tab === 'reportes' && !detailUuid }" href="#/reportes"><span>📋</span>Reportes<b class="tab-badge" x-show="myOverdueActions + permitsToApprove" x-text="myOverdueActions + permitsToApprove"></b></a>
         <a :class="{ active: tab === 'rondas' && !detailUuid }" href="#/rondas"><span>🚶</span>Rondas</a>
         <a :class="{ active: tab === 'avisos' && !detailUuid }" href="#/avisos"><span>🔔</span>Avisos<b class="tab-badge" x-show="unread" x-text="unread"></b></a>
         <a :class="{ active: tab === 'ajustes' && !detailUuid }" href="#/ajustes"><span>⚙️</span>Ajustes</a>
