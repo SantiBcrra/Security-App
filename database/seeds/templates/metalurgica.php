@@ -35,6 +35,21 @@ return [
             'Plegadora', 'Guillotina', 'Torno', 'Fresadora', 'Taladro de pie', 'Sierra sin fin', 'Compresor',
             'Andamio', 'Escalera', 'Plataforma elevadora', 'Extintor', 'Tablero eléctrico',
         ],
+        'lesion' => [
+            'Herida cortante', 'Herida punzante', 'Contusión / golpe', 'Fractura', 'Esguince / torcedura', 'Luxación',
+            'Quemadura térmica', 'Quemadura química', 'Quemadura por arco eléctrico', 'Cuerpo extraño en ojo', 'Conjuntivitis actínica',
+            'Amputación', 'Aplastamiento', 'Lumbalgia / sobreesfuerzo', 'Electrocución', 'Intoxicación', 'Hipoacusia', 'Lesiones múltiples',
+        ],
+        'parte_cuerpo' => [
+            'Cabeza', 'Cara', 'Ojos', 'Oídos', 'Cuello', 'Hombro', 'Brazo', 'Codo', 'Antebrazo', 'Muñeca', 'Mano', 'Dedos de la mano',
+            'Tórax', 'Abdomen', 'Espalda / columna', 'Cadera', 'Pierna', 'Rodilla', 'Tobillo', 'Pie', 'Dedos del pie', 'Múltiples zonas',
+        ],
+        'forma_accidente' => [
+            'Caída de personas al mismo nivel', 'Caída de personas a distinto nivel', 'Caída de objetos', 'Golpe contra objetos',
+            'Golpe / corte con herramienta', 'Atrapamiento entre objetos o partes móviles', 'Proyección de partículas',
+            'Contacto con superficies calientes', 'Contacto eléctrico', 'Sobreesfuerzo', 'Atropello o choque con vehículo',
+            'Exposición a sustancias', 'Exposición a radiación', 'Accidente de tránsito (in itinere)',
+        ],
     ],
     'positions' => [
         'Soldador', 'Operario de plegadora', 'Operario de guillotina', 'Operario de prensa', 'Tornero', 'Armador',

@@ -5,6 +5,18 @@
         <a class="btn btn-primary" href="<?= e(url('/panel/observaciones/nueva')) ?>">+ Reportar observación</a>
     <?php endif; ?>
 </div>
+<?php if ($safety !== null): ?>
+    <div class="d-flex flex-wrap gap-3 mb-3">
+        <a class="card shadow-sm text-decoration-none border-<?= $safety['noLost']['days'] === null || $safety['noLost']['days'] >= 30 ? 'success' : 'warning' ?>" href="<?= e(url('/panel/incidentes')) ?>">
+            <div class="card-body py-2"><span class="h4 m-0"><?= $safety['noLost']['days'] === null ? '—' : e($safety['noLost']['days']) ?></span>
+                <span class="small text-body-secondary ms-1">días sin accidentes con baja</span></div></a>
+        <?php if ($safety['openLeaves']): ?>
+            <a class="card shadow-sm text-decoration-none border-danger" href="<?= e(url('/panel/incidentes?bajas=1')) ?>">
+                <div class="card-body py-2"><span class="h4 m-0 text-danger"><?= e($safety['openLeaves']) ?></span>
+                    <span class="small text-body-secondary ms-1">persona(s) de baja sin alta</span></div></a>
+        <?php endif; ?>
+    </div>
+<?php endif; ?>
 <?php if ($myInspections): ?>
     <div class="card shadow-sm mb-3 border-info">
         <div class="card-header d-flex justify-content-between"><strong>Inspecciones de hoy</strong><a class="small" href="<?= e(url('/panel/inspecciones/programadas?mias=1')) ?>">Ver todas</a></div>

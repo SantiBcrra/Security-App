@@ -34,11 +34,13 @@ final class Permissions
         'cerrar'   => 'Cerrar',
         'exportar' => 'Exportar',
         'verificar'=> 'Verificar',
+        'datos_salud' => 'Datos de salud',
     ];
 
     /** Acciones que solo existen en algunos módulos (en el resto no se ofrecen ni se guardan). */
     public const MODULE_ONLY_ACTIONS = [
         'verificar' => ['acciones'], // verificación de eficacia de una acción CAPA
+        'datos_salud' => ['incidentes'], // lesión, atención médica, baja y alta del lesionado (Ley 25.326: datos sensibles)
     ];
 
     /** todo = toda la empresa; sectores = solo sus sectores asignados (Etapa 4); propios = lo que creó. */

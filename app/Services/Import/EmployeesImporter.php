@@ -27,6 +27,10 @@ final class EmployeesImporter extends EntityImporter
             'fecha_ingreso'  => ['label' => 'Fecha de ingreso', 'synonyms' => ['ingreso', 'fecha de ingreso', 'fecha alta', 'alta', 'antiguedad']],
             'telefono'       => ['label' => 'Teléfono', 'synonyms' => ['celular', 'tel', 'movil']],
             'email'          => ['label' => 'Email', 'synonyms' => ['mail', 'correo', 'e mail', 'correo electronico']],
+            'cuil'           => ['label' => 'CUIL', 'synonyms' => ['cuit', 'cuil cuit', 'nro cuil']],
+            'fecha_nacimiento' => ['label' => 'Fecha de nacimiento', 'synonyms' => ['nacimiento', 'fecha nac', 'f nacimiento']],
+            'sexo'           => ['label' => 'Sexo', 'synonyms' => ['genero'], 'help' => 'F, M o X.'],
+            'domicilio'      => ['label' => 'Domicilio', 'synonyms' => ['direccion', 'domicilio particular']],
         ];
     }
 
@@ -43,7 +47,20 @@ final class EmployeesImporter extends EntityImporter
 
     public function example(): array
     {
-        return ['30111222', '1001', 'Pérez', 'Juan', '', 'Soldador', 'Planta 1 > Nave A > Soldadura', '', '15/03/2021', '11 5555-1234', 'jperez@empresa.com'];
+        return ['30111222', '1001', 'Pérez', 'Juan', '', 'Soldador', 'Planta 1 > Nave A > Soldadura', '', '15/03/2021', '11 5555-1234', 'jperez@empresa.com',
+            '20301112220', '02/05/1985', 'M', 'Av. Siempre Viva 742, Rosario'];
+    }
+
+    private static function gender(string $v): ?string
+    {
+        $v = mb_strtoupper(trim($v));
+        return match (true) {
+            $v === '' => null,
+            in_array($v, ['F', 'FEMENINO', 'MUJER'], true) => 'F',
+            in_array($v, ['M', 'MASCULINO', 'VARON', 'VARÓN', 'HOMBRE'], true) => 'M',
+            in_array($v, ['X', 'NO BINARIO', 'OTRO'], true) => 'X',
+            default => null,
+        };
     }
 
     private function names(array $row): array
@@ -84,6 +101,16 @@ final class EmployeesImporter extends EntityImporter
         if (($row['fecha_ingreso'] ?? '') !== '' && Resource::parseDate($row['fecha_ingreso']) === null) {
             $errors[] = 'Fecha de ingreso inválida.';
         }
+        $cuil = preg_replace('/\D/', '', (string) ($row['cuil'] ?? ''));
+        if ($cuil !== '' && !\App\Core\Cuit::isValid($cuil)) {
+            $errors[] = 'CUIL inválido.';
+        }
+        if (($row['fecha_nacimiento'] ?? '') !== '' && Resource::parseDate($row['fecha_nacimiento']) === null) {
+            $errors[] = 'Fecha de nacimiento inválida.';
+        }
+        if (($row['sexo'] ?? '') !== '' && self::gender((string) $row['sexo']) === null) {
+            $errors[] = 'Sexo: usá F, M o X.';
+        }
         if (($row['email'] ?? '') !== '' && !filter_var($row['email'], FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'Email inválido.';
         }
@@ -113,6 +140,10 @@ final class EmployeesImporter extends EntityImporter
             'hire_date'     => ($row['fecha_ingreso'] ?? '') !== '' ? Resource::parseDate($row['fecha_ingreso']) : null,
             'phone'         => trim((string) ($row['telefono'] ?? '')),
             'email'         => mb_strtolower(trim((string) ($row['email'] ?? ''))),
+            'cuil'          => preg_replace('/\D/', '', (string) ($row['cuil'] ?? '')),
+            'birth_date'    => ($row['fecha_nacimiento'] ?? '') !== '' ? Resource::parseDate($row['fecha_nacimiento']) : null,
+            'gender'        => self::gender((string) ($row['sexo'] ?? '')),
+            'address'       => trim((string) ($row['domicilio'] ?? '')),
         ]);
         $existing = Employees::findBy('dni', $dni);
         if ($existing) {

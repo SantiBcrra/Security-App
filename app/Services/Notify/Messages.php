@@ -29,13 +29,17 @@ final class Messages
         'inspection.critical_fail' => 'Inspección con falla en un ítem crítico',
         'inspection.due'           => 'Inspección programada para hoy',
         'inspection.overdue'       => 'Inspección programada vencida',
+        // Incidentes (Etapa 12). Sujeto = el incidente; reporter = quien lo reportó. Nunca llevan datos de salud.
+        'incident.serious'         => 'Accidente con baja o in itinere',
+        'incident.reported'        => 'Incidente o accidente reportado',
+        'incident.closed'          => 'Incidente cerrado',
     ];
 
     /** Eventos que no se eligen en las reglas (los dispara el sistema con destinatarios fijos). */
     public const INTERNAL = ['observation.escalated'];
 
     /** Eventos críticos: llegan siempre (no se pueden silenciar) y se envían en el momento. */
-    public const CRITICAL = ['observation.imminent', 'observation.escalated'];
+    public const CRITICAL = ['observation.imminent', 'observation.escalated', 'incident.serious'];
 
     /** @return array{title:string, body:string, url:string, critical:bool} */
     public static function for(string $event, array $obs, array $extra = []): array
@@ -45,6 +49,9 @@ final class Messages
         }
         if (str_starts_with($event, 'inspection.')) {
             return self::forInspection($event, $obs);
+        }
+        if (str_starts_with($event, 'incident.')) {
+            return self::forIncident($event, $obs, $extra);
         }
         $num = Observations::format((int) $obs['number']);
         $where = trim(($obs['sector_name'] ?? '') . ($obs['equipment_code'] ? ' · ' . $obs['equipment_code'] : ''), ' ·');
@@ -110,6 +117,23 @@ final class Messages
             default => [self::EVENTS[$event] ?? $event, $what],
         };
         return ['title' => $title, 'body' => $body, 'url' => '/panel/inspecciones/' . $i['uuid'], 'critical' => false];
+    }
+
+    private static function forIncident(string $event, array $i, array $extra): array
+    {
+        $num = \App\Models\Incidents::format((int) $i['number']);
+        $type = \App\Services\IncidentService::typeLabel($i['type']);
+        $where = trim(($i['sector_name'] ?? '') . ($i['equipment_code'] ? ' · ' . $i['equipment_code'] : ''), ' ·');
+        $desc = mb_strimwidth((string) $i['description'], 0, 220, '…');
+        $injured = (int) ($i['injured_count'] ?? 0);
+        [$title, $body] = match ($event) {
+            'incident.serious'  => ["⚠ {$type} · {$num}", ($where !== '' ? "{$where}: " : '') . "{$desc}\n"
+                . ($injured ? "Lesionados: {$injured}. " : '') . 'Coordiná la atención y avisá a la ART.'],
+            'incident.reported' => ["{$type} · {$num}", ($where !== '' ? "{$where}: " : '') . $desc],
+            'incident.closed'   => ["Incidente {$num} cerrado", "{$type}." . (($extra['comment'] ?? '') !== '' ? "\n" . $extra['comment'] : '')],
+            default             => [self::EVENTS[$event] ?? $event, $desc],
+        };
+        return ['title' => $title, 'body' => $body, 'url' => '/panel/incidentes/' . $i['uuid'], 'critical' => in_array($event, self::CRITICAL, true)];
     }
 
     /** Prioridad de una acción como "nivel" (para el filtro de severidad mínima de las reglas). */

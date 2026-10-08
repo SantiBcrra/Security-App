@@ -23,6 +23,7 @@ use App\Controllers\Web\InstallController;
 use App\Controllers\Web\MobileController;
 use App\Controllers\Web\Panel\ActionsController;
 use App\Controllers\Web\Panel\ImportController;
+use App\Controllers\Web\Panel\IncidentsController;
 use App\Controllers\Web\Panel\InspectionProgramsController;
 use App\Controllers\Web\Panel\InspectionsController;
 use App\Controllers\Web\Panel\InspectionTemplatesController;
@@ -145,6 +146,21 @@ return static function (Router $r): void {
         $r->post('/acciones/{uuid}/evidencia', [ActionsController::class, 'evidence']);
         $r->get('/acciones/{uuid}/archivos/{attachment}', [ActionsController::class, 'file']);
 
+        // Incidentes y accidentes (Etapa 12)
+        $r->get('/incidentes', [IncidentsController::class, 'index'], [$can('incidentes', 'ver')]);
+        $r->get('/incidentes/nuevo', [IncidentsController::class, 'create'], [$can('incidentes', 'crear')]);
+        $r->post('/incidentes', [IncidentsController::class, 'store'], [$can('incidentes', 'crear')]);
+        $r->get('/incidentes/{uuid}', [IncidentsController::class, 'show'], [$can('incidentes', 'ver')]);
+        $r->get('/incidentes/{uuid}/imprimir', [IncidentsController::class, 'printable'], [$can('incidentes', 'ver')]);
+        $r->get('/incidentes/{uuid}/art/{person}', [IncidentsController::class, 'art'], [$can('incidentes', 'datos_salud')]);
+        $r->post('/incidentes/{uuid}/accion/{key}', [IncidentsController::class, 'transition'], [$can('incidentes', 'cerrar')]);
+        $r->post('/incidentes/{uuid}/correccion', [IncidentsController::class, 'correct'], [$can('incidentes', 'editar')]);
+        $r->post('/incidentes/{uuid}/personas', [IncidentsController::class, 'addPerson'], [$can('incidentes', 'editar')]);
+        $r->post('/incidentes/{uuid}/personas/{person}', [IncidentsController::class, 'updatePerson'], [$can('incidentes', 'editar')]);
+        $r->post('/incidentes/{uuid}/comentario', [IncidentsController::class, 'comment'], [$can('incidentes', 'ver')]);
+        $r->post('/incidentes/{uuid}/archivos', [IncidentsController::class, 'files'], [$can('incidentes', 'crear')]);
+        $r->get('/incidentes/{uuid}/archivos/{attachment}', [IncidentsController::class, 'file'], [$can('incidentes', 'ver')]);
+
         // Inspecciones y checklists (Etapa 11). Rutas fijas antes que /inspecciones/{uuid}.
         $r->get('/inspecciones', [InspectionsController::class, 'index'], [$can('inspecciones', 'ver')]);
         $r->get('/inspecciones/nueva', [InspectionsController::class, 'create'], [$can('inspecciones', 'crear')]);
@@ -192,6 +208,7 @@ return static function (Router $r): void {
 
         $r->get('/configuracion', [SettingsController::class, 'show'], [$can('configuracion', 'ver')]);
         $r->post('/configuracion', [SettingsController::class, 'update'], [$can('configuracion', 'editar')]);
+        $r->post('/configuracion/empresa', [SettingsController::class, 'updateCompany'], [$can('configuracion', 'editar')]);
 
         // Datos maestros (plantas, sectores, puestos, empleados, contratistas, equipos, catálogos).
         // Rutas fijas antes que las genéricas /datos/{resource}/...

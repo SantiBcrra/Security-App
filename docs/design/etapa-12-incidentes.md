@@ -1,6 +1,6 @@
 # Etapa 12 — Incidentes, accidentes e investigación · Diseño
 
-Estado: **aprobado**. Decisiones del usuario: datos de salud solo SyH y admin; investigación obligatoria en
+Estado: **aprobado** · entrega 1 hecha. Decisiones del usuario: datos de salud solo SyH y admin; investigación obligatoria en
 accidentes y enfermedades; aviso crítico en accidentes con baja e in itinere; se agregan los datos para la ART.
 
 ## 1. Qué resuelve

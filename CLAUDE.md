@@ -218,6 +218,23 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   inspección (QR del equipo, lista de equipos, recorridas por sector, "para hoy"); detalle `#/inspeccion/{uuid}`
   (`GET /api/v1/inspections/{uuid}`); el aviso "para hoy" abre `#/programada/{uuid}`.
 
+## Incidentes y accidentes (Etapa 12) — diseño en `docs/design/etapa-12-incidentes.md`
+- `incidents` (INC-000001, tipos en `IncidentService::TYPES`: accidente con/sin baja, in itinere, enfermedad profesional,
+  incidente, casi-accidente; `original_data`/hash inmutables, correcciones = evento `correction`), `incident_people`
+  (empleado o externo; rol lesionado/testigo/involucrado; lesión con catálogos `lesion`, `parte_cuerpo`,
+  `forma_accidente`; baja/alta/reingreso; N° de siniestro ART), `incident_events`, `incident_attachments`.
+- **Datos de salud** (lesión, atención, baja, alta, documentos médicos, eventos de seguimiento con `health = 1`): solo con
+  `incidentes.datos_salud` (acción que existe solo en ese módulo; SyH y admin). Ver el detalle o la denuncia con esos
+  datos queda auditado (`incident.health_view`, `incident.art_print`). Los avisos nunca llevan datos de salud.
+- Días perdidos: se calculan (`IncidentService::lostDays`): desde `leave_start` hasta el alta sin contarla; sin alta,
+  hasta hoy inclusive (provisorios). Accidente con baja: la baja arranca por defecto al día siguiente del hecho.
+- Avisos: `incident.serious` (CRÍTICO: con baja e in itinere) / `incident.reported` a supervisores del sector + SyH;
+  `incident.closed` a quien reportó. Cerrar exige investigación terminada (estado `investigado`) en accidentes y
+  enfermedades (`TYPES[...]['investigation']`); la investigación llega en la entrega 2.
+- Denuncia ART: imprimible `/panel/incidentes/{uuid}/art/{persona}` con empleador (razón social y CUIT del alta de la
+  empresa + `empresa.*` en /panel/configuracion) y trabajador (empleados: `cuil`, `birth_date`, `gender`, `address`).
+- "Días sin accidentes con baja" (`Incidents::daysWithoutLostTime`) y "bajas abiertas" en el inicio.
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.

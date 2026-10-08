@@ -1,0 +1,120 @@
+-- Incidentes y accidentes (Etapa 12). Reporte original inmutable (original_data + SHA-256), como las observaciones.
+-- type: accidente_con_baja | accidente_sin_baja | in_itinere | enfermedad_profesional | incidente | casi_accidente
+-- status: reportado | en_investigacion | investigado | cerrado | anulado
+CREATE TABLE IF NOT EXISTS incidents (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    uuid CHAR(36) NOT NULL,
+    number INT UNSIGNED NOT NULL,
+    type VARCHAR(30) NOT NULL,
+    occurred_at DATETIME NOT NULL,
+    received_at DATETIME NOT NULL,
+    site_id INT UNSIGNED NULL,
+    sector_id INT UNSIGNED NULL,
+    equipment_id INT UNSIGNED NULL,
+    location_text VARCHAR(191) NULL,
+    lat DECIMAL(10,7) NULL,
+    lng DECIMAL(10,7) NULL,
+    description TEXT NOT NULL,
+    immediate_actions TEXT NULL,
+    potential_severity_id INT UNSIGNED NULL,
+    reported_by INT UNSIGNED NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'reportado',
+    closed_at DATETIME NULL,
+    original_data LONGTEXT NOT NULL,
+    original_hash CHAR(64) NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    deleted_at DATETIME NULL,
+    UNIQUE KEY uq_incidents_uuid (uuid),
+    UNIQUE KEY uq_incidents_number (number),
+    KEY idx_incidents_type (type, occurred_at),
+    KEY idx_incidents_status (status, occurred_at),
+    KEY idx_incidents_sector (sector_id, occurred_at),
+    KEY idx_incidents_reported_by (reported_by),
+    KEY idx_incidents_updated (updated_at, id),
+    CONSTRAINT fk_incidents_site FOREIGN KEY (site_id) REFERENCES sites (id),
+    CONSTRAINT fk_incidents_sector FOREIGN KEY (sector_id) REFERENCES sectors (id),
+    CONSTRAINT fk_incidents_equipment FOREIGN KEY (equipment_id) REFERENCES equipment (id),
+    CONSTRAINT fk_incidents_severity FOREIGN KEY (potential_severity_id) REFERENCES catalog_items (id),
+    CONSTRAINT fk_incidents_reported_by FOREIGN KEY (reported_by) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Personas: empleado (propio o de contratista) o externo. Los datos de salud (lesión, atención, baja,
+-- alta) solo los ve quien tiene incidentes.datos_salud. Los días perdidos se calculan (no se guardan).
+-- role: lesionado | testigo | involucrado. follow_up_status: en_tratamiento | alta | reingreso | secuelas | reubicado
+CREATE TABLE IF NOT EXISTS incident_people (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    uuid CHAR(36) NOT NULL,
+    incident_id INT UNSIGNED NOT NULL,
+    role VARCHAR(12) NOT NULL DEFAULT 'lesionado',
+    employee_id INT UNSIGNED NULL,
+    external_name VARCHAR(160) NULL,
+    external_dni VARCHAR(12) NULL,
+    external_company VARCHAR(160) NULL,
+    injury_type_id INT UNSIGNED NULL,
+    body_part_id INT UNSIGNED NULL,
+    accident_form_id INT UNSIGNED NULL,
+    injury_agent VARCHAR(191) NULL,
+    injury_description TEXT NULL,
+    medical_attention VARCHAR(20) NULL,
+    lost_time TINYINT(1) NOT NULL DEFAULT 0,
+    leave_start DATE NULL,
+    discharge_date DATE NULL,
+    return_date DATE NULL,
+    follow_up_status VARCHAR(20) NULL,
+    art_case_number VARCHAR(40) NULL,
+    statement TEXT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_incident_people_uuid (uuid),
+    KEY idx_incident_people_incident (incident_id),
+    KEY idx_incident_people_employee (employee_id),
+    KEY idx_incident_people_leave (lost_time, discharge_date),
+    CONSTRAINT fk_incident_people_incident FOREIGN KEY (incident_id) REFERENCES incidents (id),
+    CONSTRAINT fk_incident_people_employee FOREIGN KEY (employee_id) REFERENCES employees (id),
+    CONSTRAINT fk_incident_people_injury FOREIGN KEY (injury_type_id) REFERENCES catalog_items (id),
+    CONSTRAINT fk_incident_people_body FOREIGN KEY (body_part_id) REFERENCES catalog_items (id),
+    CONSTRAINT fk_incident_people_form FOREIGN KEY (accident_form_id) REFERENCES catalog_items (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Línea de tiempo (solo inserción): created | status | comment | correction | person | follow_up | attachment
+-- health = 1: el evento tiene datos de salud (solo se muestra con el permiso).
+CREATE TABLE IF NOT EXISTS incident_events (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    uuid CHAR(36) NOT NULL,
+    incident_id INT UNSIGNED NOT NULL,
+    type VARCHAR(20) NOT NULL,
+    from_status VARCHAR(20) NULL,
+    to_status VARCHAR(20) NULL,
+    comment TEXT NULL,
+    data TEXT NULL,
+    health TINYINT(1) NOT NULL DEFAULT 0,
+    user_id INT UNSIGNED NULL,
+    actor_name VARCHAR(120) NULL,
+    created_at DATETIME NOT NULL,
+    UNIQUE KEY uq_incident_events_uuid (uuid),
+    KEY idx_incident_events_incident (incident_id, id),
+    CONSTRAINT fk_incident_events_incident FOREIGN KEY (incident_id) REFERENCES incidents (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Fotos y documentos (inmutables). health = 1: documento médico (certificado, alta): solo con el permiso.
+CREATE TABLE IF NOT EXISTS incident_attachments (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    uuid CHAR(36) NOT NULL,
+    incident_id INT UNSIGNED NOT NULL,
+    health TINYINT(1) NOT NULL DEFAULT 0,
+    path VARCHAR(191) NOT NULL,
+    thumb_path VARCHAR(191) NULL,
+    original_name VARCHAR(191) NULL,
+    mime VARCHAR(60) NOT NULL,
+    size_bytes INT UNSIGNED NOT NULL,
+    sha256 CHAR(64) NOT NULL,
+    width INT UNSIGNED NULL,
+    height INT UNSIGNED NULL,
+    exif TEXT NULL,
+    uploaded_by INT UNSIGNED NULL,
+    created_at DATETIME NOT NULL,
+    UNIQUE KEY uq_incident_attachments_uuid (uuid),
+    KEY idx_incident_attachments_incident (incident_id),
+    CONSTRAINT fk_incident_attachments_incident FOREIGN KEY (incident_id) REFERENCES incidents (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

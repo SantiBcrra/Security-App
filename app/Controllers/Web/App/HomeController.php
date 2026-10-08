@@ -42,6 +42,16 @@ final class HomeController
         } catch (\PDOException) {
             $myActions = []; // base sin la migración de la Etapa 10 todavía
         }
+        // Días sin accidentes con baja y bajas abiertas (Etapa 12).
+        $safety = null;
+        if (UserAuth::can('incidentes', 'ver')) {
+            try {
+                $safety = ['noLost' => \App\Models\Incidents::daysWithoutLostTime(\App\Services\IncidentService::today(), Tenant::timezone() ?? 'UTC'),
+                    'openLeaves' => \App\Services\IncidentService::canSeeHealth() ? count(\App\Models\Incidents::openLeaves()) : null];
+            } catch (\PDOException) {
+                $safety = null;
+            }
+        }
         // "Inspecciones de hoy": programadas a mi cargo para hoy y vencidas (Etapa 11).
         $myInspections = [];
         if (UserAuth::user() && UserAuth::can('inspecciones', 'crear')) {
@@ -58,6 +68,7 @@ final class HomeController
             'obs'     => $obs,
             'myActions' => $myActions,
             'myInspections' => $myInspections,
+            'safety'  => $safety,
             'today'   => \App\Services\ActionService::today(),
             'tenant'  => $tenant,
             'dbName'  => UserAuth::user() === null ? (string) DB::tenant()->query('SELECT DATABASE()')->fetchColumn() : null,

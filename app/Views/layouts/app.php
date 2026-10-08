@@ -15,6 +15,7 @@ $hasOwnActions = function () use ($me): bool {
 $menu = array_filter([
     ['/panel', 'Inicio', true],
     ['/panel/observaciones', 'Observaciones', App\Services\UserAuth::can('observaciones', 'ver')],
+    ['/panel/incidentes', 'Incidentes', App\Services\UserAuth::can('incidentes', 'ver')],
     ['/panel/inspecciones', 'Inspecciones', App\Services\UserAuth::can('inspecciones', 'ver')],
     ['/panel/acciones', 'Acciones', App\Services\UserAuth::can('acciones', 'ver') || $hasOwnActions()],
     ['/panel/rondas', 'Rondas', App\Services\UserAuth::can('rondas', 'ver')],
