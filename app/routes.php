@@ -149,12 +149,17 @@ return static function (Router $r): void {
         // Incidentes y accidentes (Etapa 12)
         $r->get('/incidentes', [IncidentsController::class, 'index'], [$can('incidentes', 'ver')]);
         $r->get('/incidentes/nuevo', [IncidentsController::class, 'create'], [$can('incidentes', 'crear')]);
+        $r->get('/incidentes/horas', [IncidentsController::class, 'hours'], [$can('incidentes', 'ver')]);
+        $r->post('/incidentes/horas', [IncidentsController::class, 'saveHours'], [$can('incidentes', 'editar')]);
+        $r->get('/incidentes/exportar', [IncidentsController::class, 'export'], [$can('incidentes', 'exportar')]);
         $r->post('/incidentes', [IncidentsController::class, 'store'], [$can('incidentes', 'crear')]);
         $r->get('/incidentes/{uuid}', [IncidentsController::class, 'show'], [$can('incidentes', 'ver')]);
         $r->get('/incidentes/{uuid}/imprimir', [IncidentsController::class, 'printable'], [$can('incidentes', 'ver')]);
         $r->get('/incidentes/{uuid}/art/{person}', [IncidentsController::class, 'art'], [$can('incidentes', 'datos_salud')]);
         $r->post('/incidentes/{uuid}/accion/{key}', [IncidentsController::class, 'transition'], [$can('incidentes', 'cerrar')]);
         $r->post('/incidentes/{uuid}/correccion', [IncidentsController::class, 'correct'], [$can('incidentes', 'editar')]);
+        $r->post('/incidentes/{uuid}/investigacion/{step}', [IncidentsController::class, 'investigation'], [$can('incidentes', 'editar')]);
+        $r->post('/incidentes/{uuid}/acciones', [IncidentsController::class, 'createAction'], [$can('incidentes', 'editar')]);
         $r->post('/incidentes/{uuid}/personas', [IncidentsController::class, 'addPerson'], [$can('incidentes', 'editar')]);
         $r->post('/incidentes/{uuid}/personas/{person}', [IncidentsController::class, 'updatePerson'], [$can('incidentes', 'editar')]);
         $r->post('/incidentes/{uuid}/comentario', [IncidentsController::class, 'comment'], [$can('incidentes', 'ver')]);

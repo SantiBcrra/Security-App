@@ -47,7 +47,7 @@ final class IncidentService
     public const TRANSITIONS = [
         'cerrar'  => ['from' => ['reportado', 'en_investigacion', 'investigado'], 'to' => 'cerrado', 'perm' => 'cerrar', 'comment' => true, 'label' => 'Cerrar'],
         'anular'  => ['from' => ['reportado', 'en_investigacion'], 'to' => 'anulado', 'perm' => 'cerrar', 'comment' => true, 'label' => 'Anular'],
-        'reabrir' => ['from' => ['cerrado'], 'to' => 'reportado', 'perm' => 'cerrar', 'comment' => true, 'label' => 'Reabrir'],
+        'reabrir' => ['from' => ['cerrado'], 'to' => 'reportado', 'perm' => 'cerrar', 'comment' => true, 'label' => 'Reabrir'], // con investigación: vuelve a "en investigación"
     ];
 
     public const ROLES = ['lesionado' => 'Lesionado', 'involucrado' => 'Involucrado', 'testigo' => 'Testigo'];
@@ -434,14 +434,18 @@ final class IncidentService
                 $db->rollBack();
                 return 'El incidente ya está "' . self::STATES[$locked['status']]['label'] . '". Recargá la página.';
             }
-            Incidents::update((int) $i['id'], ['status' => $t['to'], 'closed_at' => $t['to'] === 'cerrado' ? gmdate('Y-m-d H:i:s') : null]);
-            Incidents::addEvent((int) $i['id'], 'status', ['from' => $locked['status'], 'to' => $t['to'], 'comment' => $comment ?: null] + self::actor());
+            $to = $key === 'reabrir' && Incidents::investigation((int) $i['id']) !== null ? 'en_investigacion' : $t['to'];
+            Incidents::update((int) $i['id'], ['status' => $to, 'closed_at' => $to === 'cerrado' ? gmdate('Y-m-d H:i:s') : null]);
+            if ($to === 'en_investigacion') {
+                Incidents::saveInvestigation((int) $i['id'], ['completed_at' => null, 'completed_by' => null]);
+            }
+            Incidents::addEvent((int) $i['id'], 'status', ['from' => $locked['status'], 'to' => $to, 'comment' => $comment ?: null] + self::actor());
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollBack();
             throw $e;
         }
-        Audit::tenant('incident.' . $key, 'incident', $i['uuid'], ['estado' => $i['status']], ['estado' => $t['to']]);
+        Audit::tenant('incident.' . $key, 'incident', $i['uuid'], ['estado' => $i['status']], ['estado' => $to ?? $t['to']]);
         if ($key === 'cerrar') {
             Notifier::dispatch('incident.closed', Incidents::findById((int) $i['id']), ['comment' => $comment]);
         }

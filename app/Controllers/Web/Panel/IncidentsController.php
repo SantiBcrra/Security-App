@@ -16,6 +16,7 @@ use App\Models\Incidents;
 use App\Models\Sectors;
 use App\Models\Settings;
 use App\Services\Audit;
+use App\Services\IncidentInvestigation;
 use App\Services\IncidentService;
 use App\Services\UserAuth;
 
@@ -93,6 +94,8 @@ final class IncidentsController
             'equipment'  => array_map(fn ($e) => $e['code'] . ' · ' . $e['name'], array_column(Equipment::list(null, false, [], 3000), null, 'uuid')),
             'employees'  => Employees::options(),
             'severities' => CatalogItems::list(null, false, ['catalog' => 'severidad']),
+            'users'      => \App\Services\ActionService::assignableUsers(),
+            'causes'     => CatalogItems::optionsFor('causa'),
             'catalogs'   => [
                 'lesion' => CatalogItems::optionsFor('lesion'), 'parte_cuerpo' => CatalogItems::optionsFor('parte_cuerpo'),
                 'forma_accidente' => CatalogItems::optionsFor('forma_accidente'),
@@ -173,6 +176,114 @@ final class IncidentsController
         return Response::redirect('/panel/incidentes/' . $uuid . '#personas');
     }
 
+    /** Investigación: empezar | guardar | terminar | reabrir. */
+    public function investigation(Request $request, string $uuid, string $step): Response
+    {
+        $i = $this->find($uuid);
+        if ($i === null) {
+            return self::notFound();
+        }
+        $error = match ($step) {
+            'empezar'  => IncidentInvestigation::start($i),
+            'guardar'  => IncidentInvestigation::save($i, $request->post),
+            'terminar' => IncidentInvestigation::save($i, $request->post) ?? IncidentInvestigation::complete(Incidents::findById((int) $i['id'])),
+            'reabrir'  => IncidentInvestigation::reopen($i, (string) $request->input('comment', '')),
+            default    => 'Paso desconocido.',
+        };
+        Flash::add($error ? 'danger' : 'success', $error ?? ['empezar' => 'Investigación iniciada.', 'guardar' => 'Investigación guardada.',
+            'terminar' => 'Investigación terminada: ya se puede cerrar el incidente.', 'reabrir' => 'Investigación reabierta.'][$step]);
+        return Response::redirect('/panel/incidentes/' . $uuid . '#investigacion');
+    }
+
+    public function createAction(Request $request, string $uuid): Response
+    {
+        $i = $this->find($uuid);
+        if ($i === null) {
+            return self::notFound();
+        }
+        [$action, $errors] = IncidentInvestigation::createAction($i, $request->post);
+        Flash::add($errors ? 'danger' : 'success', $errors ? implode(' ', $errors) : 'Acción ' . \App\Models\Actions::format((int) $action['number']) . ' creada y asignada.');
+        return Response::redirect('/panel/incidentes/' . $uuid . '#investigacion');
+    }
+
+    /** Horas trabajadas por planta y mes + índices del año. */
+    public function hours(Request $request): Response
+    {
+        $year = (int) $request->input('anio', substr(IncidentService::today(), 0, 4));
+        $year = max(2000, min(2100, $year));
+        $site = ($request->input('planta', '') !== '' && ($s = \App\Models\Sites::findByUuid((string) $request->input('planta')))) ? $s : null;
+        return Response::html(View::render('panel/incidents/hours', [
+            'title'      => 'Horas trabajadas e índices',
+            'year'       => $year,
+            'sites'      => \App\Models\Sites::list(null, false, [], 200),
+            'site'       => $site,
+            'hours'      => \App\Models\WorkedHours::forYear($year),
+            'indicators' => \App\Services\IncidentIndicators::year($year, $site ? (int) $site['id'] : null),
+            'canEdit'    => UserAuth::can('incidentes', 'editar'),
+        ], 'layouts/app'));
+    }
+
+    public function saveHours(Request $request): Response
+    {
+        $year = (int) $request->input('anio');
+        // Acepta "12.345,5" (formato argentino) y "12345.5".
+        $num = function ($v): ?float {
+            $v = trim((string) $v);
+            if (str_contains($v, ',')) {
+                $v = str_replace(['.', ','], ['', '.'], $v);
+            }
+            return $v === '' || !is_numeric($v) ? null : (float) $v;
+        };
+        $changed = 0;
+        foreach ((array) $request->input('h', []) as $siteUuid => $months) {
+            $site = \App\Models\Sites::findByUuid((string) $siteUuid);
+            if ($site === null) {
+                continue;
+            }
+            foreach ((array) $months as $month => $vals) {
+                if (!preg_match('/^' . $year . '-(0[1-9]|1[0-2])$/', (string) $month)) {
+                    continue;
+                }
+                $hours = $num($vals['hours'] ?? '');
+                $heads = $num($vals['headcount'] ?? '');
+                if (($hours !== null && ($hours < 0 || $hours > 10_000_000)) || ($heads !== null && ($heads < 0 || $heads > 100_000))) {
+                    continue;
+                }
+                \App\Models\WorkedHours::save((int) $site['id'], (string) $month, $hours, $heads !== null ? (int) $heads : null, UserAuth::user()['id'] ?? null);
+                $changed++;
+            }
+        }
+        Audit::tenant('worked_hours.save', 'worked_hours', null, null, ['anio' => $year, 'celdas' => $changed]);
+        Flash::add('success', 'Horas trabajadas guardadas.');
+        return Response::redirect('/panel/incidentes/horas?anio=' . $year);
+    }
+
+    /** CSV con los filtros de la lista. Días perdidos solo con el permiso de datos de salud. */
+    public function export(Request $request): Response
+    {
+        [$filters] = $this->filters($request);
+        $rows = Incidents::search($filters, IncidentService::scope(), 5000);
+        $health = IncidentService::canSeeHealth();
+        $out = fopen('php://temp', 'r+');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, array_merge(['Número', 'Fecha', 'Tipo', 'Estado', 'Planta', 'Sector', 'Equipo', 'Lesionados', 'Descripción'], $health ? ['Días perdidos'] : []), ';');
+        foreach ($rows as $r) {
+            $lost = 0;
+            if ($health) {
+                foreach (Incidents::people((int) $r['id']) as $p) {
+                    $lost += IncidentService::lostDays($p)['days'];
+                }
+            }
+            fputcsv($out, array_merge([Incidents::format((int) $r['number']), fecha($r['occurred_at'], 'd/m/Y H:i'), IncidentService::typeLabel($r['type']),
+                IncidentService::STATES[$r['status']]['label'], $r['site_name'] ?? '', $r['sector_name'] ?? '',
+                $r['equipment_code'] ? $r['equipment_code'] . ' · ' . $r['equipment_name'] : '', $r['injured_count'], $r['description']], $health ? [$lost] : []), ';');
+        }
+        rewind($out);
+        Audit::tenant('incident.export', 'incident', null, null, ['filas' => count($rows), 'datos_salud' => $health]);
+        return new Response((string) stream_get_contents($out), 200, ['Content-Type' => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="incidentes-' . IncidentService::today() . '.csv"']);
+    }
+
     public function comment(Request $request, string $uuid): Response
     {
         $i = $this->find($uuid);
@@ -228,8 +339,12 @@ final class IncidentsController
         if ($health && array_filter($people, fn ($p) => $p['role'] === 'lesionado')) {
             Audit::tenant('incident.health_view', 'incident', $i['uuid'], null, ['vista' => $where]);
         }
+        $investigation = Incidents::investigation((int) $i['id']);
         return [
             'i'        => $i,
+            'investigation' => $investigation,
+            'tree'     => $investigation ? IncidentInvestigation::flatten($investigation['cause_tree']) : [],
+            'derived'  => \App\Models\Actions::forOrigin('incidente', (int) $i['id']),
             'health'   => $health,
             'people'   => $people,
             'original' => json_decode($i['original_data'], true) ?: [],

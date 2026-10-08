@@ -33,6 +33,9 @@ final class Messages
         'incident.serious'         => 'Accidente con baja o in itinere',
         'incident.reported'        => 'Incidente o accidente reportado',
         'incident.closed'          => 'Incidente cerrado',
+        'incident.investigation_overdue' => 'Investigación de accidente sin empezar',
+        'incident.art_pending'     => 'Falta el N° de siniestro de la ART',
+        'incident.open_leaves'     => 'Resumen semanal de bajas abiertas',
     ];
 
     /** Eventos que no se eligen en las reglas (los dispara el sistema con destinatarios fijos). */
@@ -121,6 +124,10 @@ final class Messages
 
     private static function forIncident(string $event, array $i, array $extra): array
     {
+        if ($event === 'incident.open_leaves') { // resumen (sin un incidente puntual ni nombres)
+            return ['title' => 'Bajas abiertas: ' . (int) ($extra['count'] ?? 0), 'body' => 'Hay ' . (int) ($extra['count'] ?? 0)
+                . ' persona(s) de baja sin alta médica cargada. Revisá el seguimiento.', 'url' => '/panel/incidentes?bajas=1', 'critical' => false];
+        }
         $num = \App\Models\Incidents::format((int) $i['number']);
         $type = \App\Services\IncidentService::typeLabel($i['type']);
         $where = trim(($i['sector_name'] ?? '') . ($i['equipment_code'] ? ' · ' . $i['equipment_code'] : ''), ' ·');
@@ -131,6 +138,10 @@ final class Messages
                 . ($injured ? "Lesionados: {$injured}. " : '') . 'Coordiná la atención y avisá a la ART.'],
             'incident.reported' => ["{$type} · {$num}", ($where !== '' ? "{$where}: " : '') . $desc],
             'incident.closed'   => ["Incidente {$num} cerrado", "{$type}." . (($extra['comment'] ?? '') !== '' ? "\n" . $extra['comment'] : '')],
+            'incident.investigation_overdue' => ["Investigación pendiente · {$num}", "{$type} del " . fecha($i['occurred_at'], 'd/m/Y')
+                . ' sin investigación empezada (' . (int) ($extra['days'] ?? 0) . " días).\n{$desc}"],
+            'incident.art_pending' => ["Falta el N° de siniestro ART · {$num}", "{$type} del " . fecha($i['occurred_at'], 'd/m/Y')
+                . ': hay lesionados sin N° de siniestro cargado. Verificá que se haya hecho la denuncia ante la ART.'],
             default             => [self::EVENTS[$event] ?? $event, $desc],
         };
         return ['title' => $title, 'body' => $body, 'url' => '/panel/incidentes/' . $i['uuid'], 'critical' => in_array($event, self::CRITICAL, true)];

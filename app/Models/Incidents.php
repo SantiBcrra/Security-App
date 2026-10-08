@@ -201,6 +201,69 @@ final class Incidents
             WHERE p.lost_time = 1 AND p.discharge_date IS NULL AND i.status <> 'anulado' AND i.deleted_at IS NULL ORDER BY p.leave_start")->fetchAll();
     }
 
+    // ── investigación ──────────────────────────────────────────────
+
+    /** La investigación con sus partes ya decodificadas (null = todavía no empezó). */
+    public static function investigation(int $incidentId): ?array
+    {
+        $stmt = DB::tenant()->prepare('SELECT v.*, su.name AS started_by_name, cu.name AS completed_by_name FROM incident_investigations v
+            LEFT JOIN users su ON su.id = v.started_by LEFT JOIN users cu ON cu.id = v.completed_by WHERE v.incident_id = ?');
+        $stmt->execute([$incidentId]);
+        $row = $stmt->fetch() ?: null;
+        if ($row) {
+            foreach (['team' => [], 'five_whys' => ['problem' => '', 'whys' => []], 'cause_tree' => [], 'root_causes' => []] as $k => $default) {
+                $row[$k] = json_decode((string) $row[$k], true) ?: $default;
+            }
+        }
+        return $row;
+    }
+
+    public static function startInvestigation(int $incidentId, ?int $userId): void
+    {
+        DB::tenant()->prepare('INSERT IGNORE INTO incident_investigations (incident_id, team, started_at, started_by, created_at, updated_at)
+            VALUES (?, ?, UTC_TIMESTAMP(), ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())')->execute([$incidentId, json_encode($userId ? [$userId] : []), $userId]);
+    }
+
+    public static function saveInvestigation(int $incidentId, array $data): void
+    {
+        foreach (['team', 'five_whys', 'cause_tree', 'root_causes'] as $k) {
+            if (array_key_exists($k, $data)) {
+                $data[$k] = json_encode($data[$k], JSON_UNESCAPED_UNICODE);
+            }
+        }
+        $sets = implode(', ', array_map(fn ($c) => "`{$c}` = ?", array_keys($data)));
+        DB::tenant()->prepare("UPDATE incident_investigations SET {$sets}, updated_at = UTC_TIMESTAMP() WHERE incident_id = ?")
+            ->execute([...array_values($data), $incidentId]);
+    }
+
+    /** Incidentes con investigación obligatoria todavía sin empezar, ocurridos antes de $before (UTC). */
+    public static function pendingInvestigation(array $types, string $before): array
+    {
+        $stmt = DB::tenant()->prepare(self::SELECT . " WHERE i.status = 'reportado' AND i.deleted_at IS NULL AND i.occurred_at < ?
+            AND i.type IN (" . implode(',', array_fill(0, count($types), '?')) . ')');
+        $stmt->execute([$before, ...$types]);
+        return $stmt->fetchAll();
+    }
+
+    /** Incidentes (no anulados, ocurridos antes de $before) con algún lesionado sin N° de siniestro de la ART. */
+    public static function missingArtCase(string $before): array
+    {
+        $stmt = DB::tenant()->prepare(self::SELECT . " WHERE i.status <> 'anulado' AND i.deleted_at IS NULL AND i.occurred_at < ?
+            AND EXISTS (SELECT 1 FROM incident_people p WHERE p.incident_id = i.id AND p.role = 'lesionado' AND p.art_case_number IS NULL)");
+        $stmt->execute([$before]);
+        return $stmt->fetchAll();
+    }
+
+    /** Accidentes y lesionados de un rango (para los índices). */
+    public static function forIndicators(string $fromUtc, string $toUtc): array
+    {
+        $stmt = DB::tenant()->prepare("SELECT i.id, i.type, i.occurred_at, i.site_id, p.lost_time, p.leave_start, p.discharge_date
+            FROM incidents i LEFT JOIN incident_people p ON p.incident_id = i.id AND p.role = 'lesionado'
+            WHERE i.status <> 'anulado' AND i.deleted_at IS NULL AND i.occurred_at >= ? AND i.occurred_at < ?");
+        $stmt->execute([$fromUtc, $toUtc]);
+        return $stmt->fetchAll();
+    }
+
     // ── eventos y adjuntos ─────────────────────────────────────────
 
     public static function addEvent(int $incidentId, string $type, array $f = []): void

@@ -234,6 +234,17 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Denuncia ART: imprimible `/panel/incidentes/{uuid}/art/{persona}` con empleador (razón social y CUIT del alta de la
   empresa + `empresa.*` en /panel/configuracion) y trabajador (empleados: `cuil`, `birth_date`, `gender`, `address`).
 - "Días sin accidentes con baja" (`Incidents::daysWithoutLostTime`) y "bajas abiertas" en el inicio.
+- Investigación (`incident_investigations`, servicio `IncidentInvestigation`): reportado → (empezar) en_investigacion →
+  (terminar: porqués o árbol + ≥1 causa raíz + conclusiones) investigado; reabrir. 5 porqués (JSON), árbol de causas
+  (JSON de nodos id/parent/text/type hecho|causa_inmediata|causa_basica; `normalize()` descarta vacíos, huérfanos → raíz,
+  rechaza ciclos; `flatten()` para mostrar), causas raíz del catálogo `causa`, acciones derivadas con
+  `createAction()` (`origin_type = incidente`). Reabrir un incidente cerrado con investigación vuelve a en_investigacion.
+- Recordatorios (`Notify\IncidentReminders` en el cron): investigación sin empezar a `incidentes.dias_investigacion` (3),
+  lesionado sin N° de siniestro a `incidentes.horas_art` (48, ajustable a la ART) y los lunes resumen de bajas
+  abiertas (`incident.open_leaves`, sin nombres). Plazos en /panel/configuracion/notificaciones.
+- Horas trabajadas `worked_hours` (planta × mes; vacío = se borra) en `/panel/incidentes/horas`, con índices del año
+  (`IncidentIndicators`: IF, IG, II; in itinere aparte; días perdidos al mes del accidente). CSV de incidentes
+  (días perdidos solo con datos de salud).
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

@@ -39,6 +39,8 @@ final class NotificationRulesController
                 'soon'       => Settings::get('acciones.aviso_dias', '3'),
                 'escalate'   => Settings::get('acciones.escalar_dias', '3'),
                 'verify'     => Settings::get('acciones.dias_verificacion', '15'),
+                'inv_days'   => Settings::get('incidentes.dias_investigacion', '3'),
+                'art_hours'  => Settings::get('incidentes.horas_art', '48'),
             ],
             'queue'    => NotificationQueue::recent(30),
             'stats'    => NotificationQueue::stats(),
@@ -109,6 +111,8 @@ final class NotificationRulesController
         Settings::set('acciones.aviso_dias', $days('soon_days', 3, 30));
         Settings::set('acciones.escalar_dias', $days('escalate_days', 3, 60));
         Settings::set('acciones.dias_verificacion', $days('verify_days', 15, 180));
+        Settings::set('incidentes.dias_investigacion', $days('inv_days', 3, 60));
+        Settings::set('incidentes.horas_art', $days('art_hours', 48, 720));
         Audit::tenant('settings.update', 'settings', null, null, ['escalamiento_min' => $minutes, 'resumen_diario' => (bool) $request->input('daily'), 'resumen_semanal' => (bool) $request->input('weekly'),
             'acciones_aviso_dias' => Settings::get('acciones.aviso_dias'), 'acciones_escalar_dias' => Settings::get('acciones.escalar_dias'),
             'acciones_dias_verificacion' => Settings::get('acciones.dias_verificacion')]);

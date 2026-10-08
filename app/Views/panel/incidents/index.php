@@ -7,9 +7,13 @@ $query = fn (array $over) => '?' . http_build_query(array_filter(array_merge($fo
 ?>
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <h1 class="h4 m-0">Incidentes y accidentes</h1>
-    <?php if (UserAuth::can('incidentes', 'crear')): ?>
-        <a class="btn btn-danger btn-sm" href="<?= e(url('/panel/incidentes/nuevo')) ?>">+ Reportar incidente / accidente</a>
-    <?php endif; ?>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/panel/incidentes/horas')) ?>">Horas trabajadas e índices</a>
+        <?php if (UserAuth::can('incidentes', 'exportar')): ?><a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/panel/incidentes/exportar' . $query([]))) ?>">CSV</a><?php endif; ?>
+        <?php if (UserAuth::can('incidentes', 'crear')): ?>
+            <a class="btn btn-danger btn-sm" href="<?= e(url('/panel/incidentes/nuevo')) ?>">+ Reportar incidente / accidente</a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <div class="row g-3 mb-3">

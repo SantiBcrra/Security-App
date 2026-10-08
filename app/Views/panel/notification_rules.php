@@ -103,6 +103,12 @@ $has = fn (string $type, ?string $value = null) => $form && (bool) array_filter(
                     <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">Escalar con</span><input class="form-control" type="number" name="escalate_days" min="1" max="60" value="<?= e($settings['escalate']) ?>"><span class="input-group-text">días de atraso</span></div></div>
                     <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">Verificar dentro de</span><input class="form-control" type="number" name="verify_days" min="1" max="180" value="<?= e($settings['verify']) ?>"><span class="input-group-text">días del cierre</span></div></div>
                 </div>
+                <div class="fw-semibold small mb-2">Incidentes y accidentes</div>
+                <div class="row g-2 mb-3 small">
+                    <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">Avisar si la investigación no empezó a los</span><input class="form-control" type="number" name="inv_days" min="1" max="60" value="<?= e($settings['inv_days']) ?>"><span class="input-group-text">días</span></div></div>
+                    <div class="col-12"><div class="input-group input-group-sm"><span class="input-group-text">Avisar si falta el N° de siniestro ART a las</span><input class="form-control" type="number" name="art_hours" min="1" max="720" value="<?= e($settings['art_hours']) ?>"><span class="input-group-text">horas</span></div>
+                        <div class="form-text">Ajustalo al plazo que te indique tu ART.</div></div>
+                </div>
                 <?php if ($canEdit): ?><button class="btn btn-primary btn-sm">Guardar</button><?php endif; ?>
             </fieldset>
         </form>

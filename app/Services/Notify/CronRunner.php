@@ -43,6 +43,7 @@ final class CronRunner
                         'escalated' => Escalations::run(),
                         'actions'   => ActionReminders::run(),
                         'inspections' => InspectionReminders::run(),
+                        'incidents' => IncidentReminders::run(),
                         'digests'   => Digests::run(),
                         'queue'     => QueueRunner::run($remaining, 100),
                     ];

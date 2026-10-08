@@ -107,6 +107,9 @@ final class Notifier
             $s = \App\Models\InspectionSchedules::findById((int) $row['id']) ?? $row;
             return $s + ['_type' => 'schedule', 'assignee_ids' => \App\Services\InspectionPlanner::assignees($s), 'reporter_user_id' => null, 'severity_level' => 2];
         }
+        if ($event === 'incident.open_leaves') { // resumen: no hay un incidente puntual
+            return ['id' => 0, 'uuid' => '', '_type' => 'incident', 'sector_id' => null, 'assigned_user_id' => null, 'reporter_user_id' => null, 'severity_level' => 2];
+        }
         if (str_starts_with($event, 'incident.')) {
             $i = \App\Models\Incidents::findById((int) $row['id']) ?? $row;
             return $i + ['_type' => 'incident', 'assigned_user_id' => null, 'reporter_user_id' => $i['reported_by'],

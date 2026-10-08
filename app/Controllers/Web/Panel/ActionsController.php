@@ -234,6 +234,10 @@ final class ActionsController
             return ['label' => $label . ' ' . Observations::format((int) $obs['number']),
                 'url' => ObservationService::canView($obs) ? '/panel/observaciones/' . $obs['uuid'] : null];
         }
+        if ($a['origin_type'] === 'incidente' && $a['origin_id'] !== null && ($inc = \App\Models\Incidents::findById((int) $a['origin_id']))) {
+            return ['label' => $label . ' ' . \App\Models\Incidents::format((int) $inc['number']) . ' · ' . \App\Services\IncidentService::typeLabel($inc['type']),
+                'url' => \App\Services\IncidentService::canView($inc) ? '/panel/incidentes/' . $inc['uuid'] : null];
+        }
         if ($a['origin_type'] === 'inspeccion' && $a['origin_id'] !== null && ($ins = \App\Models\Inspections::findById((int) $a['origin_id']))) {
             return ['label' => $label . ' ' . \App\Models\Inspections::format((int) $ins['number']) . ' · ' . $ins['template_name'],
                 'url' => \App\Services\InspectionService::canView($ins) ? '/panel/inspecciones/' . $ins['uuid'] : null];

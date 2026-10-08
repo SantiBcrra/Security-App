@@ -273,6 +273,128 @@ return [
         assert_true(str_contains(json_encode($bad, JSON_UNESCAPED_UNICODE), 'CUIL inválido') && str_contains(json_encode($bad, JSON_UNESCAPED_UNICODE), 'Sexo'));
     },
 
+    'investigación: árbol válido (sin ciclos; huérfanos quedan como raíz)' => function () {
+        [$d, $err] = App\Services\IncidentInvestigation::normalize(['cause_tree' => [
+            ['id' => 'a', 'parent' => null, 'text' => 'Corte en la mano', 'type' => 'hecho'],
+            ['id' => 'b', 'parent' => 'a', 'text' => 'Chapa sin guantes', 'type' => 'causa_inmediata'],
+            ['id' => 'c', 'parent' => 'zz', 'text' => 'Huérfano', 'type' => 'raro'],
+            ['id' => 'd', 'parent' => 'a', 'text' => '', 'type' => 'hecho'],
+        ], 'whys' => ['uno', '', 'dos']]);
+        assert_same(null, $err);
+        assert_same([3, null, 'causa_inmediata'], [count($d['cause_tree']), $d['cause_tree'][2]['parent'], $d['cause_tree'][2]['type']]);
+        assert_same(['uno', 'dos'], $d['five_whys']['whys']);
+        assert_same([0, 1, 0], array_column(App\Services\IncidentInvestigation::flatten($d['cause_tree']), 'depth'));
+        [, $err] = App\Services\IncidentInvestigation::normalize(['cause_tree' => [['id' => 'x', 'parent' => 'y', 'text' => 'X'], ['id' => 'y', 'parent' => 'x', 'text' => 'Y']]]);
+        assert_true(str_contains((string) $err, 'ciclo'));
+    },
+
+    'investigación: empezar, guardar, terminar (con requisitos), acción derivada, cerrar y reabrir' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['sup']); // el supervisor investiga en su nave
+        $i = Incidents::findById((int) $st['acc']['id']);
+        assert_same(null, App\Services\IncidentInvestigation::start($i));
+        $i = Incidents::findById((int) $i['id']);
+        assert_same('en_investigacion', $i['status']);
+        assert_true(str_contains((string) App\Services\IncidentInvestigation::complete($i), 'causa raíz'), 'faltan requisitos');
+        $cause = CatalogItems::findByName('causa', 'Falta de uso de EPP')['uuid'];
+        $in = ['team' => [$st['sup']['uuid'], $st['hys']['uuid']], 'problem' => 'Se cortó la mano', 'whys' => ['No usaba guantes', 'No había guantes del talle'],
+            'cause_tree' => json_encode([['id' => 'h1', 'parent' => null, 'text' => 'Corte en la palma', 'type' => 'hecho'],
+                ['id' => 'c1', 'parent' => 'h1', 'text' => 'Manipuló chapa sin guantes', 'type' => 'causa_inmediata'],
+                ['id' => 'c2', 'parent' => 'c1', 'text' => 'Faltan talles en el pañol', 'type' => 'causa_basica']]),
+            'root_causes' => [$cause], 'conclusions' => 'Falta de control de stock de EPP en el pañol', 'lessons' => 'Revisar talles al ingreso'];
+        assert_same(null, App\Services\IncidentInvestigation::save($i, $in));
+        [$action, $errors] = App\Services\IncidentInvestigation::createAction($i, ['title' => 'Comprar guantes anticorte talle S y M', 'responsible' => $st['hys']['uuid'],
+            'due_on' => (new DateTimeImmutable(IncidentService::today()))->modify('+5 days')->format('Y-m-d'), 'priority' => 'alta', 'cause' => 'Faltan talles en el pañol']);
+        assert_same([], $errors);
+        assert_same(['incidente', (int) $st['nave1']], [$action['origin_type'], (int) $action['sector_id']]);
+        assert_true(str_contains((string) $action['description'], 'Faltan talles'));
+        assert_same(null, App\Services\IncidentInvestigation::complete(Incidents::findById((int) $i['id'])));
+        $i = Incidents::findById((int) $i['id']);
+        assert_same('investigado', $i['status']);
+        $v = Incidents::investigation((int) $i['id']);
+        assert_same([3, 2, true], [count($v['cause_tree']), count($v['team']), $v['completed_at'] !== null]);
+        assert_same(null, IncidentService::transition($i, 'cerrar', ['comment' => 'Investigación y acciones en curso']));
+        UserAuth::setCurrent($st['hys']);
+        assert_same(null, IncidentService::transition(Incidents::findById((int) $i['id']), 'reabrir', ['comment' => 'Apareció un dato nuevo']));
+        $i = Incidents::findById((int) $i['id']);
+        assert_same(['en_investigacion', null], [$i['status'], Incidents::investigation((int) $i['id'])['completed_at']], 'vuelve a la investigación');
+        $st['accAction'] = $action;
+    },
+
+    'recordatorios: investigación sin empezar, falta N° ART y resumen semanal de bajas (una sola vez)' => function () use ($setup, &$st, $report, $inbox) {
+        $setup();
+        $new = $report($st['rep'], 'accidente_con_baja')['incident'];
+        DB::tenant()->prepare('UPDATE incidents SET occurred_at = UTC_TIMESTAMP() - INTERVAL 5 DAY WHERE id = ?')->execute([(int) $new['id']]);
+        DB::tenant()->prepare('UPDATE incident_people SET leave_start = CURDATE() - INTERVAL 4 DAY WHERE incident_id = ? AND lost_time = 1')->execute([(int) $new['id']]);
+        UserAuth::setCurrent(null);
+        $monday = new DateTimeImmutable('next monday 10:00', new DateTimeZone('America/Argentina/Buenos_Aires'));
+        $r = App\Services\Notify\IncidentReminders::run($monday->setTimezone(new DateTimeZone('UTC')));
+        assert_true($r['investigation'] >= 1 && $r['art'] >= 1 && $r['leaves'] >= 1, json_encode($r));
+        assert_same(['investigation' => 0, 'art' => 0, 'leaves' => 0], App\Services\Notify\IncidentReminders::run($monday->modify('+1 hour')->setTimezone(new DateTimeZone('UTC'))));
+        $titles = array_keys($inbox($st['hys']));
+        $num = Incidents::format((int) $new['number']);
+        assert_true(in_array("Investigación pendiente · {$num}", $titles, true) && in_array("Falta el N° de siniestro ART · {$num}", $titles, true));
+        assert_true((bool) array_filter($titles, fn ($t) => str_starts_with($t, 'Bajas abiertas: ')));
+        assert_true(!array_filter(array_keys($inbox($st['sup'])), fn ($t) => str_starts_with($t, 'Bajas abiertas')), 'el resumen de bajas solo a SyH');
+    },
+
+    'índices: frecuencia, gravedad e incidencia con las horas cargadas' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $tz = new DateTimeZone('America/Argentina/Buenos_Aires');
+        $month = (new DateTimeImmutable('now', $tz))->modify('-5 days')->format('Y-m'); // mes del accidente con baja del test anterior
+        $year = (int) substr($month, 0, 4);
+        $site = (int) Sectors::findById($st['nave1'])['site_id'];
+        App\Models\WorkedHours::save($site, $month, 20000.0, 120, null);
+        $ind = App\Services\IncidentIndicators::year($year);
+        $m = $ind['months'][$month];
+        assert_true($m['accidents'] >= 1 && $m['hours'] === 20000.0 && $m['headcount'] === 120);
+        assert_same(round($m['accidents'] * 1_000_000 / 20000, 2), $m['if']);
+        assert_same(round($m['lost_days'] * 1000 / 20000, 3), $m['ig']);
+        assert_same(round($m['accidents'] * 1000 / 120, 2), $m['ii']);
+        assert_true($m['lost_days'] >= 4 && $m['provisional'], 'baja abierta: días provisorios');
+        App\Models\WorkedHours::save($site, $month, null, null, null);
+        assert_same(0.0, App\Services\IncidentIndicators::year($year)['months'][$month]['hours'], 'vaciar la celda la borra');
+    },
+
+    'HTTP: investigación, horas (formato argentino) y CSV' => function () use ($setup, &$st) {
+        $setup();
+        $call = function (array $user, string $path, string $method = 'GET', array $post = []) use (&$st) {
+            UserAuth::setCurrent(null);
+            Tenant::deactivate();
+            $_SESSION = [];
+            \App\Core\Session::put(\App\Services\Impersonation::TENANT_KEY, $st['a']['uuid']);
+            \App\Core\Session::put(UserAuth::USER_KEY, $user['uuid']);
+            if ($method === 'POST') {
+                $post['csrf_token'] = csrf_token();
+            }
+            [$p, $q] = array_pad(explode('?', $path, 2), 2, '');
+            parse_str($q, $query);
+            $router = new \App\Core\Router();
+            (require BASE_PATH . '/app/routes.php')($router);
+            return $router->dispatch(new \App\Core\Request($method, $p, $query, $post));
+        };
+        $show = $call($st['hys'], '/panel/incidentes/' . $st['acc']['uuid']);
+        assert_true($show->status === 200 && str_contains($show->body, 'Faltan talles en el pañol') && str_contains($show->body, 'investigationEditor'), 'editor de la investigación');
+        $print = $call($st['sup'], '/panel/incidentes/' . $st['acc']['uuid'] . '/imprimir');
+        assert_true(str_contains($print->body, 'Árbol de causas') && str_contains($print->body, 'Comprar guantes'));
+        assert_same(200, $call($st['sup'], '/panel/incidentes/horas')->status);
+        Tenant::activate($st['a']);
+        $site = App\Models\Sites::findById((int) Sectors::findById($st['nave1'])['site_id']);
+        $year = (int) date('Y');
+        $res = $call($st['hys'], '/panel/incidentes/horas', 'POST', ['anio' => $year, 'h' => [$site['uuid'] => [$year . '-01' => ['hours' => '12.345,5', 'headcount' => '80']]]]);
+        assert_same(302, $res->status);
+        Tenant::activate($st['a']);
+        assert_same(['hours' => 12345.5, 'headcount' => 80], App\Models\WorkedHours::forYear($year)[(int) $site['id']][$year . '-01']);
+        assert_same(302, $call($st['sup'], '/panel/incidentes/horas', 'POST', ['anio' => $year])->status, 'el supervisor tiene "editar" en incidentes');
+        assert_same(403, $call($st['rep'], '/panel/incidentes/horas', 'POST', ['anio' => $year])->status, 'el operario no carga horas');
+        $csv = $call($st['hys'], '/panel/incidentes/exportar');
+        assert_true(str_contains($csv->body, 'Número;Fecha;Tipo') && str_contains($csv->body, 'Días perdidos'));
+        $_SESSION = [];
+    },
+
     'aislamiento: la empresa B no ve incidentes de A' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['b']);

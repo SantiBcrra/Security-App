@@ -33,6 +33,26 @@ require __DIR__ . '/_print_head.php';
         <?php endforeach; ?>
     </table>
     <?php if (!$health): ?><p class="note">Los datos de salud de los lesionados no se incluyen (reservados a Seguridad e Higiene).</p><?php endif; ?>
+    <?php if ($investigation): ?>
+        <h2>Investigación<?= $investigation['completed_at'] ? ' (terminada ' . e(fecha($investigation['completed_at'], 'd/m/Y')) . ')' : ' (en curso)' ?></h2>
+        <?php if ($investigation['team']): ?><p><strong>Equipo:</strong> <?= e(implode(', ', array_filter(array_map(fn ($id) => App\Models\Users::findById((int) $id)['name'] ?? null, $investigation['team'])))) ?></p><?php endif; ?>
+        <?php if (array_filter($investigation['five_whys']['whys'])): ?>
+            <p><strong>5 porqués</strong><?= $investigation['five_whys']['problem'] ? ' — ' . e($investigation['five_whys']['problem']) : '' ?></p>
+            <ol><?php foreach ($investigation['five_whys']['whys'] as $w): ?><li><?= e($w) ?></li><?php endforeach; ?></ol>
+        <?php endif; ?>
+        <?php if ($tree): ?>
+            <p><strong>Árbol de causas</strong></p>
+            <?php foreach ($tree as $n): ?><div style="padding-left: <?= (int) $n['depth'] * 7 ?>mm"><?= $n['depth'] ? '↳ ' : '' ?><em><?= e(App\Services\IncidentInvestigation::NODE_TYPES[$n['type']]) ?>:</em> <?= e($n['text']) ?></div><?php endforeach; ?>
+        <?php endif; ?>
+        <?php if ($investigation['root_causes']): ?><p><strong>Causas raíz:</strong> <?= e(implode(', ', array_map(fn ($id) => App\Models\CatalogItems::findById((int) $id)['name'] ?? '?', $investigation['root_causes']))) ?></p><?php endif; ?>
+        <?php if ($investigation['conclusions']): ?><p style="white-space: pre-wrap"><strong>Conclusiones:</strong> <?= e($investigation['conclusions']) ?></p><?php endif; ?>
+        <?php if ($investigation['lessons']): ?><p style="white-space: pre-wrap"><strong>Lecciones aprendidas:</strong> <?= e($investigation['lessons']) ?></p><?php endif; ?>
+        <?php if ($derived): ?>
+            <p><strong>Acciones derivadas</strong></p>
+            <table><?php foreach ($derived as $a): ?><tr><td class="k"><?= e(App\Models\Actions::format((int) $a['number'])) ?></td>
+                <td><?= e($a['title']) ?> · <?= e($a['responsible_name']) ?> · límite <?= e(date('d/m/Y', strtotime($a['due_on']))) ?> · <?= e(App\Services\ActionWorkflow::label($a['status'])) ?></td></tr><?php endforeach; ?></table>
+        <?php endif; ?>
+    <?php endif; ?>
     <h2>Línea de tiempo</h2>
     <table>
         <?php foreach ($events as $ev): ?>

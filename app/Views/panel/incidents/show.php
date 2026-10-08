@@ -16,7 +16,8 @@ $opt = function (array $options, ?string $current, string $empty = '—'): strin
 };
 $uuidOf = fn (?int $id) => $id ? (App\Models\CatalogItems::findById($id)['uuid'] ?? null) : null;
 $eventLabels = ['created' => 'Reportado', 'status' => 'Cambio de estado', 'comment' => 'Comentario', 'correction' => 'Corrección de clasificación',
-    'person' => 'Persona agregada', 'follow_up' => 'Seguimiento de la persona', 'attachment' => 'Archivos agregados'];
+    'person' => 'Persona agregada', 'follow_up' => 'Seguimiento de la persona', 'attachment' => 'Archivos agregados',
+    'investigation' => 'Investigación actualizada', 'action_created' => 'Acción derivada creada'];
 ?>
 <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
     <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/panel/incidentes')) ?>">←</a>
@@ -122,6 +123,8 @@ $eventLabels = ['created' => 'Reportado', 'status' => 'Cambio de estado', 'comme
             </div>
         </div>
 
+        <?php require __DIR__ . '/_investigation.php'; ?>
+
         <div class="card shadow-sm mb-3">
             <div class="card-header"><strong>Fotos y documentos (<?= count($files) ?>)</strong></div>
             <div class="card-body">
@@ -154,7 +157,11 @@ $eventLabels = ['created' => 'Reportado', 'status' => 'Cambio de estado', 'comme
                 <div class="card-header"><strong>Gestión</strong></div>
                 <div class="card-body d-grid gap-2" x-data="{ open: null }">
                     <?php if (IncidentService::TYPES[$i['type']]['investigation'] && !in_array($i['status'], ['investigado', 'cerrado', 'anulado'], true)): ?>
-                        <div class="alert alert-info small mb-0">En un <?= e(mb_strtolower(IncidentService::typeLabel($i['type']))) ?> la investigación es obligatoria para cerrar (5 porqués, árbol de causas y acciones).</div>
+                        <div class="alert alert-info small mb-0">En un <?= e(mb_strtolower(IncidentService::typeLabel($i['type']))) ?> hay que <a href="#investigacion">terminar la investigación</a> para poder cerrar.</div>
+                    <?php endif; ?>
+                    <?php $openDerived = count(array_filter($derived, fn ($a) => !in_array($a['status'], ['verificada', 'cancelada'], true))); ?>
+                    <?php if ($i['status'] === 'investigado' && $openDerived): ?>
+                        <div class="alert alert-warning small mb-0"><?= e($openDerived) ?> acción(es) derivada(s) todavía sin verificar. Se puede cerrar igual; las acciones siguen su curso.</div>
                     <?php endif; ?>
                     <?php foreach ($transitions as $key => $t): ?>
                         <button type="button" class="btn btn-sm <?= $key === 'cerrar' ? 'btn-success' : 'btn-outline-secondary' ?>" @click="open = open === '<?= e($key) ?>' ? null : '<?= e($key) ?>'"><?= e($t['label']) ?></button>
@@ -198,7 +205,8 @@ $eventLabels = ['created' => 'Reportado', 'status' => 'Cambio de estado', 'comme
                                 <div><?= e($label) ?>: <s class="text-body-secondary"><?= e($data['antes'][$label] ?? '—') ?></s> → <strong><?= e($value ?? '—') ?></strong></div>
                             <?php endforeach; ?>
                         <?php elseif ($data && isset($data['persona'])): ?><div><?= e($data['persona'] . ' (' . $data['rol'] . ')') ?></div>
-                        <?php elseif ($data && isset($data['archivos'])): ?><div><?= e($data['archivos']) ?> archivo(s)</div><?php endif; ?>
+                        <?php elseif ($data && isset($data['archivos'])): ?><div><?= e($data['archivos']) ?> archivo(s)</div>
+                        <?php elseif ($data && isset($data['accion'])): ?><div><?= e($data['accion'] . ' · ' . $data['titulo']) ?></div><?php endif; ?>
                     </li>
                 <?php endforeach; ?>
             </ul>
