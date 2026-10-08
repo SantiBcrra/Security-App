@@ -23,7 +23,7 @@ use App\Services\UserAuth;
  */
 final class Pull
 {
-    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'actions'];
+    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'actions', 'inspection_templates', 'inspection_schedule'];
     private const OVERLAP_SECONDS = 5;
     private const OBS_HISTORY_DAYS = 180;
 
@@ -50,7 +50,10 @@ final class Pull
             foreach ($rows as $row) {
                 $gone = (isset($row['is_active']) && (int) $row['is_active'] !== 1) || !empty($row['deleted_at'])
                     // Acciones: el alcance se decide en PHP; si dejó de verla (ej. la reasignaron) le llega como baja.
-                    || ($entity === 'actions' && !ActionService::canView($row));
+                    || ($entity === 'actions' && !ActionService::canView($row))
+                    // Checklists: solo a quien puede hacer inspecciones. Programadas: solo las pendientes a su cargo.
+                    || ($entity === 'inspection_templates' && (!UserAuth::can('inspecciones', 'crear') || $row['version_uuid'] === null))
+                    || ($entity === 'inspection_schedule' && ($row['status'] !== 'pendiente' || !self::scheduleIsMine($row)));
                 if ($gone) {
                     $deleted[$entity][] = $row['uuid'];
                 } else {
@@ -77,6 +80,22 @@ final class Pull
                 'usuario'           => $user ? ['uuid' => $user['uuid'], 'nombre' => $user['name'], 'rol' => $user['role_name']] : null,
             ],
         ];
+    }
+
+    /** ¿La programada está a cargo del usuario actual? (usuario, rol o supervisor del sector) */
+    private static function scheduleIsMine(array $row): bool
+    {
+        static $mine = null, $forUser = null;
+        $user = UserAuth::user();
+        if ($forUser !== ($user['id'] ?? null)) {
+            $mine = \App\Services\InspectionPlanner::mine();
+            $forUser = $user['id'] ?? null;
+        }
+        return match ($row['assignee_type']) {
+            'user'  => (int) $row['assignee_user_id'] === $mine['user_id'],
+            'role'  => $row['assignee_role'] === $mine['role'],
+            default => $row['sector_id'] !== null && in_array((int) $row['sector_id'], $mine['sector_ids'], true),
+        };
     }
 
     /** Siguiente cursor: exacto si el último cambio es "viejo"; con solapamiento si es muy reciente. */
@@ -138,6 +157,16 @@ final class Pull
                     FROM actions t JOIN users ru ON ru.id = t.responsible_user_id LEFT JOIN sectors se ON se.id = t.sector_id
                     LEFT JOIN observations o ON t.origin_type = 'observacion' AND o.id = t.origin_id
                     WHERE {$after} AND (t.status IN ('abierta', 'en_curso', 'cerrada') OR t.updated_at > UTC_TIMESTAMP() - INTERVAL 60 DAY){$order}", $params];
+            case 'inspection_templates':
+                return ["SELECT t.*, v.uuid AS version_uuid, v.structure, ty.uuid AS type_uuid FROM inspection_templates t
+                    LEFT JOIN inspection_template_versions v ON v.id = t.current_version_id LEFT JOIN catalog_items ty ON ty.id = t.equipment_type_id
+                    WHERE {$after}{$order}", $params];
+            case 'inspection_schedule':
+                return ["SELECT t.*, p.assignee_type, p.assignee_user_id, p.assignee_role, p.name AS program_name, tp.uuid AS template_uuid,
+                        eq.uuid AS equipment_uuid, se.uuid AS sector_uuid
+                    FROM inspection_schedule t JOIN inspection_programs p ON p.id = t.program_id JOIN inspection_templates tp ON tp.id = p.template_id
+                    LEFT JOIN equipment eq ON eq.id = t.equipment_id LEFT JOIN sectors se ON se.id = t.sector_id
+                    WHERE {$after}{$order}", $params];
             case 'patrol_points':
                 return ["SELECT t.* FROM patrol_points t WHERE {$after}{$order}", $params];
             case 'patrol_routes':
@@ -192,6 +221,14 @@ final class Pull
                 'can_start' => $r['status'] === 'abierta' && ActionService::canDo($r, 'tomar'),
                 'can_close' => ActionWorkflow::isOpen($r['status']) && ActionService::canDo($r, 'cerrar'),
                 'updated_at' => str_replace(' ', 'T', $r['updated_at']) . 'Z',
+            ],
+            'inspection_templates' => [
+                'uuid' => $r['uuid'], 'name' => $r['name'], 'description' => $r['description'], 'scope' => $r['scope'], 'type_uuid' => $r['type_uuid'],
+                'version_uuid' => $r['version_uuid'], 'structure' => json_decode((string) $r['structure'], true) ?: ['sections' => []],
+            ],
+            'inspection_schedule' => [
+                'uuid' => $r['uuid'], 'template_uuid' => $r['template_uuid'], 'equipment_uuid' => $r['equipment_uuid'], 'sector_uuid' => $r['sector_uuid'],
+                'program' => $r['program_name'], 'due_from' => $r['due_from'], 'due_on' => $r['due_on'],
             ],
             'patrol_points' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'code' => $r['code'], 'description' => $r['description'], 'lat' => (float) $r['lat'], 'lng' => (float) $r['lng'], 'radius_m' => (int) $r['radius_m'], 'critical' => (bool) $r['is_critical']],
             'patrol_routes' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'description' => $r['description'], 'frequency' => $r['frequency'],

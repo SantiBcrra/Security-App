@@ -60,7 +60,7 @@ final class InspectionService
      * @param array<string, list<array{tmp:string,name:?string,upload:bool}>> $photos fotos por item_key
      * @return array{inspection: ?array, errors: array<string,string>, duplicate?: bool}
      */
-    public static function create(array $in, array $photos = []): array
+    public static function create(array $in, array $photos = [], array $declaredPhotos = []): array
     {
         if (!UserAuth::can(self::MODULE, 'crear')) {
             return ['inspection' => null, 'errors' => ['_' => 'Tu rol no puede hacer inspecciones.']];
@@ -108,7 +108,12 @@ final class InspectionService
         if ($doneAt === null) {
             $errors['done_at'] = 'Fecha y hora inválidas (no puede ser futura ni de hace más de 30 días).';
         }
-        $eval = InspectionStructure::evaluate($version['structure'], (array) ($in['answers'] ?? []), array_map('count', $photos));
+        // Fotos: las que llegan en este request (web) o las que la app declara que va a subir por partes.
+        $photoCounts = array_map('count', $photos);
+        foreach ($declaredPhotos as $key => $n) {
+            $photoCounts[(string) $key] = max($photoCounts[(string) $key] ?? 0, (int) $n);
+        }
+        $eval = InspectionStructure::evaluate($version['structure'], (array) ($in['answers'] ?? []), $photoCounts);
         $errors += $eval['errors'];
         // Programada que cumple esta inspección: la indicada (desde el aviso / la lista) o la que corresponda.
         $schedule = null;

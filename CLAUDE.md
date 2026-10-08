@@ -211,6 +211,12 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   (`InspectionSchedules::matchFor`: misma plantilla y objetivo, ventana habilitada, la más vieja); `on_time` = hecha
   hasta `due_on`. Omitir con motivo (permiso cerrar). Cumplimiento = a tiempo / (vencidas − omitidas), por mes y por
   programa / sector / equipo / inspector (`/panel/inspecciones/cumplimiento`, CSV). "Inspecciones de hoy" en el inicio.
+- App de campo: pull de `inspection_templates` (estructura de la versión vigente; solo a quien puede crear) e
+  `inspection_schedule` (solo pendientes a su cargo; hecha/omitida/ajena = baja). Push `inspection.create` (uuid del
+  celular, `version`, `schedule`, `answers`, `photo_counts` = fotos que va a subir: valida las obligatorias). Fotos por
+  partes con `inspection_uuid` + `item_key` (solo el inspector). Pestaña "Nuevo" → Reportar observación | Hacer
+  inspección (QR del equipo, lista de equipos, recorridas por sector, "para hoy"); detalle `#/inspeccion/{uuid}`
+  (`GET /api/v1/inspections/{uuid}`); el aviso "para hoy" abre `#/programada/{uuid}`.
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

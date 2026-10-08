@@ -2,7 +2,7 @@
 // hasta que se sincroniza: catálogos, sectores, equipos, empleados, observaciones, cola de envío
 // (outbox) y fotos pendientes.
 const NAME = 'secapp-movil';
-const VERSION = 3;
+const VERSION = 4;
 const STORES = {
     kv: { keyPath: 'key' },
     catalog_items: { keyPath: 'uuid', indexes: ['catalog'] },
@@ -16,6 +16,9 @@ const STORES = {
     patrol_rounds: { keyPath: 'uuid' },
     patrol_scans: { keyPath: 'uuid' },
     actions: { keyPath: 'uuid' },
+    inspection_templates: { keyPath: 'uuid' },
+    inspection_schedule: { keyPath: 'uuid' },
+    inspections: { keyPath: 'uuid' },   // las hechas en este celular (pendientes de enviar y enviadas)
     outbox: { keyPath: 'op_id' },
     uploads: { keyPath: 'upload_uuid', indexes: ['observation_uuid'] },
 };

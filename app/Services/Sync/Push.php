@@ -20,7 +20,7 @@ use App\Services\UserAuth;
 final class Push
 {
     public const MAX_OPS = 50;
-    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'action.start', 'action.close'];
+    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'action.start', 'action.close', 'inspection.create'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
     public static function run(array $operations): array
@@ -65,6 +65,7 @@ final class Push
                 'round.finish'           => self::roundFinish($data),
                 'action.start'           => self::actionStep($data, 'tomar'),
                 'action.close'           => self::actionStep($data, 'cerrar'),
+                'inspection.create'      => self::inspectionCreate($data),
                 default                  => self::error('Tipo de operación desconocido: ' . $type),
             };
         } catch (UserError $e) {
@@ -168,6 +169,25 @@ final class Push
         $fresh = \App\Models\Actions::findByUuid($a['uuid']);
         return ['status' => 'ok', 'data' => ['uuid' => $fresh['uuid'], 'status' => $fresh['status'],
             'status_label' => \App\Services\ActionWorkflow::label($fresh['status']), 'duplicate' => $done]];
+    }
+
+    /**
+     * Inspección hecha sin señal (uuid del celular: reenviarla no duplica). Las fotos se suben después por
+     * partes (uploads con inspection_uuid + item_key); photo_counts dice cuántas trae cada ítem.
+     */
+    private static function inspectionCreate(array $data): array
+    {
+        if (!Uuid::isValid((string) ($data['uuid'] ?? ''))) {
+            return self::error('Falta el identificador de la inspección.');
+        }
+        $r = \App\Services\InspectionService::create($data, [], (array) ($data['photo_counts'] ?? []));
+        if ($r['inspection'] === null) {
+            return self::error(reset($r['errors']) ?: 'Inspección inválida.');
+        }
+        $i = $r['inspection'];
+        return ['status' => 'ok', 'data' => ['uuid' => $i['uuid'], 'code' => \App\Models\Inspections::format((int) $i['number']),
+            'result' => $i['result'], 'result_label' => \App\Services\InspectionService::RESULTS[$i['result']]['label'], 'score' => $i['score'] !== null ? (int) $i['score'] : null,
+            'actions' => (int) $i['items_fail'], 'duplicate' => !empty($r['duplicate'])]];
     }
 
     private static function error(string $message): array

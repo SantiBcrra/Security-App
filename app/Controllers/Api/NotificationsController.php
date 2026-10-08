@@ -22,6 +22,8 @@ final class NotificationsController
             'read' => $n['read_at'] !== null, 'at' => str_replace(' ', 'T', $n['created_at']) . 'Z',
             'observation_uuid' => $n['url'] && preg_match('#/observaciones/([0-9a-f\-]{36})#', $n['url'], $m) ? $m[1] : null,
             'action_uuid' => $n['url'] && preg_match('#/acciones/([0-9a-f\-]{36})#', $n['url'], $m) ? $m[1] : null,
+            'inspection_uuid' => $n['url'] && preg_match('#/inspecciones/([0-9a-f\-]{36})#', $n['url'], $m) ? $m[1] : null,
+            'schedule_uuid' => $n['url'] && preg_match('#programada=([0-9a-f\-]{36})#', $n['url'], $m) ? $m[1] : null,
             'alert_uuid' => $n['alert_uuid'], 'alert_acked' => $n['alert_acked_at'] !== null, 'alert_acked_by' => $n['alert_acked_name'],
         ], Notifications::forUser((int) $user['id'], 50));
         return Response::json(['unread' => Notifications::unreadCount((int) $user['id']), 'items' => $items]);

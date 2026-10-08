@@ -285,9 +285,111 @@
 
     <!-- Reportar -->
     <main class="app-main" x-show="!detailUuid && !actionUuid && tab === 'reportar'">
-        <template x-if="!canCreate && meta"><div class="alert alert-secondary">Tu rol no puede cargar reportes.</div></template>
+        <div class="btn-group w-100 mb-3" x-show="canInspect && !insp">
+            <button type="button" class="btn" :class="newMode === 'obs' ? 'btn-dark' : 'btn-outline-dark'" @click="newMode = 'obs'">Reportar observación</button>
+            <button type="button" class="btn" :class="newMode === 'insp' ? 'btn-dark' : 'btn-outline-dark'" @click="newMode = 'insp'">Hacer inspección</button>
+        </div>
+
+        <!-- Inspección: elegir checklist -->
+        <template x-if="newMode === 'insp' && !insp">
+            <div>
+                <button type="button" class="btn btn-primary btn-lg w-100 mb-3" @click="openScanner()">📷 Escanear el QR del equipo</button>
+                <template x-if="inspPickEquipment">
+                    <div class="card mb-3 border-primary"><div class="card-body">
+                        <div class="fw-semibold mb-2" x-text="inspPickEquipment.code + ' · ' + inspPickEquipment.name"></div>
+                        <template x-for="t in templatesForEquipment(inspPickEquipment)" :key="t.uuid">
+                            <button type="button" class="btn btn-outline-primary w-100 mb-2" @click="startInspection(t.uuid, inspPickEquipment.uuid)" x-text="t.name"></button>
+                        </template>
+                    </div></div>
+                </template>
+                <template x-if="inspToday.length">
+                    <div class="mb-3"><h2 class="h6 text-body-secondary">Para hoy, a tu cargo</h2>
+                        <template x-for="s in inspToday" :key="s.uuid">
+                            <a class="obs-card" href="#" @click.prevent="startInspection(s.template_uuid, s.equipment_uuid, s.uuid, s.sector_uuid)" :class="s.due_on < todayLocal() ? 'obs-imminent' : ''">
+                                <strong x-text="s.equipment_uuid ? equipmentLabel(s.equipment_uuid) : sectorLabel(s.sector_uuid)"></strong>
+                                <div class="small" x-text="templateName(s.template_uuid)"></div>
+                                <div class="small" :class="s.due_on < todayLocal() ? 'text-danger fw-semibold' : 'text-body-secondary'"
+                                     x-text="s.due_on < todayLocal() ? 'Vencida (' + s.due_on.split('-').reverse().join('/') + ')' : (s.due_on === todayLocal() ? 'Hoy' : 'Hasta el ' + s.due_on.split('-').reverse().join('/'))"></div>
+                            </a>
+                        </template>
+                    </div>
+                </template>
+                <h2 class="h6 text-body-secondary">O elegí el equipo</h2>
+                <input class="form-control mb-2" type="search" x-model="inspSearch" placeholder="Código o nombre del equipo">
+                <template x-for="e in inspEquipmentResults" :key="e.uuid">
+                    <a class="obs-card py-2" href="#" @click.prevent="chooseEquipment(e)"><strong x-text="e.code"></strong> <span class="small" x-text="e.name"></span></a>
+                </template>
+                <template x-if="areaTemplates.length">
+                    <div class="mt-3"><h2 class="h6 text-body-secondary">Recorridas por sector</h2>
+                        <template x-for="t in areaTemplates" :key="t.uuid">
+                            <button type="button" class="btn btn-outline-secondary w-100 mb-2" @click="startInspection(t.uuid)" x-text="t.name"></button>
+                        </template>
+                    </div>
+                </template>
+                <div class="small text-body-secondary mt-2" x-show="!inspTemplates.length">Todavía no hay checklists en el celular (se bajan al sincronizar).</div>
+            </div>
+        </template>
+
+        <!-- Inspección: el checklist -->
+        <template x-if="insp">
+            <div>
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div><h2 class="h5 m-0" x-text="insp.template.name"></h2>
+                        <div class="text-body-secondary" x-show="insp.equipment" x-text="insp.equipment ? insp.equipment.code + ' · ' + insp.equipment.name : ''"></div></div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @click="cancelInspection()">Cancelar</button>
+                </div>
+                <div class="alert alert-secondary small py-2" x-show="insp.template.description" x-text="insp.template.description"></div>
+                <template x-if="insp.template.scope !== 'equipo'">
+                    <div class="mb-3"><label class="form-label small mb-1">Sector</label>
+                        <select class="form-select" x-model="insp.sector" :class="insp.showErrors && !insp.sector ? 'is-invalid' : ''"><option value="">Elegí…</option>
+                            <template x-for="sc in sectors" :key="sc.uuid"><option :value="sc.uuid" x-text="sc.label" :selected="sc.uuid === insp.sector"></option></template>
+                        </select></div>
+                </template>
+                <template x-for="sec in insp.template.structure.sections" :key="sec.title">
+                    <div class="card mb-3">
+                        <div class="card-header small fw-semibold" x-text="sec.title"></div>
+                        <ul class="list-group list-group-flush">
+                            <template x-for="it in sec.items" :key="it.key">
+                                <li class="list-group-item" :class="insp.showErrors && itemError(it) ? 'list-group-item-danger' : (itemFails(it) ? 'list-group-item-warning' : '')">
+                                    <div class="mb-2"><span class="badge text-bg-danger me-1" x-show="it.critical">Crítico</span><span x-text="it.text"></span>
+                                        <div class="small text-body-secondary" x-show="it.help" x-text="it.help"></div></div>
+                                    <template x-if="it.type === 'si_no' || it.type === 'si_no_na'">
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn flex-fill py-2" :class="insp.answers[it.key].value === 'si' ? (it.ok_when === 'si' ? 'btn-success' : 'btn-danger') : 'btn-outline-secondary'" @click="insp.answers[it.key].value = 'si'">Sí</button>
+                                            <button type="button" class="btn flex-fill py-2" :class="insp.answers[it.key].value === 'no' ? (it.ok_when === 'no' ? 'btn-success' : 'btn-danger') : 'btn-outline-secondary'" @click="insp.answers[it.key].value = 'no'">No</button>
+                                            <button type="button" class="btn flex-fill py-2" x-show="it.type === 'si_no_na'" :class="insp.answers[it.key].value === 'na' ? 'btn-secondary' : 'btn-outline-secondary'" @click="insp.answers[it.key].value = 'na'">N/A</button>
+                                        </div>
+                                    </template>
+                                    <template x-if="it.type === 'numero'">
+                                        <div class="input-group"><input class="form-control" inputmode="decimal" x-model="insp.answers[it.key].value">
+                                            <span class="input-group-text" x-show="it.unit" x-text="it.unit"></span></div>
+                                    </template>
+                                    <template x-if="it.type === 'texto'"><input class="form-control" x-model="insp.answers[it.key].value"></template>
+                                    <textarea class="form-control form-control-sm mt-2" rows="2" x-show="itemFails(it)" x-model="insp.answers[it.key].comment" placeholder="¿Qué pasa? (se crea una acción correctiva)"></textarea>
+                                    <div class="mt-2" x-show="it.photo === 'siempre' || itemFails(it)">
+                                        <label class="btn btn-sm btn-outline-secondary">📷 Foto<span x-show="it.photo === 'siempre' || (it.photo === 'si_no_cumple' && itemFails(it))"> (obligatoria)</span>
+                                            <input type="file" accept="image/*" capture="environment" hidden @change="addInspPhotos(it, $event)"></label>
+                                        <div class="photo-grid mt-2" x-show="insp.photos[it.key].length">
+                                            <template x-for="(ph, pi) in insp.photos[it.key]"><div class="position-relative"><img :src="ph.url" alt="Foto">
+                                                <button type="button" class="btn btn-sm btn-danger photo-remove" @click="removeInspPhoto(it, pi)">✕</button></div></template>
+                                        </div>
+                                    </div>
+                                    <div class="small text-danger mt-1" x-show="insp.showErrors && itemError(it)" x-text="itemError(it)"></div>
+                                </li>
+                            </template>
+                        </ul>
+                    </div>
+                </template>
+                <textarea class="form-control mb-3" rows="2" x-model="insp.notes" placeholder="Notas (opcional)"></textarea>
+                <button type="button" class="btn btn-primary btn-lg w-100 mb-2" :disabled="inspBusy" @click="saveInspection()"
+                        x-text="inspPending ? 'Guardar (faltan ' + inspPending + ')' : 'Guardar checklist'"></button>
+                <div class="small text-body-secondary text-center mb-4">Funciona sin señal: se envía cuando vuelva la conexión.</div>
+            </div>
+        </template>
+
+        <template x-if="!canCreate && meta && newMode === 'obs'"><div class="alert alert-secondary">Tu rol no puede cargar reportes.</div></template>
         <template x-if="!meta"><div class="alert alert-info small">Bajando los datos de la empresa… (la primera vez necesita conexión)</div></template>
-        <form @submit.prevent="save()" x-show="canCreate">
+        <form @submit.prevent="save()" x-show="canCreate && newMode === 'obs'">
             <button type="button" class="btn w-100 mb-3 py-3 fw-bold imminent-btn" :class="form.imminent ? 'btn-danger' : 'btn-outline-danger'" @click="toggleImminent()">
                 <span x-text="form.imminent ? '⚠ RIESGO INMINENTE (activado)' : '⚠ ¿Riesgo inminente? Tocá acá'"></span>
             </button>
@@ -359,6 +461,46 @@
 
     <!-- Mis reportes -->
     <main class="app-main" x-show="!detailUuid && !actionUuid && tab === 'reportes'">
+        <template x-if="inspDetailUuid && inspDetail">
+            <div>
+                <button class="btn btn-link px-0 mb-2" @click="history.length > 1 ? history.back() : go('reportes')">← Volver</button>
+                <template x-if="inspDetail.remote">
+                    <div>
+                        <div class="d-flex flex-wrap gap-2 align-items-center mb-1"><h2 class="h5 m-0" x-text="inspDetail.remote.code"></h2>
+                            <span class="badge" :class="resultClass(inspDetail.remote.result)" x-text="inspDetail.remote.result_label"></span>
+                            <span class="small text-body-secondary" x-show="inspDetail.remote.score !== null" x-text="inspDetail.remote.score + '%'"></span></div>
+                        <div class="fw-semibold" x-text="inspDetail.remote.template"></div>
+                        <div class="small text-body-secondary mb-3" x-text="(inspDetail.remote.equipment || inspDetail.remote.sector || '') + ' · ' + fmtDate(inspDetail.remote.done_at) + ' · ' + (inspDetail.remote.inspector || '')"></div>
+                        <ul class="list-group mb-3 small">
+                            <template x-for="a in inspDetail.remote.answers">
+                                <li class="list-group-item" :class="a.ok === false ? 'list-group-item-danger' : ''">
+                                    <div class="d-flex justify-content-between gap-2"><span><span class="badge text-bg-danger me-1" x-show="a.critical">Crítico</span><span x-text="a.text"></span></span>
+                                        <strong class="text-nowrap" x-text="(a.ok === true ? '✓ ' : a.ok === false ? '✗ ' : '') + a.value"></strong></div>
+                                    <div x-show="a.comment" x-text="a.comment"></div>
+                                    <a x-show="a.action_uuid" :href="'#/accion/' + a.action_uuid" x-text="'➜ Acción ' + a.action_code"></a>
+                                </li>
+                            </template>
+                        </ul>
+                    </div>
+                </template>
+                <template x-if="!inspDetail.remote && !inspDetail.loading">
+                    <div class="alert alert-secondary small" x-text="inspDetail.local && inspDetail.local.local ? 'Guardada en el celular: se envía cuando haya señal.' : 'Sin conexión: no se puede mostrar el detalle.'"></div>
+                </template>
+            </div>
+        </template>
+        <div x-show="!inspDetailUuid">
+        <template x-if="inspToday.length">
+            <div class="mb-4">
+                <h2 class="h6 text-body-secondary">Inspecciones para hoy</h2>
+                <template x-for="s in inspToday" :key="s.uuid">
+                    <a class="obs-card" href="#" @click.prevent="startInspection(s.template_uuid, s.equipment_uuid, s.uuid, s.sector_uuid)" :class="s.due_on < todayLocal() ? 'obs-imminent' : ''">
+                        <div class="d-flex justify-content-between gap-2"><strong x-text="s.equipment_uuid ? equipmentLabel(s.equipment_uuid) : sectorLabel(s.sector_uuid)"></strong>
+                            <span class="badge text-bg-primary">Hacer</span></div>
+                        <div class="small text-body-secondary" x-text="templateName(s.template_uuid) + (s.due_on < todayLocal() ? ' · vencida' : '')"></div>
+                    </a>
+                </template>
+            </div>
+        </template>
         <template x-if="myActions.length">
             <div class="mb-4">
                 <h2 class="h6 text-body-secondary">Mis acciones <span class="badge text-bg-danger" x-show="myOverdueActions" x-text="myOverdueActions + ' vencida(s)'"></span></h2>
@@ -371,6 +513,20 @@
                         </div>
                         <div class="small text-truncate" x-text="a.title"></div>
                         <div class="small" :class="actionLate(a) ? 'text-danger fw-semibold' : 'text-body-secondary'" x-text="dueText(a)"></div>
+                    </a>
+                </template>
+            </div>
+        </template>
+        <template x-if="inspections.length">
+            <div class="mb-4">
+                <h2 class="h6 text-body-secondary">Mis inspecciones</h2>
+                <template x-for="i in inspections.slice(0, 15)" :key="i.uuid">
+                    <a class="obs-card" :href="'#/inspeccion/' + i.uuid" :class="i.critical ? 'obs-imminent' : ''">
+                        <div class="d-flex justify-content-between gap-2"><strong x-text="i.code || i.template_name"></strong>
+                            <span class="badge" :class="i.local ? (i.sync_error ? 'text-bg-danger' : 'text-bg-warning') : resultClass(i.result)"
+                                  x-text="i.local ? (i.sync_error ? 'Rechazada' : 'Pendiente de enviar') : i.result_label"></span></div>
+                        <div class="small" x-text="(i.code ? i.template_name + ' · ' : '') + (i.equipment || sectorLabel(i.sector_uuid))"></div>
+                        <div class="small text-body-secondary" x-text="fmtDate(i.done_at) + (i.fails ? ' · ' + i.fails + ' no cumple(n)' : '')"></div>
                     </a>
                 </template>
             </div>
@@ -398,6 +554,7 @@
                     </a>
                 </template></div>
         </template>
+        </div>
     </main>
 
     <!-- Avisos -->
@@ -416,6 +573,8 @@
                     <span class="small text-success fw-normal" x-show="n.alert_acked" x-text="'✓ confirmada por ' + n.alert_acked_by"></span>
                     <a class="btn btn-outline-secondary btn-sm" x-show="n.observation_uuid" :href="'#/observacion/' + n.observation_uuid">Ver</a>
                     <a class="btn btn-outline-secondary btn-sm" x-show="n.action_uuid" :href="'#/accion/' + n.action_uuid">Ver acción</a>
+                    <a class="btn btn-outline-secondary btn-sm" x-show="n.inspection_uuid" :href="'#/inspeccion/' + n.inspection_uuid">Ver inspección</a>
+                    <a class="btn btn-primary btn-sm" x-show="n.schedule_uuid" :href="'#/programada/' + n.schedule_uuid">Hacer</a>
                 </div>
             </div>
         </template>
@@ -464,7 +623,7 @@
     </main>
 
     <nav class="tabbar">
-        <a :class="{ active: tab === 'reportar' && !detailUuid }" href="#/reportar"><span>➕</span>Reportar</a>
+        <a :class="{ active: tab === 'reportar' && !detailUuid }" href="#/reportar"><span>➕</span>Nuevo</a>
         <a :class="{ active: tab === 'reportes' && !detailUuid }" href="#/reportes"><span>📋</span>Reportes<b class="tab-badge" x-show="myOverdueActions" x-text="myOverdueActions"></b></a>
         <a :class="{ active: tab === 'rondas' && !detailUuid }" href="#/rondas"><span>🚶</span>Rondas</a>
         <a :class="{ active: tab === 'avisos' && !detailUuid }" href="#/avisos"><span>🔔</span>Avisos<b class="tab-badge" x-show="unread" x-text="unread"></b></a>

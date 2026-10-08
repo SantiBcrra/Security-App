@@ -448,6 +448,71 @@ return [
         $_SESSION = [];
     },
 
+    'app de campo: pull de checklists y de mis programadas' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        DB::tenant()->exec('UPDATE inspection_templates SET updated_at = updated_at - INTERVAL 60 SECOND');
+        DB::tenant()->exec('UPDATE inspection_schedule SET updated_at = updated_at - INTERVAL 60 SECOND');
+        $pull = function (array $u) {
+            UserAuth::setCurrent($u);
+            $page = App\Services\Sync\Pull::run(null, 1000);
+            return [(array) ($page['changes']->inspection_templates ?? []), (array) ($page['changes']->inspection_schedule ?? [])];
+        };
+        [$tpls, $sched] = $pull($st['rep']);
+        $ae = array_values(array_filter($tpls, fn ($t) => $t['name'] === 'Pre-uso autoelevador'))[0];
+        assert_true(count($ae['structure']['sections']) === 3 && $ae['version_uuid'] !== null && $ae['type_uuid'] !== null, 'estructura completa para hacerla offline');
+        assert_same([], $sched, 'el operario no tiene programadas a su cargo (son de los supervisores)');
+        [, $sched] = $pull($st['sup']);
+        $today = ActionService::today();
+        assert_true(count($sched) >= 1 && !array_filter($sched, fn ($s) => $s['equipment_uuid'] === null), 'el supervisor recibe las de su nave');
+        assert_true(in_array($st['ae2']['uuid'], array_column($sched, 'equipment_uuid'), true));
+        [, $sched2] = $pull($st['sup2']);
+        assert_same([], $sched2, 'el de otra nave no');
+    },
+
+    'app de campo: inspección offline por sync con foto por partes; reenvío sin duplicar' => function () use ($setup, &$st, $keys, $allOk, $photo) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['sup']);
+        $tpl = InspectionTemplates::findById((int) $st['tplAe']['id']);
+        $items = $keys($tpl);
+        $brake = $items['Frenos de servicio funcionan']['key'];
+        $uuid = Uuid::v4();
+        $today = ActionService::today();
+        $sched = App\Models\InspectionSchedules::search(['equipment_id' => (int) $st['ae2']['id'], 'status' => 'pendiente', 'due_on_from' => $today, 'due_on_to' => $today], null);
+        $data = ['uuid' => $uuid, 'template' => $tpl['uuid'], 'version' => $tpl['current_version_uuid'], 'equipment' => $st['ae2']['uuid'],
+            'schedule' => $sched[0]['uuid'] ?? null, 'done_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 300),
+            'answers' => $allOk($items, ['Frenos de servicio funcionan' => ['value' => 'no', 'comment' => 'No frena']])];
+        $op = fn (array $d) => ['op_id' => Uuid::v4(), 'type' => 'inspection.create', 'data' => $d];
+        $noPhoto = App\Services\Sync\Push::run([$op($data)])[0];
+        assert_true(str_contains((string) ($noPhoto['error'] ?? ''), 'Falta la foto'), 'sin declarar la foto obligatoria se rechaza');
+        $r = App\Services\Sync\Push::run([$op($data + ['photo_counts' => [$brake => 1]])])[0];
+        assert_same('ok', $r['status'], json_encode($r));
+        assert_same(['no_conforme_critico', 1], [$r['data']['result'], $r['data']['actions']]);
+        assert_same(true, App\Services\Sync\Push::run([$op($data + ['photo_counts' => [$brake => 1]])])[0]['data']['duplicate'], 'reenvío: no duplica');
+        $i = Inspections::findByUuid($uuid);
+        if ($sched) {
+            assert_same('hecha', App\Models\InspectionSchedules::findById((int) $sched[0]['id'])['status'], 'marca la programada indicada');
+        }
+        // La foto por partes, con su ítem
+        $bytes = file_get_contents($photo()['tmp']);
+        $up = Uuid::v4();
+        $init = App\Services\Uploads::init(['upload_uuid' => $up, 'inspection_uuid' => $uuid, 'item_key' => $brake, 'name' => 'freno.jpg',
+            'size' => strlen($bytes), 'sha256' => hash('sha256', $bytes)]);
+        assert_same('receiving', $init['status'] ?? null, json_encode($init));
+        App\Services\Uploads::chunk($up, 0, $bytes);
+        assert_same('completed', App\Services\Uploads::complete($up)['status'] ?? null);
+        $att = Inspections::attachments((int) $i['id']);
+        assert_same([1, $brake], [count($att), $att[0]['item_key']]);
+        UserAuth::setCurrent($st['rep2']);
+        $other = App\Services\Uploads::init(['upload_uuid' => Uuid::v4(), 'inspection_uuid' => $uuid, 'size' => 10, 'sha256' => str_repeat('a', 64)]);
+        assert_same(404, $other['code'] ?? null, 'nadie más sube fotos a una inspección ajena');
+        UserAuth::setCurrent($st['sup']);
+        $api = (new App\Controllers\Api\InspectionsController())->show(new App\Core\Request('GET', '/api/v1/inspections/' . $uuid), $uuid);
+        $json = json_decode($api->body, true)['data'];
+        assert_same(['no_conforme_critico', true], [$json['result'], (bool) array_filter($json['answers'], fn ($a) => $a['ok'] === false && $a['action_code'])]);
+    },
+
     'aislamiento: la empresa B no ve plantillas ni inspecciones de A' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['b']);

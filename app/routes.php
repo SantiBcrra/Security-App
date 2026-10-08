@@ -5,6 +5,7 @@ use App\Controllers\Api\AuthController as ApiAuthController;
 use App\Controllers\Api\DevicesController;
 use App\Controllers\Api\NotificationsController as ApiNotificationsController;
 use App\Controllers\Api\ActionsController as ApiActionsController;
+use App\Controllers\Api\InspectionsController as ApiInspectionsController;
 use App\Controllers\Api\ObservationsController as ApiObservationsController;
 use App\Controllers\Api\SyncController;
 use App\Controllers\Api\UploadsController;
@@ -238,6 +239,7 @@ return static function (Router $r): void {
             $r->get('/observations/{uuid}', [ApiObservationsController::class, 'show']);
             $r->get('/observations/{uuid}/photos/{photo}', [ApiObservationsController::class, 'photo']);
             $r->get('/actions/{uuid}', [ApiActionsController::class, 'show']);
+            $r->get('/inspections/{uuid}', [ApiInspectionsController::class, 'show']);
             $r->get('/actions/{uuid}/files/{file}', [ApiActionsController::class, 'file']);
             $r->get('/notifications', [ApiNotificationsController::class, 'index']);
             $r->post('/notifications/read', [ApiNotificationsController::class, 'readAll']);

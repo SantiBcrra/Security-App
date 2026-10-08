@@ -88,7 +88,7 @@ $setup = function () use (&$st, $root, $dropAll, $server, $master): void {
     $st['rep'] = $mk('reportante', 'rep@sy.test');
     UserSectors::replace((int) $st['sup']['id'], [$st['nave1']]);
     // Todo lo creado "hace un minuto": así el cursor no entra en la ventana de solapamiento.
-    foreach (['catalog_items', 'sites', 'sectors', 'positions'] as $t) {
+    foreach (['catalog_items', 'sites', 'sectors', 'positions', 'inspection_templates'] as $t) {
         DB::tenant()->exec("UPDATE {$t} SET updated_at = updated_at - INTERVAL 60 SECOND");
     }
     $st['ids'] = fn () => [

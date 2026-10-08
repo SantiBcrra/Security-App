@@ -71,6 +71,16 @@ document.addEventListener('alpine:init', () => {
         actionPhotos: [],      // evidencia ya subida (remota) + pendiente en el celular
         actionForm: { text: '', photos: [] },
         actionBusy: false,
+        newMode: 'obs',          // pestaña Nuevo: 'obs' (reportar observación) | 'insp' (hacer inspección)
+        inspTemplates: [],
+        inspSchedule: [],
+        inspections: [],
+        insp: null,              // checklist en curso
+        inspPickEquipment: null, // equipo escaneado con varios checklists posibles
+        inspSearch: '',
+        inspBusy: false,
+        inspDetailUuid: null,
+        inspDetail: null,
         detailUuid: null,
         toast: null,
         meta: null,
@@ -189,6 +199,19 @@ document.addEventListener('alpine:init', () => {
                 this.openDetail(id);
                 return;
             }
+            if (section === 'inspeccion' && id) {
+                this.detailUuid = null; this.actionUuid = null;
+                this.tab = 'reportes'; this.openInspection(id);
+                return;
+            }
+            if (section === 'programada' && id) { // desde un aviso "Inspección para hoy"
+                this.detailUuid = null; this.actionUuid = null; this.inspDetailUuid = null;
+                const s = this.inspSchedule.find((x) => x.uuid === id);
+                if (s) this.startInspection(s.template_uuid, s.equipment_uuid, s.uuid, s.sector_uuid);
+                this.tab = 'reportar'; this.newMode = 'insp';
+                return;
+            }
+            this.inspDetailUuid = null;
             if (section === 'accion' && id) {
                 this.detailUuid = null;
                 this.openAction(id);
@@ -222,6 +245,9 @@ document.addEventListener('alpine:init', () => {
             this.patrolRoutes = (await db.all('patrol_routes')).sort((a, b) => a.name.localeCompare(b.name));
             this.patrolScans = await db.all('patrol_scans');
             const order = { abierta: 0, en_curso: 0, cerrada: 1, verificada: 2, cancelada: 3 };
+            this.inspTemplates = (await db.all('inspection_templates')).sort((a, b) => a.name.localeCompare(b.name));
+            this.inspSchedule = (await db.all('inspection_schedule')).sort((a, b) => a.due_on.localeCompare(b.due_on));
+            this.inspections = (await db.all('inspections')).sort((a, b) => (b.done_at || '').localeCompare(a.done_at || ''));
             this.actions = (await db.all('actions')).sort((a, b) => (order[a.status] - order[b.status]) || (a.due_on || '').localeCompare(b.due_on || ''));
             this.patrolRounds = (await db.all('patrol_rounds')).sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
             // La ronda en curso sobrevive a cerrar la app: es la mía más reciente que no terminó
@@ -249,6 +275,131 @@ document.addEventListener('alpine:init', () => {
             return (q ? this.sectors.filter((s) => s.label.toLowerCase().includes(q)) : this.sectors).slice(0, 40);
         },
         get canCreate() { return !!this.meta?.permisos?.observaciones?.acciones?.includes('crear'); },
+        // ── inspecciones (checklists) ───────────────────────────────────
+        get canInspect() { return !!this.meta?.permisos?.inspecciones?.acciones?.includes('crear'); },
+        /** Programadas a mi cargo ya habilitadas (hoy y vencidas), sin las que ya hice en este celular. */
+        get inspToday() {
+            const done = new Set(this.inspections.map((i) => i.schedule).filter(Boolean));
+            return this.inspSchedule.filter((s) => s.due_from <= this.todayLocal() && !done.has(s.uuid));
+        },
+        get areaTemplates() { return this.inspTemplates.filter((t) => t.scope !== 'equipo'); },
+        get inspEquipmentResults() {
+            const q = this.inspSearch.trim().toLowerCase();
+            const typed = new Set(this.inspTemplates.filter((t) => t.scope === 'equipo').map((t) => t.type_uuid));
+            return this.equipment.filter((e) => typed.has(e.type_uuid) && (!q || (e.code + ' ' + e.name).toLowerCase().includes(q))).slice(0, 30);
+        },
+        templatesForEquipment(eq) { return eq ? this.inspTemplates.filter((t) => t.scope === 'equipo' && t.type_uuid === eq.type_uuid) : []; },
+        templateName(uuid) { return this.inspTemplates.find((t) => t.uuid === uuid)?.name || 'Checklist'; },
+        equipmentLabel(uuid) { const e = this.equipment.find((x) => x.uuid === uuid); return e ? e.code + ' · ' + e.name : ''; },
+        /** Equipo elegido (escaneado o de la lista): si tiene un solo checklist se abre directo. */
+        chooseEquipment(eq) {
+            const list = this.templatesForEquipment(eq);
+            if (!list.length) { this.flash('No hay checklists para ' + eq.code + '.'); return; }
+            const sched = this.inspToday.find((s) => s.equipment_uuid === eq.uuid);
+            if (list.length === 1) { this.startInspection(list[0].uuid, eq.uuid, sched?.template_uuid === list[0].uuid ? sched.uuid : null); return; }
+            this.inspPickEquipment = eq;
+        },
+        startInspection(templateUuid, equipmentUuid = null, scheduleUuid = null, sectorUuid = null) {
+            const t = this.inspTemplates.find((x) => x.uuid === templateUuid);
+            if (!t) { this.flash('Ese checklist todavía no está en el celular: sincronizá.'); return; }
+            const answers = {};
+            const photos = {};
+            for (const sec of t.structure.sections) for (const it of sec.items) { answers[it.key] = { value: '', comment: '' }; photos[it.key] = []; }
+            const eq = this.equipment.find((e) => e.uuid === equipmentUuid);
+            this.insp = { uuid: crypto.randomUUID(), template: t, equipment: eq || null, schedule: scheduleUuid,
+                sector: sectorUuid || eq?.sector_uuid || '', answers, photos, notes: '', startedAt: new Date().toISOString(), showErrors: false };
+            this.inspPickEquipment = null;
+            this.newMode = 'insp';
+            if (location.hash !== '#/reportar') this.go('reportar');
+            window.scrollTo(0, 0);
+        },
+        cancelInspection() {
+            if (!confirm('¿Descartar este checklist? Lo cargado se pierde.')) return;
+            Object.values(this.insp.photos).flat().forEach((p) => URL.revokeObjectURL(p.url));
+            this.insp = null;
+        },
+        itemFails(it) {
+            const v = this.insp.answers[it.key].value;
+            if (it.type === 'si_no' || it.type === 'si_no_na') return v !== '' && v !== 'na' && v !== it.ok_when;
+            if (it.type === 'numero' && v !== '' && !isNaN(parseFloat(String(v).replace(',', '.')))) {
+                const n = parseFloat(String(v).replace(',', '.'));
+                return (it.min !== null && n < it.min) || (it.max !== null && n > it.max);
+            }
+            return false;
+        },
+        itemError(it) {
+            const a = this.insp.answers[it.key];
+            if ((it.type === 'si_no' || it.type === 'si_no_na') && !a.value) return 'Falta responder';
+            if (it.type === 'numero' && (a.value === '' || isNaN(parseFloat(String(a.value).replace(',', '.'))))) return 'Cargá un número';
+            const fails = this.itemFails(it);
+            if (fails && !a.comment.trim()) return 'Contá qué pasa';
+            if ((it.photo === 'siempre' || (it.photo === 'si_no_cumple' && fails)) && !this.insp.photos[it.key].length) return 'Falta la foto';
+            return null;
+        },
+        get inspPending() {
+            if (!this.insp) return 0;
+            let n = 0;
+            for (const sec of this.insp.template.structure.sections) for (const it of sec.items) if (this.itemError(it)) n++;
+            if (this.insp.template.scope !== 'equipo' && !this.insp.sector) n++;
+            return n;
+        },
+        async addInspPhotos(it, event) {
+            const files = [...event.target.files].slice(0, 3 - this.insp.photos[it.key].length);
+            event.target.value = '';
+            for (const f of files) {
+                const blob = await shrinkPhoto(f);
+                this.insp.photos[it.key].push({ blob, url: URL.createObjectURL(blob), name: 'item.jpg' });
+            }
+        },
+        removeInspPhoto(it, i) { URL.revokeObjectURL(this.insp.photos[it.key][i].url); this.insp.photos[it.key].splice(i, 1); },
+        /** Se guarda en el celular: checklist + fotos; se envía cuando hay señal (primero la inspección, después las fotos). */
+        async saveInspection() {
+            this.insp.showErrors = true;
+            if (this.inspPending) { alert('Faltan ' + this.inspPending + ' dato(s): revisá los ítems marcados en rojo.'); return; }
+            this.inspBusy = true;
+            try {
+                const i = this.insp;
+                const gps = await this.currentPosition();
+                const photoCounts = {};
+                for (const [key, list] of Object.entries(i.photos)) {
+                    if (!list.length) continue;
+                    photoCounts[key] = list.length;
+                    for (const p of list) {
+                        await db.put('uploads', { upload_uuid: crypto.randomUUID(), inspection_uuid: i.uuid, item_key: key, name: p.name, size: p.blob.size,
+                            sha256: await sha256Hex(p.blob), blob: p.blob, status: 'pending', received: 0 });
+                        URL.revokeObjectURL(p.url);
+                    }
+                }
+                const answers = {};
+                for (const [key, a] of Object.entries(i.answers)) answers[key] = { value: String(a.value), comment: a.comment.trim() };
+                const fails = i.template.structure.sections.flatMap((s) => s.items).filter((it) => this.itemFails(it));
+                const doneAt = new Date().toISOString();
+                await db.put('inspections', { uuid: i.uuid, local: true, template_name: i.template.name, equipment: i.equipment ? i.equipment.code + ' · ' + i.equipment.name : null,
+                    sector_uuid: i.sector || null, schedule: i.schedule, done_at: doneAt, fails: fails.length, critical: fails.filter((it) => it.critical).length });
+                await enqueue('inspection.create', { uuid: i.uuid, template: i.template.uuid, version: i.template.version_uuid, equipment: i.equipment?.uuid,
+                    sector: i.sector || undefined, schedule: i.schedule || undefined, done_at: doneAt, lat: gps?.lat, lng: gps?.lng, gps_accuracy: gps?.acc,
+                    notes: i.notes.trim() || undefined, answers, photo_counts: photoCounts });
+                const critical = fails.some((it) => it.critical);
+                this.insp = null;
+                await this.reloadLocal();
+                if (critical) alert('⚠ Falló un ítem CRÍTICO. No uses el equipo y avisá al supervisor. Se crea la acción correctiva al enviar.');
+                this.flash((await isOnline()) ? 'Checklist guardado. Enviando…' : 'Checklist guardado en el celular. Se envía cuando haya señal.');
+                this.go('reportes');
+                syncNow('save');
+            } catch (e) {
+                alert('No se pudo guardar: ' + e.message);
+            } finally {
+                this.inspBusy = false;
+            }
+        },
+        async openInspection(uuid) {
+            this.inspDetailUuid = uuid;
+            this.inspDetail = { local: await db.get('inspections', uuid), remote: null, loading: true };
+            try { this.inspDetail.remote = await request('GET', '/inspections/' + uuid); } catch (e) { /* sin red o todavía no enviada */ }
+            this.inspDetail.loading = false;
+        },
+        resultClass(r) { return { conforme: 'text-bg-success', con_observaciones: 'text-bg-warning', no_conforme_critico: 'text-bg-danger' }[r] || 'text-bg-secondary'; },
+
         // ── acciones (CAPA) ────────────────────────────────────────────
         get myActions() { return this.actions.filter((a) => a.mine && (['abierta', 'en_curso', 'cerrada'].includes(a.status) || a.pending)); },
         get myOverdueActions() { return this.myActions.filter((a) => this.actionLate(a)).length; },
@@ -421,6 +572,12 @@ document.addEventListener('alpine:init', () => {
                         const m = codes.map((c) => c.rawValue.match(/\/q\/([0-9a-f-]{36})/i)).find(Boolean);
                         if (m) {
                             const eq = this.equipment.find((e) => e.uuid === m[1].toLowerCase());
+                            if (eq && this.newMode === 'insp') {
+                                this.scanner.open = false;
+                                stream.getTracks().forEach((t) => t.stop());
+                                this.chooseEquipment(eq);
+                                return;
+                            }
                             if (eq) {
                                 this.form.equipment = eq.uuid;
                                 if (eq.sector_uuid && !this.form.sector) this.pickSector(this.sectors.find((s) => s.uuid === eq.sector_uuid) || { uuid: eq.sector_uuid, label: '' });
