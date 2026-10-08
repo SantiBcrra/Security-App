@@ -69,8 +69,81 @@
         </div>
     </header>
 
+    <!-- Detalle de una acción (CAPA) -->
+    <main class="app-main" x-show="actionUuid">
+        <button class="btn btn-link px-0 mb-2" @click="closeAction()">← Volver</button>
+        <div class="alert alert-secondary small" x-show="action && !action.local && !action.loading">Esta acción todavía no está en el celular. Conectate y sincronizá.</div>
+        <template x-if="action && action.local">
+            <div>
+                <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
+                    <h2 class="h5 m-0" x-text="action.local.code"></h2>
+                    <span class="badge" :class="action.local.pending ? 'text-bg-warning' : 'text-bg-secondary'" x-text="action.local.pending ? action.local.status_label + ' · sin enviar' : action.local.status_label"></span>
+                    <span class="badge text-bg-danger" x-show="action.local.priority === 'critica'">Crítica</span>
+                    <span class="badge text-bg-warning" x-show="action.local.priority === 'alta'">Alta</span>
+                </div>
+                <div class="fw-semibold mb-2" x-text="action.local.title"></div>
+                <div class="alert alert-danger small py-2" x-show="action.local.sync_error" x-text="'El servidor lo rechazó: ' + action.local.sync_error"></div>
+                <div class="card mb-3"><div class="card-body small">
+                    <div :class="actionLate(action.local) ? 'text-danger fw-semibold' : ''" x-text="dueText(action.local)"></div>
+                    <div class="text-body-secondary" x-show="action.local.sector_uuid" x-text="sectorLabel(action.local.sector_uuid)"></div>
+                    <div class="text-body-secondary">Responsable: <span x-text="action.local.responsible"></span></div>
+                    <div class="text-body-secondary" x-show="!action.local.observation_uuid" x-text="'Origen: ' + action.local.origin"></div>
+                    <a x-show="action.local.observation_uuid" :href="'#/observacion/' + action.local.observation_uuid" x-text="'Origen: observación ' + action.local.observation_code"></a>
+                    <p class="mt-2 mb-0" style="white-space: pre-wrap" x-show="action.local.description" x-text="action.local.description"></p>
+                </div></div>
+
+                <div class="card mb-3 border-warning" x-show="action.local.closure_text"><div class="card-body small">
+                    <div class="fw-semibold">Cierre</div>
+                    <div style="white-space: pre-wrap" x-text="action.local.closure_text"></div>
+                    <div class="text-body-secondary mt-1" x-show="action.local.status === 'cerrada'">Falta que Seguridad e Higiene verifique si fue eficaz.</div>
+                </div></div>
+
+                <div class="photo-grid mb-3" x-show="actionPhotos.length">
+                    <template x-for="p in actionPhotos"><div class="position-relative"><img :src="p.url" alt="Evidencia" :style="p.old ? 'opacity:.5' : ''">
+                        <span class="badge text-bg-warning photo-pending" x-show="p.pending">pendiente</span>
+                        <span class="badge text-bg-secondary photo-pending" x-show="p.old">intento anterior</span></div></template>
+                </div>
+
+                <button class="btn btn-outline-primary w-100 mb-2" x-show="action.local.can_start && action.local.status === 'abierta' && !action.local.pending" @click="startAction()">Tomar: empiezo a trabajar</button>
+
+                <template x-if="action.local.can_close && ['abierta', 'en_curso'].includes(action.local.status)">
+                    <div class="card mb-3"><div class="card-body">
+                        <div class="fw-semibold mb-2">Cerrar con evidencia</div>
+                        <label class="form-label small mb-1">¿Qué se hizo?</label>
+                        <textarea class="form-control mb-2" rows="3" x-model="actionForm.text" placeholder="Ej: se colocó la guarda y se probó la máquina"></textarea>
+                        <label class="btn btn-outline-secondary w-100 mb-2">📷 Sacar o elegir fotos
+                            <input type="file" accept="image/*" capture="environment" multiple hidden @change="addActionPhotos($event)"></label>
+                        <div class="photo-grid mb-2" x-show="actionForm.photos.length">
+                            <template x-for="(p, i) in actionForm.photos"><div class="position-relative"><img :src="p.url" alt="Foto">
+                                <button type="button" class="btn btn-sm btn-danger photo-remove" @click="removeActionPhoto(i)">✕</button></div></template>
+                        </div>
+                        <div class="small text-body-secondary mb-2" x-show="action.local.evidence > 0 && !actionForm.photos.length" x-text="'Ya hay ' + action.local.evidence + ' archivo(s) de evidencia.'"></div>
+                        <button class="btn btn-success w-100" :disabled="actionBusy" @click="submitClose()">Cerrar acción</button>
+                        <div class="small text-body-secondary mt-2">Funciona sin señal: se envía cuando vuelva la conexión.</div>
+                    </div></div>
+                </template>
+
+                <template x-if="action.remote">
+                    <div class="card mb-3">
+                        <div class="card-header small fw-semibold">Línea de tiempo</div>
+                        <ul class="list-group list-group-flush small">
+                            <template x-for="ev in [...action.remote.events].reverse()">
+                                <li class="list-group-item">
+                                    <div class="d-flex justify-content-between"><strong x-text="ev.label"></strong><span class="text-body-secondary" x-text="fmtDate(ev.at)"></span></div>
+                                    <div class="text-body-secondary" x-text="ev.actor"></div>
+                                    <div x-show="ev.comment" style="white-space: pre-wrap" x-text="ev.comment"></div>
+                                </li>
+                            </template>
+                        </ul>
+                    </div>
+                </template>
+                <div class="text-center small text-body-secondary" x-show="!action.remote && !action.loading">Sin conexión: se muestra lo guardado en el celular.</div>
+            </div>
+        </template>
+    </main>
+
     <!-- Detalle de una observación -->
-    <main class="app-main" x-show="detailUuid">
+    <main class="app-main" x-show="detailUuid && !actionUuid">
         <button class="btn btn-link px-0 mb-2" @click="closeDetail()">← Volver</button>
         <template x-if="detail && detail.local">
             <div>
@@ -129,7 +202,7 @@
     </main>
 
     <!-- Rondas -->
-    <main class="app-main" x-show="!detailUuid && tab === 'rondas'">
+    <main class="app-main" x-show="!detailUuid && !actionUuid && tab === 'rondas'">
         <!-- Punto escaneado -->
         <template x-if="roundPointUuid">
             <div>
@@ -211,7 +284,7 @@
     </main>
 
     <!-- Reportar -->
-    <main class="app-main" x-show="!detailUuid && tab === 'reportar'">
+    <main class="app-main" x-show="!detailUuid && !actionUuid && tab === 'reportar'">
         <template x-if="!canCreate && meta"><div class="alert alert-secondary">Tu rol no puede cargar reportes.</div></template>
         <template x-if="!meta"><div class="alert alert-info small">Bajando los datos de la empresa… (la primera vez necesita conexión)</div></template>
         <form @submit.prevent="save()" x-show="canCreate">
@@ -285,7 +358,23 @@
     </main>
 
     <!-- Mis reportes -->
-    <main class="app-main" x-show="!detailUuid && tab === 'reportes'">
+    <main class="app-main" x-show="!detailUuid && !actionUuid && tab === 'reportes'">
+        <template x-if="myActions.length">
+            <div class="mb-4">
+                <h2 class="h6 text-body-secondary">Mis acciones <span class="badge text-bg-danger" x-show="myOverdueActions" x-text="myOverdueActions + ' vencida(s)'"></span></h2>
+                <template x-for="a in myActions" :key="a.uuid">
+                    <a class="obs-card" :href="'#/accion/' + a.uuid" :class="actionLate(a) ? 'obs-imminent' : ''">
+                        <div class="d-flex justify-content-between gap-2">
+                            <strong x-text="a.code"></strong>
+                            <span class="badge" :class="a.pending ? 'text-bg-warning' : (a.status === 'cerrada' ? 'text-bg-secondary' : 'text-bg-primary')"
+                                  x-text="a.pending ? 'Sin enviar' : a.status_label"></span>
+                        </div>
+                        <div class="small text-truncate" x-text="a.title"></div>
+                        <div class="small" :class="actionLate(a) ? 'text-danger fw-semibold' : 'text-body-secondary'" x-text="dueText(a)"></div>
+                    </a>
+                </template>
+            </div>
+        </template>
         <h2 class="h6 text-body-secondary">Mis reportes</h2>
         <div class="text-body-secondary small mb-3" x-show="!myReports.length">Todavía no cargaste reportes desde este celular.</div>
         <template x-for="o in myReports" :key="o.uuid">
@@ -312,7 +401,7 @@
     </main>
 
     <!-- Avisos -->
-    <main class="app-main" x-show="!detailUuid && tab === 'avisos'">
+    <main class="app-main" x-show="!detailUuid && !actionUuid && tab === 'avisos'">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h2 class="h6 text-body-secondary m-0">Avisos</h2>
             <button class="btn btn-sm btn-link" @click="markAllRead()" x-show="unread">Marcar leídos</button>
@@ -326,13 +415,14 @@
                     <button class="btn btn-danger btn-sm" x-show="n.alert_uuid && !n.alert_acked" @click="ack(n)">Recibido</button>
                     <span class="small text-success fw-normal" x-show="n.alert_acked" x-text="'✓ confirmada por ' + n.alert_acked_by"></span>
                     <a class="btn btn-outline-secondary btn-sm" x-show="n.observation_uuid" :href="'#/observacion/' + n.observation_uuid">Ver</a>
+                    <a class="btn btn-outline-secondary btn-sm" x-show="n.action_uuid" :href="'#/accion/' + n.action_uuid">Ver acción</a>
                 </div>
             </div>
         </template>
     </main>
 
     <!-- Ajustes -->
-    <main class="app-main" x-show="!detailUuid && tab === 'ajustes'">
+    <main class="app-main" x-show="!detailUuid && !actionUuid && tab === 'ajustes'">
         <div class="card mb-3"><div class="card-body small">
             <div class="fw-semibold" x-text="meta?.usuario?.nombre"></div>
             <div class="text-body-secondary" x-text="(meta?.usuario?.rol || '') + ' · ' + (meta?.empresa?.nombre || '')"></div>
@@ -375,7 +465,7 @@
 
     <nav class="tabbar">
         <a :class="{ active: tab === 'reportar' && !detailUuid }" href="#/reportar"><span>➕</span>Reportar</a>
-        <a :class="{ active: tab === 'reportes' && !detailUuid }" href="#/reportes"><span>📋</span>Reportes</a>
+        <a :class="{ active: tab === 'reportes' && !detailUuid }" href="#/reportes"><span>📋</span>Reportes<b class="tab-badge" x-show="myOverdueActions" x-text="myOverdueActions"></b></a>
         <a :class="{ active: tab === 'rondas' && !detailUuid }" href="#/rondas"><span>🚶</span>Rondas</a>
         <a :class="{ active: tab === 'avisos' && !detailUuid }" href="#/avisos"><span>🔔</span>Avisos<b class="tab-badge" x-show="unread" x-text="unread"></b></a>
         <a :class="{ active: tab === 'ajustes' && !detailUuid }" href="#/ajustes"><span>⚙️</span>Ajustes</a>

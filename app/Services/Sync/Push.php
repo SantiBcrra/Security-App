@@ -20,7 +20,7 @@ use App\Services\UserAuth;
 final class Push
 {
     public const MAX_OPS = 50;
-    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish'];
+    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'action.start', 'action.close'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
     public static function run(array $operations): array
@@ -63,6 +63,8 @@ final class Push
                 'round.start'            => self::roundStart($data),
                 'round.scan'             => self::roundScan($data),
                 'round.finish'           => self::roundFinish($data),
+                'action.start'           => self::actionStep($data, 'tomar'),
+                'action.close'           => self::actionStep($data, 'cerrar'),
                 default                  => self::error('Tipo de operación desconocido: ' . $type),
             };
         } catch (UserError $e) {
@@ -142,6 +144,30 @@ final class Push
         if (!UserAuth::can('rondas', 'cerrar')) return self::error('Tu rol no puede cerrar rondas.');
         $r = Patrols::finish((string) ($data['round_uuid'] ?? ''));
         return ['status' => 'ok', 'data' => ['uuid' => $r['uuid'], 'status' => $r['status']]];
+    }
+
+    /**
+     * Tomar o cerrar una acción desde el celular. La evidencia ya subió por partes (la app manda el
+     * cierre después de las fotos). Si ya estaba hecho por el mismo usuario, se responde ok (reenvío).
+     */
+    private static function actionStep(array $data, string $key): array
+    {
+        $a = \App\Models\Actions::findByUuid((string) ($data['uuid'] ?? ''));
+        if ($a === null || !\App\Services\ActionService::canView($a)) {
+            return self::error('La acción no existe o ya no tenés acceso.');
+        }
+        $me = (int) UserAuth::user()['id'];
+        $done = $key === 'tomar' ? in_array($a['status'], ['en_curso', 'cerrada', 'verificada'], true)
+            : ($a['status'] === 'cerrada' && (int) $a['closed_by'] === $me) || $a['status'] === 'verificada';
+        if (!$done) {
+            $error = \App\Services\ActionService::transition($a, $key, ['closure_text' => $data['closure_text'] ?? '']);
+            if ($error !== null) {
+                return self::error($error);
+            }
+        }
+        $fresh = \App\Models\Actions::findByUuid($a['uuid']);
+        return ['status' => 'ok', 'data' => ['uuid' => $fresh['uuid'], 'status' => $fresh['status'],
+            'status_label' => \App\Services\ActionWorkflow::label($fresh['status']), 'duplicate' => $done]];
     }
 
     private static function error(string $message): array

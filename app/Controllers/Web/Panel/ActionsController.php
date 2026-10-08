@@ -133,7 +133,7 @@ final class ActionsController
             'files'       => ActionAttachments::forAction((int) $a['id']),
             'transitions' => ActionWorkflow::available($a),
             'canEdit'     => ActionService::canEdit($a),
-            'canEvidence' => ActionWorkflow::isOpen($a['status']) && (ActionService::isResponsible($a) || UserAuth::can(ActionService::MODULE, 'cerrar')),
+            'canEvidence' => ActionService::canAddEvidence($a),
             'users'       => ActionService::assignableUsers(),
             'today'       => ActionService::today(),
             'old'         => $old,

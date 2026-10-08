@@ -347,41 +347,61 @@ final class ActionService
     /** Agregar evidencia antes de cerrar (queda en el ciclo actual). */
     public static function addEvidence(array $a, array $files): array
     {
-        if (!ActionWorkflow::isOpen($a['status']) || !(self::isResponsible($a) || UserAuth::can(self::MODULE, 'cerrar'))) {
+        if (!self::canAddEvidence($a)) {
             return ['No podés agregar evidencia a esta acción.'];
         }
         return self::storeFiles($a, array_slice($files, 0, self::MAX_FILES), 'evidencia');
+    }
+
+    /** ¿Puede agregar evidencia? El responsable o quien puede cerrar, mientras la acción esté abierta. */
+    public static function canAddEvidence(array $a): bool
+    {
+        return ActionWorkflow::isOpen($a['status']) && self::canView($a) && (self::isResponsible($a) || UserAuth::can(self::MODULE, 'cerrar'));
     }
 
     /** @return list<string> errores por archivo (los válidos se guardan igual) */
     public static function storeFiles(array $a, array $files, string $kind): array
     {
         $errors = [];
-        $saved = 0;
-        $tenant = Tenant::current()['uuid'];
-        $me = UserAuth::user()['id'] ?? null;
         foreach ($files as $f) {
             try {
-                $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($f['tmp']) ?: '';
-                if (isset(ImageProcessor::TYPES[$mime])) {
-                    $meta = ImageProcessor::store($tenant, $f['tmp'], $f['name'] ?? null, $f['upload'] ?? true, $me, 'actions');
-                } else {
-                    $relative = TenantFiles::storeFile($tenant, $f['tmp'], 'actions/' . gmdate('Y') . '/' . gmdate('m'),
-                        self::FILE_TYPES, ImageProcessor::MAX_BYTES, $f['upload'] ?? true);
-                    $full = TenantFiles::path($tenant, $relative);
-                    $meta = ['path' => $relative, 'original_name' => isset($f['name']) ? mb_substr(basename((string) $f['name']), 0, 191) : null,
-                        'mime' => $mime, 'size_bytes' => (int) filesize($full), 'sha256' => hash_file('sha256', $full), 'uploaded_by' => $me];
-                }
-                ActionAttachments::create((int) $a['id'], $kind, (int) $a['cycle'], $meta);
-                $saved++;
+                self::storeFile($a, $f, $kind, false);
             } catch (\DomainException $e) {
                 $errors[] = ($f['name'] ?? 'Archivo') . ': ' . $e->getMessage();
             }
         }
+        $saved = count($files) - count($errors);
         if ($saved > 0) {
             ActionEvents::add((int) $a['id'], 'evidence', ['data' => ['archivos' => $saved, 'tipo' => $kind]] + self::actor());
+            Actions::update((int) $a['id'], []); // updated_at: la app de campo se entera por la sync
         }
         return $errors;
+    }
+
+    /**
+     * Guarda un archivo (foto o PDF) como evidencia inmutable del ciclo actual. @return string uuid del adjunto
+     * @throws \DomainException tipo o tamaño inválido
+     */
+    public static function storeFile(array $a, array $f, string $kind, bool $logEvent = true): string
+    {
+        $tenant = Tenant::current()['uuid'];
+        $me = UserAuth::user()['id'] ?? null;
+        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($f['tmp']) ?: '';
+        if (isset(ImageProcessor::TYPES[$mime])) {
+            $meta = ImageProcessor::store($tenant, $f['tmp'], $f['name'] ?? null, $f['upload'] ?? true, $me, 'actions');
+        } else {
+            $relative = TenantFiles::storeFile($tenant, $f['tmp'], 'actions/' . gmdate('Y') . '/' . gmdate('m'),
+                self::FILE_TYPES, ImageProcessor::MAX_BYTES, $f['upload'] ?? true);
+            $full = TenantFiles::path($tenant, $relative);
+            $meta = ['path' => $relative, 'original_name' => isset($f['name']) ? mb_substr(basename((string) $f['name']), 0, 191) : null,
+                'mime' => $mime, 'size_bytes' => (int) filesize($full), 'sha256' => hash_file('sha256', $full), 'uploaded_by' => $me];
+        }
+        $uuid = ActionAttachments::create((int) $a['id'], $kind, (int) $a['cycle'], $meta);
+        if ($logEvent) {
+            ActionEvents::add((int) $a['id'], 'evidence', ['data' => ['archivos' => 1, 'tipo' => $kind]] + self::actor());
+            Actions::update((int) $a['id'], []);
+        }
+        return $uuid;
     }
 
     /**

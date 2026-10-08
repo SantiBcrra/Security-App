@@ -180,6 +180,10 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   ya no existen (migración 0041).
 - Tablero `/panel/acciones/tablero` (`Actions::board()`, con alcance), CSV `/panel/acciones/exportar` (";" + BOM,
   permiso exportar), imprimible `/panel/acciones/{uuid}/imprimir`, "Mis acciones pendientes" en el inicio.
+- App de campo: entidad `actions` en `Sync\Pull` (alcance en PHP con `ActionService::canView`; si deja de verla, baja),
+  operaciones `action.start` / `action.close` en `Sync\Push`, evidencia por partes con `POST /uploads` + `action_uuid`.
+  En `sync.js` el cierre espera a que suban sus fotos (dos pasadas de `pushOps`); "Mis acciones" en la pestaña Reportes y
+  detalle `#/accion/{uuid}`. Reintentar un envío rechazado genera otro op_id (el servidor recuerda la respuesta de cada uno).
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

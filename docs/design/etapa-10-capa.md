@@ -1,6 +1,6 @@
 # Etapa 10 — Acciones correctivas y preventivas (CAPA) · Diseño
 
-Estado: **aprobado** · entregas 1 y 2 hechas (decisiones del usuario: la observación se cierra sola; app de campo incluida en esta etapa).
+Estado: **aprobado** · entregas 1, 2 y 3 hechas (Etapa 10 completa) (decisiones del usuario: la observación se cierra sola; app de campo incluida en esta etapa).
 
 ## 1. Qué resuelve
 Hoy una observación con "acción asignada" guarda tres campos sueltos:

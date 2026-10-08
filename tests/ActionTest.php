@@ -449,6 +449,66 @@ return [
         assert_same($e, $events(), 'correrla de nuevo no duplica');
     },
 
+    'app de campo: pull de acciones con alcance y baja al reasignar' => function () use ($setup, &$st, $newAction) {
+        $setup();
+        $a = $newAction($st['hys'], $st['rep2'], $st['nave2'], ['title' => 'Despejar salida de emergencia']);
+        $pull = function (array $user) {
+            UserAuth::setCurrent($user);
+            $page = \App\Services\Sync\Pull::run(null, 1000);
+            return [array_column((array) ($page['changes']->actions ?? []), null, 'uuid'), (array) ($page['deleted']->actions ?? [])];
+        };
+        [$mine] = $pull($st['rep2']);
+        assert_true(isset($mine[$a['uuid']]), 'el responsable la recibe');
+        $row = $mine[$a['uuid']];
+        assert_same([true, true, true, 0], [$row['mine'], $row['can_start'], $row['can_close'], $row['evidence']]);
+        assert_true(!isset($row['responsible_user_id']) && !isset($row['id']), 'sin ids internos');
+        [$sup] = $pull($st['sup']);
+        assert_true(!isset($sup[$a['uuid']]), 'el supervisor de otra nave no la recibe');
+        // Se reasigna: al viejo responsable le llega como baja
+        UserAuth::setCurrent($st['hys']);
+        ActionService::update(Actions::findByUuid($a['uuid']), ['title' => $a['title'], 'responsible' => $st['rep']['uuid'], 'due_on' => $a['due_on'],
+            'priority' => $a['priority'], 'type' => $a['type'], 'comment' => 'Cambio de turno']);
+        [, $deleted] = $pull($st['rep2']);
+        assert_true(in_array($a['uuid'], $deleted, true), 'le llega como baja');
+        $st['mobile'] = Actions::findByUuid($a['uuid']);
+    },
+
+    'app de campo: tomar y cerrar offline con foto por partes, reenvíos sin duplicar' => function () use ($setup, &$st, $photo) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['rep']);
+        $a = $st['mobile'];
+        $op = fn (string $type, array $data) => ['op_id' => \App\Core\Uuid::v4(), 'type' => $type, 'data' => $data];
+        $start = $op('action.start', ['uuid' => $a['uuid']]);
+        assert_same('en_curso', \App\Services\Sync\Push::run([$start])[0]['data']['status']);
+        assert_same(true, \App\Services\Sync\Push::run([$op('action.start', ['uuid' => $a['uuid']])])[0]['data']['duplicate'], 'tomar dos veces no falla');
+        $closeNoPhoto = \App\Services\Sync\Push::run([$op('action.close', ['uuid' => $a['uuid'], 'closure_text' => 'Salida despejada y señalizada'])])[0];
+        assert_true(str_contains((string) ($closeNoPhoto['error'] ?? ''), 'evidencia'), 'sin foto el servidor no la cierra');
+        // Foto por partes como evidencia de la acción
+        $jpg = $photo()['tmp'];
+        $bytes = file_get_contents($jpg);
+        $id = \App\Core\Uuid::v4();
+        $init = \App\Services\Uploads::init(['upload_uuid' => $id, 'action_uuid' => $a['uuid'], 'name' => 'salida.jpg', 'size' => strlen($bytes), 'sha256' => hash('sha256', $bytes)]);
+        assert_same('receiving', $init['status'] ?? null, json_encode($init));
+        \App\Services\Uploads::chunk($id, 0, $bytes);
+        $done = \App\Services\Uploads::complete($id);
+        assert_same('completed', $done['status'] ?? null, json_encode($done));
+        assert_same($done, \App\Services\Uploads::complete($id), 'completar dos veces es idempotente');
+        assert_same(1, ActionAttachments::countEvidence((int) $a['id'], (int) $a['cycle']));
+        $close = $op('action.close', ['uuid' => $a['uuid'], 'closure_text' => 'Salida despejada y señalizada']);
+        $r1 = \App\Services\Sync\Push::run([$close])[0];
+        assert_same('cerrada', $r1['data']['status'] ?? null, json_encode($r1));
+        assert_same($r1, \App\Services\Sync\Push::run([$close])[0], 'mismo op_id: mismo resultado');
+        assert_same(true, \App\Services\Sync\Push::run([$op('action.close', ['uuid' => $a['uuid'], 'closure_text' => 'otra vez'])])[0]['data']['duplicate'],
+            'reenvío con otro op_id: no falla ni pisa el cierre');
+        assert_same('Salida despejada y señalizada', Actions::findByUuid($a['uuid'])['closure_text']);
+        $late = \App\Services\Uploads::init(['upload_uuid' => \App\Core\Uuid::v4(), 'action_uuid' => $a['uuid'], 'name' => 'x.jpg', 'size' => 10, 'sha256' => str_repeat('a', 64)]);
+        assert_same(404, $late['code'] ?? null, 'a una acción cerrada ya no se le sube evidencia');
+        UserAuth::setCurrent($st['rep2']);
+        assert_true(str_contains((string) (\App\Services\Sync\Push::run([$op('action.start', ['uuid' => $st['a1']['uuid']])])[0]['error'] ?? ''), 'acceso'),
+            'otro usuario no puede tocar una acción que no ve');
+    },
+
     'aislamiento: la empresa B no ve acciones de A' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['b']);

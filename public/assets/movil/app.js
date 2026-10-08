@@ -65,6 +65,12 @@ document.addEventListener('alpine:init', () => {
         patrolRoutes: [],
         patrolRounds: [],
         patrolScans: [],
+        actions: [],
+        actionUuid: null,
+        action: null,          // { local, remote, loading }
+        actionPhotos: [],      // evidencia ya subida (remota) + pendiente en el celular
+        actionForm: { text: '', photos: [] },
+        actionBusy: false,
         detailUuid: null,
         toast: null,
         meta: null,
@@ -183,6 +189,12 @@ document.addEventListener('alpine:init', () => {
                 this.openDetail(id);
                 return;
             }
+            if (section === 'accion' && id) {
+                this.detailUuid = null;
+                this.openAction(id);
+                return;
+            }
+            this.actionUuid = null;
             if (section === 'ronda' && id === 'punto') {
                 this.roundPointUuid = (hash.split('/')[2] || '').toLowerCase() || null;
                 this.tab = 'rondas'; this.loadRoundPoint(); return;
@@ -209,6 +221,8 @@ document.addEventListener('alpine:init', () => {
             this.patrolPoints = (await db.all('patrol_points')).sort((a, b) => a.code.localeCompare(b.code));
             this.patrolRoutes = (await db.all('patrol_routes')).sort((a, b) => a.name.localeCompare(b.name));
             this.patrolScans = await db.all('patrol_scans');
+            const order = { abierta: 0, en_curso: 0, cerrada: 1, verificada: 2, cancelada: 3 };
+            this.actions = (await db.all('actions')).sort((a, b) => (order[a.status] - order[b.status]) || (a.due_on || '').localeCompare(b.due_on || ''));
             this.patrolRounds = (await db.all('patrol_rounds')).sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
             // La ronda en curso sobrevive a cerrar la app: es la mía más reciente que no terminó
             this.activeRound = this.patrolRounds.find((r) => r.mine && r.status === 'en_curso') || null;
@@ -235,6 +249,95 @@ document.addEventListener('alpine:init', () => {
             return (q ? this.sectors.filter((s) => s.label.toLowerCase().includes(q)) : this.sectors).slice(0, 40);
         },
         get canCreate() { return !!this.meta?.permisos?.observaciones?.acciones?.includes('crear'); },
+        // ── acciones (CAPA) ────────────────────────────────────────────
+        get myActions() { return this.actions.filter((a) => a.mine && (['abierta', 'en_curso', 'cerrada'].includes(a.status) || a.pending)); },
+        get myOverdueActions() { return this.myActions.filter((a) => this.actionLate(a)).length; },
+        todayLocal() {
+            const d = new Date();
+            d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+            return d.toISOString().slice(0, 10);
+        },
+        actionLate(a) { return ['abierta', 'en_curso'].includes(a.status) && a.due_on < this.todayLocal(); },
+        dueText(a) {
+            const days = Math.round((new Date(a.due_on + 'T00:00:00') - new Date(this.todayLocal() + 'T00:00:00')) / 86400000);
+            const date = a.due_on.split('-').reverse().join('/');
+            if (!['abierta', 'en_curso'].includes(a.status)) return 'Límite ' + date;
+            if (days < 0) return 'Vencida hace ' + (-days) + (days === -1 ? ' día' : ' días') + ' (' + date + ')';
+            return days === 0 ? 'Vence hoy' : 'Vence el ' + date;
+        },
+        async openAction(uuid) {
+            this.actionUuid = uuid;
+            this.tab = 'reportes';
+            const local = await db.get('actions', uuid);
+            this.action = { local, remote: null, loading: true };
+            this.actionForm = { text: '', photos: [] };
+            const pending = (await db.all('uploads')).filter((u) => u.action_uuid === uuid && u.status !== 'done' && u.blob);
+            const localPhotos = pending.map((u) => ({ url: URL.createObjectURL(u.blob), pending: true }));
+            this.actionPhotos = localPhotos;
+            if (!local) { this.action.loading = false; return; }
+            try {
+                const remote = await request('GET', '/actions/' + uuid);
+                const remotePhotos = [];
+                for (const f of remote.files.filter((x) => x.image)) {
+                    try { remotePhotos.push({ url: await blobUrl(f.url.slice(f.url.indexOf('/api/v1') + 7)), pending: false, old: f.kind === 'evidencia' && f.cycle < local.cycle }); } catch (e) { /* sin foto */ }
+                }
+                this.actionPhotos = [...remotePhotos, ...localPhotos];
+                this.action = { local, remote, loading: false };
+            } catch (e) {
+                this.action = { local, remote: null, loading: false };
+            }
+        },
+        closeAction() { history.length > 1 ? history.back() : this.go('reportes'); },
+        async addActionPhotos(event) {
+            const files = [...event.target.files].slice(0, MAX_PHOTOS - this.actionForm.photos.length);
+            event.target.value = '';
+            for (const f of files) {
+                const blob = await shrinkPhoto(f);
+                this.actionForm.photos.push({ blob, url: URL.createObjectURL(blob), name: (f.name || 'evidencia').replace(/\.\w+$/, '') + '.jpg' });
+            }
+        },
+        removeActionPhoto(i) {
+            URL.revokeObjectURL(this.actionForm.photos[i].url);
+            this.actionForm.photos.splice(i, 1);
+        },
+        async startAction() {
+            const a = this.action.local;
+            await enqueue('action.start', { uuid: a.uuid });
+            await db.put('actions', { ...a, status: 'en_curso', status_label: 'En curso', pending: true, sync_error: null });
+            this.flash('Acción tomada. Se envía al sincronizar.');
+            await this.reloadLocal();
+            this.action.local = await db.get('actions', a.uuid);
+            syncNow('save');
+        },
+        /** Cierre offline: la evidencia queda en el celular y el cierre se manda después de subir las fotos. */
+        async submitClose() {
+            const a = this.action.local;
+            const text = this.actionForm.text.trim();
+            if (text.length < 10) { alert('Contá qué se hizo (mínimo 10 letras).'); return; }
+            if (!this.actionForm.photos.length && !(a.evidence > 0)) { alert('Sacá al menos una foto de evidencia.'); return; }
+            this.actionBusy = true;
+            try {
+                for (const p of this.actionForm.photos) {
+                    await db.put('uploads', {
+                        upload_uuid: crypto.randomUUID(), action_uuid: a.uuid, name: p.name, size: p.blob.size,
+                        sha256: await sha256Hex(p.blob), blob: p.blob, status: 'pending', received: 0,
+                    });
+                    URL.revokeObjectURL(p.url);
+                }
+                await enqueue('action.close', { uuid: a.uuid, closure_text: text });
+                await db.put('actions', { ...a, status: 'cerrada', status_label: 'Cerrada · a verificar', closure_text: text, pending: true, sync_error: null });
+                this.actionForm = { text: '', photos: [] };
+                await this.reloadLocal();
+                this.flash((await isOnline()) ? 'Cierre guardado. Enviando fotos y cierre…' : 'Cierre guardado en el celular. Se envía cuando haya señal.');
+                this.go('reportes');
+                syncNow('save');
+            } catch (e) {
+                alert('No se pudo guardar: ' + e.message);
+            } finally {
+                this.actionBusy = false;
+            }
+        },
+
         // ── rondas ─────────────────────────────────────────────────────
         get activeRoute() { return this.activeRound?.route_uuid ? this.patrolRoutes.find((r) => r.uuid === this.activeRound.route_uuid) || null : null; },
         get roundScans() { return this.activeRound ? this.patrolScans.filter((x) => x.round_uuid === this.activeRound.uuid) : []; },
@@ -437,6 +540,7 @@ document.addEventListener('alpine:init', () => {
         // ── detalle ────────────────────────────────────────────────────
         async openDetail(uuid, silent = false) {
             this.detailUuid = uuid;
+            this.actionUuid = null;
             const local = await db.get('observations', uuid);
             if (!silent) { this.detail = { local, remote: null, loading: true }; this.detailPhotos = []; }
             const pendingPhotos = (await db.byIndex('uploads', 'observation_uuid', uuid)).filter((u) => u.status !== 'done' && u.blob);
@@ -513,6 +617,10 @@ document.addEventListener('alpine:init', () => {
             if (!confirm('¿Descartar este envío? No se va a mandar.')) return;
             await db.del('outbox', op.op_id);
             if (op.type === 'observation.create') await db.del('observations', op.data.uuid);
+            if (op.type.startsWith('action.')) { // vuelve a mostrar lo que diga el servidor en la próxima sync
+                const local = await db.get('actions', op.data.uuid);
+                if (local) await db.put('actions', { ...local, pending: false });
+            }
             await this.loadFailed();
             await this.reloadLocal();
         },

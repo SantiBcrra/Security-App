@@ -5,9 +5,12 @@ namespace App\Services\Sync;
 
 use App\Core\DB;
 use App\Core\Tenant;
+use App\Models\Observations;
 use App\Models\Patrols;
 use App\Models\Sectors;
 use App\Models\Settings;
+use App\Services\ActionService;
+use App\Services\ActionWorkflow;
 use App\Services\ObservationService;
 use App\Services\ObservationWorkflow;
 use App\Services\UserAuth;
@@ -20,7 +23,7 @@ use App\Services\UserAuth;
  */
 final class Pull
 {
-    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans'];
+    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'actions'];
     private const OVERLAP_SECONDS = 5;
     private const OBS_HISTORY_DAYS = 180;
 
@@ -45,7 +48,9 @@ final class Pull
             $hasMore = $hasMore || $more;
 
             foreach ($rows as $row) {
-                $gone = (isset($row['is_active']) && (int) $row['is_active'] !== 1) || !empty($row['deleted_at']);
+                $gone = (isset($row['is_active']) && (int) $row['is_active'] !== 1) || !empty($row['deleted_at'])
+                    // Acciones: el alcance se decide en PHP; si dejó de verla (ej. la reasignaron) le llega como baja.
+                    || ($entity === 'actions' && !ActionService::canView($row));
                 if ($gone) {
                     $deleted[$entity][] = $row['uuid'];
                 } else {
@@ -127,6 +132,12 @@ final class Pull
                     LEFT JOIN equipment eq ON eq.id = t.equipment_id LEFT JOIN users au ON au.id = t.assigned_user_id
                     LEFT JOIN users ru ON ru.id = t.reporter_user_id
                     WHERE ' . implode(' AND ', $where) . $order, $params];
+            case 'actions':
+                // Las terminadas hace más de 60 días no viajan (el historial completo está en la web).
+                return ["SELECT t.*, ru.name AS responsible_name, se.uuid AS sector_uuid, o.uuid AS observation_uuid, o.number AS observation_number
+                    FROM actions t JOIN users ru ON ru.id = t.responsible_user_id LEFT JOIN sectors se ON se.id = t.sector_id
+                    LEFT JOIN observations o ON t.origin_type = 'observacion' AND o.id = t.origin_id
+                    WHERE {$after} AND (t.status IN ('abierta', 'en_curso', 'cerrada') OR t.updated_at > UTC_TIMESTAMP() - INTERVAL 60 DAY){$order}", $params];
             case 'patrol_points':
                 return ["SELECT t.* FROM patrol_points t WHERE {$after}{$order}", $params];
             case 'patrol_routes':
@@ -169,6 +180,18 @@ final class Pull
                 'mine' => $r['reporter_uuid'] !== null && $r['reporter_uuid'] === (UserAuth::user()['uuid'] ?? null),
                 'assigned_name' => $r['assigned_name'], 'action_due_on' => $r['action_due_on'],
                 'created_at_device' => str_replace(' ', 'T', $r['created_at_device']) . 'Z', 'updated_at' => str_replace(' ', 'T', $r['updated_at']) . 'Z',
+            ],
+            'actions' => [
+                'uuid' => $r['uuid'], 'code' => \App\Models\Actions::format((int) $r['number']), 'title' => $r['title'], 'description' => $r['description'],
+                'status' => $r['status'], 'status_label' => ActionWorkflow::label($r['status']), 'priority' => $r['priority'], 'type' => $r['type'],
+                'due_on' => $r['due_on'], 'responsible' => $r['responsible_name'], 'mine' => ActionService::isResponsible($r),
+                'sector_uuid' => $r['sector_uuid'], 'origin' => ActionWorkflow::ORIGINS[$r['origin_type']] ?? $r['origin_type'],
+                'observation_uuid' => $r['observation_uuid'], 'observation_code' => $r['observation_number'] ? Observations::format((int) $r['observation_number']) : null,
+                'cycle' => (int) $r['cycle'], 'closure_text' => $r['closure_text'], 'closed_at' => $r['closed_at'] ? str_replace(' ', 'T', $r['closed_at']) . 'Z' : null,
+                'evidence' => \App\Models\ActionAttachments::countEvidence((int) $r['id'], (int) $r['cycle']),
+                'can_start' => $r['status'] === 'abierta' && ActionService::canDo($r, 'tomar'),
+                'can_close' => ActionWorkflow::isOpen($r['status']) && ActionService::canDo($r, 'cerrar'),
+                'updated_at' => str_replace(' ', 'T', $r['updated_at']) . 'Z',
             ],
             'patrol_points' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'code' => $r['code'], 'description' => $r['description'], 'lat' => (float) $r['lat'], 'lng' => (float) $r['lng'], 'radius_m' => (int) $r['radius_m'], 'critical' => (bool) $r['is_critical']],
             'patrol_routes' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'description' => $r['description'], 'frequency' => $r['frequency'],

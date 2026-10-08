@@ -25,14 +25,18 @@ components:
       required: [op_id, type, data]
       properties:
         op_id: { type: string, format: uuid, description: "Generado en el celular. Reenviar el mismo op_id devuelve el mismo resultado (idempotente)." }
-        type: { type: string, enum: [observation.create, observation.comment, observation.transition] }
+        type: { type: string, enum: [observation.create, observation.comment, observation.transition, round.start, round.scan, round.finish, action.start, action.close] }
         data:
           type: object
           description: |
             observation.create: uuid (del celular), category, severity, sector (UUIDs), description, created_at_device (ISO 8601),
               opcionales risk_type, equipment, location_text, lat, lng, gps_accuracy, imminent (0/1), anonymous (0/1), people[].
             observation.comment: uuid, comment.
-            observation.transition: uuid, action (analizar|asignar|cerrar|descartar|reabrir), input { comment, assigned_user, action_text, action_due_on }.
+            observation.transition: uuid, action (analizar|asignar|cerrar|descartar|reabrir), input { comment, assigned_user, action_text, action_due_on, priority, action_type }.
+            round.start: uuid, route_uuid?, lat?, lng?. round.scan: uuid, round_uuid, point_uuid, lat, lng, accuracy_m, scanned_at_device. round.finish: round_uuid.
+            action.start: uuid (tomar la acción). action.close: uuid, closure_text (≥ 10). El cierre exige evidencia del ciclo actual:
+              la app sube las fotos (POST /uploads con action_uuid) ANTES de mandar action.close. Reenviar un paso ya hecho por el
+              mismo usuario responde ok con duplicate: true.
 security: [{ bearer: [] }]
 paths:
   /auth/login:
@@ -56,7 +60,11 @@ paths:
     get:
       summary: Cambios desde el cursor
       description: |
-        Entidades: catalog_items, sites, sectors, equipment, employees, observations (según el alcance del rol, últimos 180 días).
+        Entidades: catalog_items, sites, sectors, equipment, employees, observations (según el alcance del rol, últimos 180 días),
+        patrol_points, patrol_routes (solo las asignadas), patrol_rounds, patrol_scans y actions (las que el usuario ve: el responsable
+        siempre las suyas; terminadas hace más de 60 días no viajan; si deja de verla, por ejemplo al reasignarla, llega en `deleted`).
+        actions trae: code, title, status, status_label, priority, due_on, responsible, mine, origin, observation_uuid, cycle,
+        closure_text, evidence (archivos del ciclo actual), can_start, can_close.
         `deleted` trae los uuid dados de baja. Paginado: repetir con el cursor devuelto mientras `has_more` sea true.
         El cliente hace upsert por uuid (puede recibir algo dos veces sin duplicar).
       parameters:
@@ -73,8 +81,9 @@ paths:
   /uploads:
     post:
       summary: Alta de una foto por partes (idempotente)
-      requestBody: { content: { application/json: { schema: { type: object, required: [upload_uuid, observation_uuid, size, sha256],
-        properties: { upload_uuid: { type: string, format: uuid }, observation_uuid: { type: string, format: uuid }, name: { type: string },
+      description: "Foto de una observación (observation_uuid) o evidencia de una acción CAPA abierta (action_uuid): uno de los dos."
+      requestBody: { content: { application/json: { schema: { type: object, required: [upload_uuid, size, sha256],
+        properties: { upload_uuid: { type: string, format: uuid }, observation_uuid: { type: string, format: uuid }, action_uuid: { type: string, format: uuid }, name: { type: string },
           size: { type: integer, maximum: 15728640 }, sha256: { type: string } } } } } }
       responses: { "200": { description: "estado: received_bytes, status" }, "404": { description: la observación todavía no llegó } }
   /uploads/{uuid}:
@@ -95,8 +104,12 @@ paths:
     get: { summary: Detalle con línea de tiempo, fotos y acciones posibles, parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
   /observations/{uuid}/photos/{photo}:
     get: { summary: Miniatura de una foto, parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }, { name: photo, in: path, required: true, schema: { type: string } }], responses: { "200": { description: imagen } } }
+  /actions/{uuid}:
+    get: { summary: "Detalle de una acción: línea de tiempo y evidencia (files[] con url de miniatura)", parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok }, "404": { description: no existe o fuera de alcance } } }
+  /actions/{uuid}/files/{file}:
+    get: { summary: Miniatura (o archivo) de una evidencia, parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }, { name: file, in: path, required: true, schema: { type: string } }], responses: { "200": { description: archivo } } }
   /notifications:
-    get: { summary: Avisos del usuario (unread + items), responses: { "200": { description: ok } } }
+    get: { summary: "Avisos del usuario (unread + items; cada item trae observation_uuid o action_uuid para abrirlo)", responses: { "200": { description: ok } } }
   /notifications/read:
     post: { summary: Marcar todos como leídos, responses: { "200": { description: ok } } }
   /alerts/{uuid}/ack:
