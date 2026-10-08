@@ -62,7 +62,9 @@ document.addEventListener('alpine:init', () => {
         roundPoint: null,
         activeRound: null,
         patrolPoints: [],
+        patrolRoutes: [],
         patrolRounds: [],
+        patrolScans: [],
         detailUuid: null,
         toast: null,
         meta: null,
@@ -186,6 +188,7 @@ document.addEventListener('alpine:init', () => {
                 this.tab = 'rondas'; this.loadRoundPoint(); return;
             }
             this.detailUuid = null;
+            this.roundPointUuid = null;
             this.tab = ['reportar', 'reportes', 'rondas', 'avisos', 'ajustes'].includes(section) ? section : 'reportar';
             if (this.tab === 'avisos') this.loadNotifications();
             if (this.tab === 'reportar') this.ensureGps();
@@ -203,7 +206,9 @@ document.addEventListener('alpine:init', () => {
             this.catalogs.risks = sorted(items.filter((i) => i.catalog === 'tipo_riesgo'));
             this.sectors = (await db.all('sectors')).sort((a, b) => a.label.localeCompare(b.label));
             this.equipment = (await db.all('equipment')).sort((a, b) => a.code.localeCompare(b.code));
-            this.patrolPoints = await db.all('patrol_points');
+            this.patrolPoints = (await db.all('patrol_points')).sort((a, b) => a.code.localeCompare(b.code));
+            this.patrolRoutes = (await db.all('patrol_routes')).sort((a, b) => a.name.localeCompare(b.name));
+            this.patrolScans = await db.all('patrol_scans');
             this.patrolRounds = (await db.all('patrol_rounds')).sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
             // La ronda en curso sobrevive a cerrar la app: es la mía más reciente que no terminó
             this.activeRound = this.patrolRounds.find((r) => r.mine && r.status === 'en_curso') || null;
@@ -230,6 +235,26 @@ document.addEventListener('alpine:init', () => {
             return (q ? this.sectors.filter((s) => s.label.toLowerCase().includes(q)) : this.sectors).slice(0, 40);
         },
         get canCreate() { return !!this.meta?.permisos?.observaciones?.acciones?.includes('crear'); },
+        // ── rondas ─────────────────────────────────────────────────────
+        get activeRoute() { return this.activeRound?.route_uuid ? this.patrolRoutes.find((r) => r.uuid === this.activeRound.route_uuid) || null : null; },
+        get roundScans() { return this.activeRound ? this.patrolScans.filter((x) => x.round_uuid === this.activeRound.uuid) : []; },
+        /** Puntos de la ruta en orden, con si ya se registraron; el primero pendiente es el "próximo". */
+        get roundProgress() {
+            const route = this.activeRoute;
+            if (!route) return [];
+            const done = new Set(this.roundScans.map((x) => x.point_uuid));
+            let nextMarked = false;
+            return (route.points || []).map((uuid, i) => {
+                const p = this.patrolPoints.find((x) => x.uuid === uuid) || { uuid, code: '?', name: 'Punto no sincronizado', critical: false };
+                const isDone = done.has(uuid);
+                const next = !isDone && !nextMarked;
+                if (next) nextMarked = true;
+                return { ...p, n: i + 1, done: isDone, next };
+            });
+        },
+        get roundDoneCount() { return this.roundProgress.filter((p) => p.done).length; },
+        get roundPointInRoute() { return !this.activeRoute || (this.activeRoute.points || []).includes(this.roundPointUuid); },
+        get roundPointDone() { return this.roundScans.some((x) => x.point_uuid === this.roundPointUuid); },
         get canPatrol() { return !!this.meta?.permisos?.rondas?.acciones?.includes('crear'); },
         get myReports() { return this.observations.filter((o) => o.mine || o.local); },
         get otherReports() { return this.observations.filter((o) => !o.mine && !o.local); },
@@ -317,31 +342,41 @@ document.addEventListener('alpine:init', () => {
             this.roundPoint = this.patrolPoints.find((p) => p.uuid === this.roundPointUuid) || null;
             if (!this.roundPoint && this.patrolPoints.length) this.flash('Punto no sincronizado todavía. Conectate y sincronizá.');
         },
-        async startRound() {
+        async startRound(routeUuid = null) {
+            if (this.activeRound) { this.flash('Ya tenés una ronda en curso'); return; }
             const uuid = crypto.randomUUID();
             const gps = await this.currentPosition();
-            this.activeRound = { uuid, status: 'en_curso', started_at: new Date().toISOString(), mine: true, local: true };
+            this.activeRound = { uuid, route_uuid: routeUuid, status: 'en_curso', started_at: new Date().toISOString(), mine: true, local: true };
             await db.put('patrol_rounds', this.activeRound);
-            await enqueue('round.start', { uuid, lat: gps?.lat, lng: gps?.lng });
-            this.flash('Ronda iniciada');
+            await enqueue('round.start', { uuid, route_uuid: routeUuid, lat: gps?.lat, lng: gps?.lng });
+            this.flash(routeUuid ? 'Ruta iniciada: escaneá el primer punto' : 'Ronda iniciada');
+            syncNow('round');
         },
         async scanRoundPoint() {
             if (!this.roundPoint) return;
             if (!this.activeRound) await this.startRound();
-            const done = (await db.all('patrol_scans')).some((x) => x.round_uuid === this.activeRound.uuid && x.point_uuid === this.roundPoint.uuid);
-            if (done) { this.flash('Este punto ya está registrado en la ronda'); return; }
+            if (this.roundPointDone) { this.flash('Este punto ya está registrado en la ronda'); return; }
+            if (!this.roundPointInRoute && !confirm('Este punto no es parte de la ruta en curso. ¿Registrarlo igual?')) return;
             const gps = await this.currentPosition();
             const scan = { uuid: crypto.randomUUID(), round_uuid: this.activeRound.uuid, point_uuid: this.roundPoint.uuid,
                 lat: gps?.lat, lng: gps?.lng, accuracy_m: gps?.acc, scanned_at_device: new Date().toISOString() };
             await db.put('patrol_scans', { ...scan, local: true });
             await enqueue('round.scan', scan);
-            this.flash(gps ? 'Punto registrado con GPS' : 'Punto registrado sin GPS');
+            this.patrolScans = await db.all('patrol_scans');
+            const pending = this.roundProgress.filter((p) => !p.done).length;
+            this.flash((gps ? 'Punto registrado con GPS' : 'Punto registrado sin GPS') + (this.activeRoute ? (pending ? ` · faltan ${pending}` : ' · ruta completa') : ''));
+            syncNow('round');
+            this.go('rondas');
         },
         async finishRound() {
             if (!this.activeRound) return;
+            const missing = this.roundProgress.filter((p) => !p.done);
+            if (missing.length && !confirm(`Faltan ${missing.length} punto(s) de la ruta. Si finalizás, quedan como salteados. ¿Finalizar igual?`)) return;
             await enqueue('round.finish', { round_uuid: this.activeRound.uuid });
-            await db.put('patrol_rounds', { ...this.activeRound, status: 'completa' });
-            this.activeRound = null; this.flash('Ronda finalizada');
+            await db.put('patrol_rounds', { ...this.activeRound, status: missing.length ? 'incompleta' : 'completa' });
+            this.activeRound = null;
+            this.flash(missing.length ? 'Ronda finalizada con puntos salteados' : 'Ronda finalizada');
+            syncNow('round');
         },
         currentPosition() {
             return new Promise((resolve) => {

@@ -5,6 +5,7 @@ namespace App\Services\Sync;
 
 use App\Core\DB;
 use App\Core\Tenant;
+use App\Models\Patrols;
 use App\Models\Sectors;
 use App\Models\Settings;
 use App\Services\ObservationService;
@@ -129,7 +130,14 @@ final class Pull
             case 'patrol_points':
                 return ["SELECT t.* FROM patrol_points t WHERE {$after}{$order}", $params];
             case 'patrol_routes':
-                return ["SELECT t.* FROM patrol_routes t WHERE {$after}{$order}", $params];
+                // Solo las rutas asignadas (o todas con alcance "todo"): las demás viajan como baja,
+                // así el celular se entera si le sacan una ruta. Cambiar asignaciones o puntos debe
+                // tocar patrol_routes.updated_at.
+                $all = UserAuth::scope('rondas') === 'todo' ? 1 : 0;
+                return ["SELECT t.id, t.uuid, t.name, t.description, t.frequency, t.expected_minutes, t.updated_at, t.deleted_at,
+                        CASE WHEN t.is_active = 1 AND (? = 1 OR EXISTS (SELECT 1 FROM patrol_route_assignments a
+                            WHERE a.route_id = t.id AND a.user_id = ? AND a.is_active = 1)) THEN 1 ELSE 0 END AS is_active
+                    FROM patrol_routes t WHERE {$after}{$order}", array_merge([$all, (int) (UserAuth::user()['id'] ?? 0)], $params)];
             case 'patrol_rounds':
                 $join = 'SELECT t.*, pr.uuid AS route_uuid FROM patrol_rounds t LEFT JOIN patrol_routes pr ON pr.id=t.route_id WHERE ';
                 if (UserAuth::scope('rondas') === 'propios') { $params[] = (int) UserAuth::user()['id']; return [$join . "{$after} AND t.user_id=?{$order}", $params]; }
@@ -163,7 +171,8 @@ final class Pull
                 'created_at_device' => str_replace(' ', 'T', $r['created_at_device']) . 'Z', 'updated_at' => str_replace(' ', 'T', $r['updated_at']) . 'Z',
             ],
             'patrol_points' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'code' => $r['code'], 'description' => $r['description'], 'lat' => (float) $r['lat'], 'lng' => (float) $r['lng'], 'radius_m' => (int) $r['radius_m'], 'critical' => (bool) $r['is_critical']],
-            'patrol_routes' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'description' => $r['description'], 'frequency' => $r['frequency'], 'expected_minutes' => $r['expected_minutes']],
+            'patrol_routes' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'description' => $r['description'], 'frequency' => $r['frequency'],
+                'expected_minutes' => $r['expected_minutes'] !== null ? (int) $r['expected_minutes'] : null, 'points' => Patrols::routePointUuids((int) $r['id'])],
             'patrol_rounds' => ['uuid' => $r['uuid'], 'route_uuid' => $r['route_uuid'], 'mine' => (int) $r['user_id'] === (int) (UserAuth::user()['id'] ?? 0), 'status' => $r['status'], 'started_at' => str_replace(' ', 'T', $r['started_at']) . 'Z', 'finished_at' => $r['finished_at'] ? str_replace(' ', 'T', $r['finished_at']) . 'Z' : null],
             'patrol_scans' => ['uuid' => $r['uuid'], 'round_uuid' => $r['round_uuid'], 'point_uuid' => $r['point_uuid'], 'scanned_at_device' => str_replace(' ', 'T', $r['scanned_at_device']) . 'Z', 'lat' => $r['lat'] !== null ? (float) $r['lat'] : null, 'lng' => $r['lng'] !== null ? (float) $r['lng'] : null, 'accuracy_m' => $r['accuracy_m'] !== null ? (float) $r['accuracy_m'] : null, 'distance_m' => $r['distance_m'] !== null ? (float) $r['distance_m'] : null, 'within_radius' => (bool) $r['within_radius'], 'note' => $r['note']],
         };

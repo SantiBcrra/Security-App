@@ -13,14 +13,29 @@ use App\Models\Sectors;
 use App\Models\Sites;
 use App\Models\Users;
 use App\Services\Audit;
+use App\Services\UserAuth;
 
 final class RoundsController
 {
     public function index(Request $request): Response
     {
         return Response::html(View::render('panel/rounds/index', [
-            'title' => 'Rondas de guardias', 'points' => Patrols::points(), 'routes' => Patrols::routes(), 'rounds' => Patrols::rounds(),
+            'title' => 'Rondas de guardias', 'points' => Patrols::points(), 'routes' => Patrols::routes(), 'rounds' => Patrols::rounds(100, $this->onlyUser()),
         ], 'layouts/app'));
+    }
+
+    public function round(Request $request, string $uuid): Response
+    {
+        $round = Patrols::roundDetail($uuid);
+        $only = $this->onlyUser();
+        if (!$round || ($only !== null && (int) $round['user_id'] !== $only)) return new Response('', 404);
+        return Response::html(View::render('panel/rounds/round', ['title' => 'Ronda de ' . $round['user_name'], 'round' => $round], 'layouts/app'));
+    }
+
+    /** Con alcance "propios" el usuario ve solo sus rondas; si no, todas. */
+    private function onlyUser(): ?int
+    {
+        return UserAuth::scope('rondas') === 'propios' ? (int) UserAuth::user()['id'] : null;
     }
 
     public function pointForm(Request $request): Response

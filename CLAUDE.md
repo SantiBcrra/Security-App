@@ -149,6 +149,10 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Cada escaneo guarda hora del dispositivo, hora de recepción, GPS, precisión, distancia calculada y si quedó dentro del radio. No se duplica un punto dentro de la misma ronda.
 - La PWA guarda rondas y escaneos en IndexedDB y los envía con `round.start`, `round.scan` y `round.finish`; las operaciones son idempotentes por `op_id`.
 - El mapa operativo usa Leaflet/OpenStreetMap ya incluido; no se agrega dependencia de Google Maps.
+- Rutas: al celular llegan solo las asignadas (`patrol_route_assignments`; alcance "todo" ve todas), con `points` = UUIDs en
+  orden; las no asignadas viajan como baja. **Cambiar asignaciones o puntos de una ruta debe tocar `patrol_routes.updated_at`.**
+  Iniciar una ruta no asignada se rechaza. Al finalizar: `completa` o `incompleta` (puntos salteados).
+  Detalle en `/panel/rondas/ronda/{uuid}` (recorrido, salteados, fuera de radio). Con alcance "propios" el panel muestra solo las propias.
 - `round.start` es idempotente también por uuid de la ronda; el escaneo valida punto activo, uuid y hora del
   celular (máx. 30 días atrás). La PWA recupera la ronda en curso (`mine` + `en_curso`) al reabrir.
 

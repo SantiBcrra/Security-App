@@ -130,16 +130,83 @@
 
     <!-- Rondas -->
     <main class="app-main" x-show="!detailUuid && tab === 'rondas'">
+        <!-- Punto escaneado -->
         <template x-if="roundPointUuid">
             <div>
-                <button class="btn btn-link px-0 mb-2" @click="go('rondas'); roundPointUuid=null">← Rondas</button>
-                <div class="card mb-3"><div class="card-body"><h2 class="h5" x-text="roundPoint?.name || 'Punto de ronda'"></h2><div class="text-body-secondary" x-text="roundPoint?.code"></div><div class="small mt-2" x-show="roundPoint" x-text="'Radio permitido: ' + roundPoint.radius_m + ' m'"></div></div></div>
-                <button class="btn btn-primary btn-lg w-100 mb-2" @click="scanRoundPoint()" :disabled="!roundPoint || !canPatrol">📍 Registrar este punto</button>
-                <button class="btn btn-outline-secondary w-100" x-show="activeRound" @click="finishRound()">Finalizar ronda</button>
+                <button class="btn btn-link px-0 mb-2" @click="go('rondas')">← Rondas</button>
+                <div class="card mb-3"><div class="card-body">
+                    <h2 class="h5 mb-1" x-text="roundPoint?.name || 'Punto de ronda'"></h2>
+                    <div class="text-body-secondary" x-text="roundPoint?.code"></div>
+                    <span class="badge text-bg-danger mt-2" x-show="roundPoint?.critical">Punto crítico</span>
+                    <div class="small mt-2" x-show="roundPoint" x-text="'Radio permitido: ' + roundPoint?.radius_m + ' m'"></div>
+                </div></div>
+                <div class="alert alert-success small" x-show="roundPointDone">✓ Ya registraste este punto en la ronda.</div>
+                <div class="alert alert-warning small" x-show="activeRoute && !roundPointInRoute">Este punto no es parte de la ruta <strong x-text="activeRoute?.name"></strong>.</div>
+                <div class="alert alert-info small" x-show="!activeRound && canPatrol">No tenés una ronda en curso: al registrar el punto se inicia una ronda libre.</div>
+                <button class="btn btn-primary btn-lg w-100 mb-2" @click="scanRoundPoint()" :disabled="!roundPoint || !canPatrol || roundPointDone">📍 Registrar este punto</button>
             </div>
         </template>
+
         <template x-if="!roundPointUuid">
-            <div><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h6 text-body-secondary m-0">Rondas</h2><button class="btn btn-outline-primary btn-sm" @click="openScanner()">Escanear QR</button></div><div class="alert alert-info small">Escaneá el QR de cada punto. Se guarda la hora y la ubicación GPS, incluso sin señal.</div><button class="btn btn-primary w-100 mb-3" x-show="!activeRound && canPatrol" @click="startRound()">Iniciar ronda libre</button><div class="small text-body-secondary" x-show="!patrolPoints.length">Sin puntos sincronizados todavía.</div><template x-for="p in patrolPoints" :key="p.uuid"><a class="obs-card" :href="'#/ronda/punto/' + p.uuid"><strong x-text="p.code + ' · ' + p.name"></strong><div class="small text-body-secondary" x-text="'Radio ' + p.radius_m + ' m'"></div></a></template></div>
+            <div>
+                <!-- Ronda en curso -->
+                <template x-if="activeRound">
+                    <div class="card mb-3 border-primary"><div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <div class="small text-body-secondary">Ronda en curso</div>
+                                <h2 class="h5 m-0" x-text="activeRoute ? activeRoute.name : 'Ronda libre'"></h2>
+                            </div>
+                            <span class="badge text-bg-primary fs-6" x-show="activeRoute" x-text="roundDoneCount + '/' + roundProgress.length"></span>
+                            <span class="badge text-bg-primary fs-6" x-show="!activeRoute" x-text="roundScans.length + ' punto(s)'"></span>
+                        </div>
+                        <div class="progress mb-3" style="height:8px" x-show="activeRoute">
+                            <div class="progress-bar" :style="'width:' + (roundProgress.length ? Math.round(roundDoneCount * 100 / roundProgress.length) : 0) + '%'"></div>
+                        </div>
+                        <ol class="list-unstyled mb-3" x-show="activeRoute">
+                            <template x-for="p in roundProgress" :key="p.uuid">
+                                <li class="d-flex align-items-center gap-2 py-1" :class="{ 'fw-bold': p.next, 'text-body-secondary': p.done }">
+                                    <span style="width:1.6em" x-text="p.done ? '✓' : (p.next ? '➜' : p.n + '.')"></span>
+                                    <a class="text-reset text-decoration-none flex-grow-1" :href="'#/ronda/punto/' + p.uuid" x-text="p.code + ' · ' + p.name"></a>
+                                    <span class="badge text-bg-danger" x-show="p.critical && !p.done">crítico</span>
+                                </li>
+                            </template>
+                        </ol>
+                        <button class="btn btn-primary btn-lg w-100 mb-2" @click="openScanner()">📷 Escanear QR del punto</button>
+                        <button class="btn btn-outline-secondary w-100" @click="finishRound()">Finalizar ronda</button>
+                    </div></div>
+                </template>
+
+                <!-- Sin ronda: mis rutas -->
+                <template x-if="!activeRound">
+                    <div>
+                        <div class="alert alert-secondary small" x-show="!canPatrol">Tu rol no puede hacer rondas.</div>
+                        <h2 class="h6 text-body-secondary">Mis rutas</h2>
+                        <div class="small text-body-secondary mb-3" x-show="!patrolRoutes.length">No tenés rutas asignadas.</div>
+                        <template x-for="r in patrolRoutes" :key="r.uuid">
+                            <div class="obs-card">
+                                <div class="d-flex justify-content-between align-items-center gap-2">
+                                    <div>
+                                        <strong x-text="r.name"></strong>
+                                        <div class="small text-body-secondary" x-text="(r.points?.length || 0) + ' puntos' + (r.expected_minutes ? ' · ~' + r.expected_minutes + ' min' : '')"></div>
+                                    </div>
+                                    <button class="btn btn-primary btn-sm" x-show="canPatrol" @click="startRound(r.uuid)">Iniciar</button>
+                                </div>
+                            </div>
+                        </template>
+                        <button class="btn btn-outline-primary w-100 my-3" x-show="canPatrol" @click="startRound()">Iniciar ronda libre</button>
+                    </div>
+                </template>
+
+                <details class="mt-2">
+                    <summary class="small text-body-secondary">Todos los puntos (<span x-text="patrolPoints.length"></span>)</summary>
+                    <div class="mt-2">
+                        <template x-for="p in patrolPoints" :key="p.uuid">
+                            <a class="obs-card" :href="'#/ronda/punto/' + p.uuid"><strong x-text="p.code + ' · ' + p.name"></strong><div class="small text-body-secondary" x-text="'Radio ' + p.radius_m + ' m' + (p.critical ? ' · crítico' : '')"></div></a>
+                        </template>
+                    </div>
+                </details>
+            </div>
         </template>
     </main>
 

@@ -52,6 +52,55 @@ final class Patrols
         return array_values(array_map('intval', array_filter(array_map(fn ($u) => $map[$u] ?? null, $uuids))));
     }
 
+    public static function isAssigned(int $routeId, int $userId): bool
+    {
+        $s = DB::tenant()->prepare('SELECT 1 FROM patrol_route_assignments WHERE route_id=? AND user_id=? AND is_active=1 LIMIT 1');
+        $s->execute([$routeId, $userId]);
+        return (bool) $s->fetchColumn();
+    }
+
+    /** @return list<string> UUID de los puntos de la ruta, en el orden de recorrido. */
+    public static function routePointUuids(int $routeId): array
+    {
+        $s = DB::tenant()->prepare('SELECT p.uuid FROM patrol_route_points rp JOIN patrol_points p ON p.id=rp.point_id WHERE rp.route_id=? ORDER BY rp.sort_order, rp.id');
+        $s->execute([$routeId]);
+        return $s->fetchAll(\PDO::FETCH_COLUMN);
+    }
+
+    /** Puntos de la ruta que la ronda no registró. */
+    public static function missingPoints(int $roundId, int $routeId): int
+    {
+        $s = DB::tenant()->prepare('SELECT COUNT(*) FROM patrol_route_points rp
+            LEFT JOIN patrol_scans sc ON sc.round_id=? AND sc.point_id=rp.point_id WHERE rp.route_id=? AND sc.id IS NULL');
+        $s->execute([$roundId, $routeId]);
+        return (int) $s->fetchColumn();
+    }
+
+    /**
+     * Detalle de una ronda para el panel: escaneos y, si es de ruta, cada punto de la ruta con su
+     * escaneo (o salteado). Los escaneos fuera de la ruta se listan aparte.
+     */
+    public static function roundDetail(string $uuid): ?array
+    {
+        $round = self::round($uuid);
+        if (!$round) return null;
+        $round['route_points'] = [];
+        if ($round['route_id'] !== null) {
+            $s = DB::tenant()->prepare('SELECT p.uuid, p.code, p.name, p.is_critical, p.radius_m, rp.sort_order,
+                    sc.scanned_at_device, sc.distance_m, sc.within_radius, sc.accuracy_m
+                FROM patrol_route_points rp JOIN patrol_points p ON p.id=rp.point_id
+                LEFT JOIN patrol_scans sc ON sc.round_id=? AND sc.point_id=rp.point_id
+                WHERE rp.route_id=? ORDER BY rp.sort_order, rp.id');
+            $s->execute([(int) $round['id'], (int) $round['route_id']]);
+            $round['route_points'] = $s->fetchAll();
+            $inRoute = array_column($round['route_points'], 'uuid');
+            $round['extra_scans'] = array_values(array_filter($round['scans'], fn ($sc) => !in_array($sc['point_uuid'], $inRoute, true)));
+        } else {
+            $round['extra_scans'] = $round['scans'];
+        }
+        return $round;
+    }
+
     public static function routes(): array
     {
         return DB::tenant()->query('SELECT r.*,
@@ -106,7 +155,9 @@ final class Patrols
         $routeId = null;
         if ($routeUuid !== null && $routeUuid !== '') {
             $r = self::route($routeUuid);
-            if (!$r) throw new UserError('Ruta inexistente.');
+            if (!$r || (int) $r['is_active'] !== 1 || $r['deleted_at'] !== null) throw new UserError('La ruta no existe o está desactivada.');
+            $userId = (int) UserAuth::user()['id'];
+            if (UserAuth::scope('rondas') !== 'todo' && !self::isAssigned((int) $r['id'], $userId)) throw new UserError('Esta ruta no está asignada a tu usuario.');
             $routeId = (int) $r['id'];
         }
         if ($roundUuid !== null && $roundUuid !== '' && !Uuid::isValid($roundUuid)) throw new UserError('Identificador de ronda inválido.');
@@ -115,7 +166,7 @@ final class Patrols
             if ((int) $existing['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('La ronda no está disponible.');
             return $existing;
         }
-        DB::tenant()->prepare('INSERT INTO patrol_rounds (uuid,route_id,user_id,status,started_at,started_lat,started_lng,created_at,updated_at) VALUES (?,?,?,"en_curso",UTC_TIMESTAMP(),?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
+        DB::tenant()->prepare('INSERT INTO patrol_rounds (uuid,route_id,user_id,status,started_at,started_lat,started_lng,created_at,updated_at) VALUES (?,?,?,\'en_curso\',UTC_TIMESTAMP(),?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
             ->execute([$uuid, $routeId, (int) UserAuth::user()['id'], $lat, $lng]);
         return self::round($uuid) ?? [];
     }
@@ -133,12 +184,16 @@ final class Patrols
         return $row;
     }
 
-    public static function rounds(int $limit = 100): array
+    /** Rondas recientes; con $userId solo las de ese usuario (alcance "propios"). */
+    public static function rounds(int $limit = 100, ?int $userId = null): array
     {
         $stmt = DB::tenant()->prepare('SELECT r.*, u.name AS user_name, pr.name AS route_name,
-            (SELECT COUNT(*) FROM patrol_scans s WHERE s.round_id=r.id) AS scans_count
-            FROM patrol_rounds r JOIN users u ON u.id=r.user_id LEFT JOIN patrol_routes pr ON pr.id=r.route_id ORDER BY r.started_at DESC LIMIT ' . max(1, min(500, $limit)));
-        $stmt->execute();
+            (SELECT COUNT(*) FROM patrol_scans s WHERE s.round_id=r.id) AS scans_count,
+            (SELECT COUNT(*) FROM patrol_scans s WHERE s.round_id=r.id AND s.within_radius=0) AS outside_count,
+            (SELECT COUNT(*) FROM patrol_route_points rp WHERE rp.route_id=r.route_id) AS route_points
+            FROM patrol_rounds r JOIN users u ON u.id=r.user_id LEFT JOIN patrol_routes pr ON pr.id=r.route_id'
+            . ($userId !== null ? ' WHERE r.user_id = ?' : '') . ' ORDER BY r.started_at DESC LIMIT ' . max(1, min(500, $limit)));
+        $stmt->execute($userId !== null ? [$userId] : []);
         return $stmt->fetchAll();
     }
 
@@ -168,7 +223,8 @@ final class Patrols
     {
         $round = self::round($uuid);
         if (!$round || (int) $round['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('La ronda no existe.');
-        DB::tenant()->prepare('UPDATE patrol_rounds SET status="completa", finished_at=UTC_TIMESTAMP(), updated_at=UTC_TIMESTAMP() WHERE id=? AND status="en_curso"')->execute([(int) $round['id']]);
+        $status = $round['route_id'] !== null && self::missingPoints((int) $round['id'], (int) $round['route_id']) > 0 ? 'incompleta' : 'completa';
+        DB::tenant()->prepare("UPDATE patrol_rounds SET status=?, finished_at=UTC_TIMESTAMP(), updated_at=UTC_TIMESTAMP() WHERE id=? AND status='en_curso'")->execute([$status, (int) $round['id']]);
         return self::round($uuid) ?? $round;
     }
 

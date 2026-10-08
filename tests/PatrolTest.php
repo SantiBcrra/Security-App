@@ -146,6 +146,70 @@ return [
         assert_same([false, false], array_column($all, 'mine'));
     },
 
+    'rutas: solo las asignadas llegan al celular, con los puntos en orden' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        $st['route'] = Uuid::v4();
+        Patrols::createRoute(['uuid' => $st['route'], 'name' => 'Nocturna', 'description' => '', 'frequency' => 'diaria', 'expected_minutes' => 30,
+            'point_ids' => [$st['p2'], $st['p1']], 'user_ids' => [(int) $st['g1']['id']]]);
+        $pull = function (array $user) {
+            UserAuth::setCurrent($user);
+            $page = Pull::run(null, 1000);
+            return [(array) ($page['changes']->patrol_routes ?? []), (array) ($page['deleted']->patrol_routes ?? [])];
+        };
+        [$g1] = $pull($st['g1']);
+        assert_same(1, count($g1));
+        assert_same([($st['uuid'])($st['p2']), ($st['uuid'])($st['p1'])], $g1[0]['points'], 'en el orden de la ruta');
+        [$g2, $g2Deleted] = $pull($st['g2']);
+        assert_same([], $g2, 'el guardia sin asignación no la recibe');
+        assert_same([$st['route']], $g2Deleted, 'le llega como baja (por si se la sacaron)');
+        [$hys] = $pull($st['hys']);
+        assert_same(1, count($hys), 'SyH (alcance todo) ve todas las rutas');
+    },
+
+    'rutas: no se puede iniciar una ruta no asignada; salteados = incompleta' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['g2']);
+        $r = Push::run([$op('round.start', ['uuid' => Uuid::v4(), 'route_uuid' => $st['route']])])[0];
+        assert_true(str_contains((string) ($r['error'] ?? ''), 'asignada'), json_encode($r));
+        UserAuth::setCurrent($st['g1']);
+        $scan = fn (string $round, int $point) => Push::run([$op('round.scan', ['uuid' => Uuid::v4(), 'round_uuid' => $round,
+            'point_uuid' => ($st['uuid'])($point), 'lat' => -34.6037, 'lng' => -58.3816])])[0];
+        // Ronda que saltea un punto
+        $partial = Uuid::v4();
+        assert_same('ok', Push::run([$op('round.start', ['uuid' => $partial, 'route_uuid' => $st['route']])])[0]['status']);
+        assert_same('ok', $scan($partial, $st['p1'])['status']);
+        assert_same('incompleta', Push::run([$op('round.finish', ['round_uuid' => $partial])])[0]['data']['status']);
+        $detail = Patrols::roundDetail($partial);
+        assert_same(['P2', 'P1'], array_column($detail['route_points'], 'code'));
+        assert_same(null, $detail['route_points'][0]['scanned_at_device'], 'P2 salteado');
+        assert_true($detail['route_points'][1]['scanned_at_device'] !== null);
+        // Ronda completa
+        $full = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $full, 'route_uuid' => $st['route']])]);
+        $scan($full, $st['p2']);
+        $scan($full, $st['p1']);
+        assert_same('completa', Push::run([$op('round.finish', ['round_uuid' => $full])])[0]['data']['status']);
+        // Historial del panel por alcance
+        assert_same(3, count(Patrols::rounds(100, (int) $st['g1']['id'])), 'el guardia ve solo sus 3 rondas');
+        assert_same(4, count(Patrols::rounds(100)), 'sin filtro, todas');
+        $row = array_values(array_filter(Patrols::rounds(100), fn ($x) => $x['uuid'] === $partial))[0];
+        assert_same([1, 2], [(int) $row['scans_count'], (int) $row['route_points']]);
+    },
+
+    'panel: el historial y el detalle de ronda se renderizan' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $rounds = Patrols::rounds();
+        $html = \App\Core\View::render('panel/rounds/index', ['points' => Patrols::points(), 'routes' => Patrols::routes(), 'rounds' => $rounds], null);
+        assert_true(str_contains($html, 'incompleta') && str_contains($html, '1 / 2'), 'estado y avance en el historial');
+        $partial = array_values(array_filter($rounds, fn ($r) => $r['status'] === 'incompleta'))[0];
+        $html = \App\Core\View::render('panel/rounds/round', ['round' => Patrols::roundDetail($partial['uuid'])], null);
+        assert_true(str_contains($html, 'Salteado') && str_contains($html, 'Se saltearon 1 punto'), 'marca el punto salteado');
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');
