@@ -8,6 +8,7 @@ use App\Core\Tenant;
 use App\Core\TenantFiles;
 use App\Core\Uuid;
 use App\Models\Actions;
+use App\Models\Incidents;
 use App\Models\Inspections;
 use App\Models\ObservationAttachments;
 use App\Models\ObservationEvents;
@@ -30,9 +31,10 @@ final class Uploads
         $actionUuid = strtolower((string) ($in['action_uuid'] ?? ''));
         $inspectionUuid = strtolower((string) ($in['inspection_uuid'] ?? ''));
         $itemKey = strtolower((string) ($in['item_key'] ?? ''));
+        $incidentUuid = strtolower((string) ($in['incident_uuid'] ?? ''));
         $size = (int) ($in['size'] ?? 0);
         $sha = strtolower((string) ($in['sha256'] ?? ''));
-        $target = $actionUuid !== '' ? $actionUuid : ($inspectionUuid !== '' ? $inspectionUuid : $obsUuid); // acción, inspección u observación
+        $target = $actionUuid ?: ($inspectionUuid ?: ($incidentUuid ?: $obsUuid)); // acción, inspección, incidente u observación
         if (!Uuid::isValid($uuid) || !Uuid::isValid($target) || !preg_match('/^[a-f0-9]{64}$/', $sha)) {
             return ['error' => 'Datos de la subida inválidos.', 'code' => 422];
         }
@@ -42,7 +44,12 @@ final class Uploads
         if (($existing = self::find($uuid)) !== null) {
             return self::state($existing);
         }
-        if ($inspectionUuid !== '') {
+        if ($incidentUuid !== '') {
+            $incident = Incidents::findByUuid($incidentUuid);
+            if ($incident === null || (int) $incident['reported_by'] !== (int) UserAuth::user()['id']) {
+                return ['error' => 'El incidente no existe (todavía) o no lo reportaste vos.', 'code' => 404];
+            }
+        } elseif ($inspectionUuid !== '') {
             $inspection = Inspections::findByUuid($inspectionUuid);
             if ($inspection === null || (int) $inspection['inspector_user_id'] !== (int) UserAuth::user()['id']) {
                 return ['error' => 'La inspección no existe (todavía) o no es tuya.', 'code' => 404];
@@ -61,10 +68,10 @@ final class Uploads
                 return ['error' => 'La observación no existe (todavía) o no tenés acceso.', 'code' => 404];
             }
         }
-        DB::tenant()->prepare('INSERT INTO uploads (uuid, user_id, observation_uuid, action_uuid, inspection_uuid, item_key, original_name, size_bytes, sha256, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())')
-            ->execute([$uuid, (int) UserAuth::user()['id'], $actionUuid === '' && $inspectionUuid === '' ? $obsUuid : null, $actionUuid ?: null,
-                $inspectionUuid ?: null, $itemKey ?: null,
+        DB::tenant()->prepare('INSERT INTO uploads (uuid, user_id, observation_uuid, action_uuid, inspection_uuid, item_key, incident_uuid, original_name, size_bytes, sha256, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())')
+            ->execute([$uuid, (int) UserAuth::user()['id'], $actionUuid === '' && $inspectionUuid === '' && $incidentUuid === '' ? $obsUuid : null, $actionUuid ?: null,
+                $inspectionUuid ?: null, $itemKey ?: null, $incidentUuid ?: null,
                 mb_substr(basename((string) ($in['name'] ?? 'foto.jpg')), 0, 191), $size, $sha]);
         file_put_contents(self::partPath($uuid), '');
         return self::state(self::find($uuid));
@@ -132,6 +139,9 @@ final class Uploads
         if (($up['inspection_uuid'] ?? null) !== null) {
             return self::completeInspection($up, $part);
         }
+        if (($up['incident_uuid'] ?? null) !== null) {
+            return self::completeIncident($up, $part);
+        }
         $obs = Observations::findByUuid($up['observation_uuid']);
         try {
             $meta = ImageProcessor::store(Tenant::current()['uuid'], $part, $up['original_name'], false, (int) $up['user_id']);
@@ -178,6 +188,27 @@ final class Uploads
             return ['error' => $e->getMessage(), 'code' => 422];
         }
         $attachment = Inspections::addAttachment((int) $inspection['id'], $up['item_key'], $meta);
+        DB::tenant()->prepare("UPDATE uploads SET status = 'completed', attachment_uuid = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?")->execute([$attachment, $up['id']]);
+        @unlink($part);
+        return self::state(self::find($up['uuid']));
+    }
+
+    /** Foto de un incidente reportado desde el celular (no es documento médico). */
+    private static function completeIncident(array $up, string $part): array
+    {
+        $incident = Incidents::findByUuid($up['incident_uuid']);
+        if ($incident === null) {
+            return ['error' => 'El incidente ya no existe.', 'code' => 404];
+        }
+        try {
+            $meta = ImageProcessor::store(Tenant::current()['uuid'], $part, $up['original_name'], false, (int) $up['user_id'], 'incidents');
+        } catch (\DomainException $e) {
+            DB::tenant()->prepare("UPDATE uploads SET status = 'rejected', error = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?")->execute([$e->getMessage(), $up['id']]);
+            return ['error' => $e->getMessage(), 'code' => 422];
+        }
+        $attachment = Incidents::addAttachment((int) $incident['id'], false, $meta);
+        Incidents::addEvent((int) $incident['id'], 'attachment', ['data' => ['archivos' => 1, 'medico' => false], 'user_id' => (int) $up['user_id'],
+            'actor_name' => UserAuth::user()['name'] ?? null]);
         DB::tenant()->prepare("UPDATE uploads SET status = 'completed', attachment_uuid = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?")->execute([$attachment, $up['id']]);
         @unlink($part);
         return self::state(self::find($up['uuid']));

@@ -245,6 +245,11 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Horas trabajadas `worked_hours` (planta × mes; vacío = se borra) en `/panel/incidentes/horas`, con índices del año
   (`IncidentIndicators`: IF, IG, II; in itinere aparte; días perdidos al mes del accidente). CSV de incidentes
   (días perdidos solo con datos de salud).
+- App de campo: "Nuevo" → Observación | Inspección | Incidente / accidente (formulario offline: tipo, cuándo, sector o QR,
+  personas buscando en `employees` sincronizados o externos, qué pasó, fotos). Push `incident.create` (idempotente por
+  uuid), fotos por partes con `uploads.incident_uuid` (solo quien lo reportó). Pull `incidents`: solo los que reportó
+  el usuario, sin datos de salud; detalle `GET /api/v1/incidents/{uuid}` (nunca datos de salud). "Mis incidentes" en
+  Reportes, detalle `#/incidente/{uuid}`.
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

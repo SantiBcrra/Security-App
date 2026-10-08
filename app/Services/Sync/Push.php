@@ -20,7 +20,7 @@ use App\Services\UserAuth;
 final class Push
 {
     public const MAX_OPS = 50;
-    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'action.start', 'action.close', 'inspection.create'];
+    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'action.start', 'action.close', 'inspection.create', 'incident.create'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
     public static function run(array $operations): array
@@ -66,6 +66,7 @@ final class Push
                 'action.start'           => self::actionStep($data, 'tomar'),
                 'action.close'           => self::actionStep($data, 'cerrar'),
                 'inspection.create'      => self::inspectionCreate($data),
+                'incident.create'        => self::incidentCreate($data),
                 default                  => self::error('Tipo de operación desconocido: ' . $type),
             };
         } catch (UserError $e) {
@@ -188,6 +189,21 @@ final class Push
         return ['status' => 'ok', 'data' => ['uuid' => $i['uuid'], 'code' => \App\Models\Inspections::format((int) $i['number']),
             'result' => $i['result'], 'result_label' => \App\Services\InspectionService::RESULTS[$i['result']]['label'], 'score' => $i['score'] !== null ? (int) $i['score'] : null,
             'actions' => (int) $i['items_fail'], 'duplicate' => !empty($r['duplicate'])]];
+    }
+
+    /** Incidente reportado sin señal (uuid del celular: reenviarlo no duplica). Las fotos van después, por partes. */
+    private static function incidentCreate(array $data): array
+    {
+        if (!Uuid::isValid((string) ($data['uuid'] ?? ''))) {
+            return self::error('Falta el identificador del incidente.');
+        }
+        $r = \App\Services\IncidentService::create($data);
+        if ($r['incident'] === null) {
+            return self::error(implode(' ', $r['errors']) ?: 'Reporte inválido.');
+        }
+        $i = $r['incident'];
+        return ['status' => 'ok', 'data' => ['uuid' => $i['uuid'], 'code' => \App\Models\Incidents::format((int) $i['number']), 'status' => $i['status'],
+            'status_label' => \App\Services\IncidentService::STATES[$i['status']]['label'], 'duplicate' => !empty($r['duplicate'])]];
     }
 
     private static function error(string $message): array

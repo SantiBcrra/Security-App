@@ -23,7 +23,7 @@ use App\Services\UserAuth;
  */
 final class Pull
 {
-    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'actions', 'inspection_templates', 'inspection_schedule'];
+    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'actions', 'inspection_templates', 'inspection_schedule', 'incidents'];
     private const OVERLAP_SECONDS = 5;
     private const OBS_HISTORY_DAYS = 180;
 
@@ -53,7 +53,9 @@ final class Pull
                     || ($entity === 'actions' && !ActionService::canView($row))
                     // Checklists: solo a quien puede hacer inspecciones. Programadas: solo las pendientes a su cargo.
                     || ($entity === 'inspection_templates' && (!UserAuth::can('inspecciones', 'crear') || $row['version_uuid'] === null))
-                    || ($entity === 'inspection_schedule' && ($row['status'] !== 'pendiente' || !self::scheduleIsMine($row)));
+                    || ($entity === 'inspection_schedule' && ($row['status'] !== 'pendiente' || !self::scheduleIsMine($row)))
+                    // Incidentes: al celular solo llegan los que reportó el usuario (sin datos de salud).
+                    || ($entity === 'incidents' && (int) $row['reported_by'] !== (int) (UserAuth::user()['id'] ?? 0));
                 if ($gone) {
                     $deleted[$entity][] = $row['uuid'];
                 } else {
@@ -157,6 +159,10 @@ final class Pull
                     FROM actions t JOIN users ru ON ru.id = t.responsible_user_id LEFT JOIN sectors se ON se.id = t.sector_id
                     LEFT JOIN observations o ON t.origin_type = 'observacion' AND o.id = t.origin_id
                     WHERE {$after} AND (t.status IN ('abierta', 'en_curso', 'cerrada') OR t.updated_at > UTC_TIMESTAMP() - INTERVAL 60 DAY){$order}", $params];
+            case 'incidents':
+                return ["SELECT t.id, t.uuid, t.number, t.type, t.status, t.occurred_at, t.description, t.reported_by, t.updated_at, t.deleted_at,
+                        se.uuid AS sector_uuid FROM incidents t LEFT JOIN sectors se ON se.id = t.sector_id
+                    WHERE {$after} AND t.occurred_at > UTC_TIMESTAMP() - INTERVAL 180 DAY{$order}", $params];
             case 'inspection_templates':
                 return ["SELECT t.*, v.uuid AS version_uuid, v.structure, ty.uuid AS type_uuid FROM inspection_templates t
                     LEFT JOIN inspection_template_versions v ON v.id = t.current_version_id LEFT JOIN catalog_items ty ON ty.id = t.equipment_type_id
@@ -221,6 +227,12 @@ final class Pull
                 'can_start' => $r['status'] === 'abierta' && ActionService::canDo($r, 'tomar'),
                 'can_close' => ActionWorkflow::isOpen($r['status']) && ActionService::canDo($r, 'cerrar'),
                 'updated_at' => str_replace(' ', 'T', $r['updated_at']) . 'Z',
+            ],
+            'incidents' => [
+                'uuid' => $r['uuid'], 'code' => \App\Models\Incidents::format((int) $r['number']), 'type' => $r['type'],
+                'type_label' => \App\Services\IncidentService::typeLabel($r['type']), 'status' => $r['status'],
+                'status_label' => \App\Services\IncidentService::STATES[$r['status']]['label'], 'sector_uuid' => $r['sector_uuid'],
+                'occurred_at' => str_replace(' ', 'T', $r['occurred_at']) . 'Z', 'description' => mb_strimwidth((string) $r['description'], 0, 300, '…'),
             ],
             'inspection_templates' => [
                 'uuid' => $r['uuid'], 'name' => $r['name'], 'description' => $r['description'], 'scope' => $r['scope'], 'type_uuid' => $r['type_uuid'],

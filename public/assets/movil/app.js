@@ -81,6 +81,14 @@ document.addEventListener('alpine:init', () => {
         inspBusy: false,
         inspDetailUuid: null,
         inspDetail: null,
+        employees: [],
+        incForm: null,           // reporte de incidente en curso
+        incBusy: false,
+        incidents: [],
+        incDetailUuid: null,
+        incDetail: null,
+        incTypes: { accidente_con_baja: 'Accidente con baja', accidente_sin_baja: 'Accidente sin baja', in_itinere: 'Accidente in itinere',
+            enfermedad_profesional: 'Enfermedad profesional', incidente: 'Incidente (daño material)', casi_accidente: 'Casi-accidente' },
         detailUuid: null,
         toast: null,
         meta: null,
@@ -199,6 +207,12 @@ document.addEventListener('alpine:init', () => {
                 this.openDetail(id);
                 return;
             }
+            if (section === 'incidente' && id) {
+                this.detailUuid = null; this.actionUuid = null; this.inspDetailUuid = null;
+                this.tab = 'reportes'; this.openIncident(id);
+                return;
+            }
+            this.incDetailUuid = null;
             if (section === 'inspeccion' && id) {
                 this.detailUuid = null; this.actionUuid = null;
                 this.tab = 'reportes'; this.openInspection(id);
@@ -245,6 +259,8 @@ document.addEventListener('alpine:init', () => {
             this.patrolRoutes = (await db.all('patrol_routes')).sort((a, b) => a.name.localeCompare(b.name));
             this.patrolScans = await db.all('patrol_scans');
             const order = { abierta: 0, en_curso: 0, cerrada: 1, verificada: 2, cancelada: 3 };
+            this.employees = (await db.all('employees')).sort((a, b) => a.name.localeCompare(b.name));
+            this.incidents = (await db.all('incidents')).sort((a, b) => (b.occurred_at || '').localeCompare(a.occurred_at || ''));
             this.inspTemplates = (await db.all('inspection_templates')).sort((a, b) => a.name.localeCompare(b.name));
             this.inspSchedule = (await db.all('inspection_schedule')).sort((a, b) => a.due_on.localeCompare(b.due_on));
             this.inspections = (await db.all('inspections')).sort((a, b) => (b.done_at || '').localeCompare(a.done_at || ''));
@@ -275,6 +291,91 @@ document.addEventListener('alpine:init', () => {
             return (q ? this.sectors.filter((s) => s.label.toLowerCase().includes(q)) : this.sectors).slice(0, 40);
         },
         get canCreate() { return !!this.meta?.permisos?.observaciones?.acciones?.includes('crear'); },
+        // ── incidentes y accidentes ─────────────────────────────────────
+        get canReportIncident() { return !!this.meta?.permisos?.incidentes?.acciones?.includes('crear'); },
+        get isAccidentType() { return ['accidente_con_baja', 'accidente_sin_baja', 'in_itinere', 'enfermedad_profesional'].includes(this.incForm?.type); },
+        startIncident() {
+            this.incForm = { uuid: crypto.randomUUID(), type: '', occurred_at: nowLocalInput(), sector: '', sectorQuery: '', equipment: '',
+                location_text: '', description: '', immediate_actions: '', people: [], personQuery: '', photos: [], showErrors: false };
+            this.newMode = 'inc';
+        },
+        employeeResults() {
+            const q = (this.incForm?.personQuery || '').trim().toLowerCase();
+            return q.length < 2 ? [] : this.employees.filter((e) => e.name.toLowerCase().includes(q)).slice(0, 8);
+        },
+        addIncPerson(emp, role) {
+            if (this.incForm.people.some((p) => p.employee === emp.uuid)) return;
+            this.incForm.people.push({ employee: emp.uuid, name: emp.name, role, injury_description: '', statement: '' });
+            this.incForm.personQuery = '';
+            if (!this.incForm.sector && emp.sector_uuid) this.incForm.sector = emp.sector_uuid;
+        },
+        addIncExternal(role) {
+            const name = this.incForm.personQuery.trim();
+            if (name.length < 3) return;
+            this.incForm.people.push({ external_name: name, name: name + ' (externo)', role, injury_description: '', statement: '' });
+            this.incForm.personQuery = '';
+        },
+        incErrors() {
+            const f = this.incForm;
+            const errs = [];
+            if (!f.type) errs.push('qué pasó (tipo)');
+            if (!f.sector && f.type !== 'in_itinere') errs.push('el sector');
+            if (f.description.trim().length < 10) errs.push('la descripción (mínimo 10 letras)');
+            if (this.isAccidentType && !f.people.some((p) => p.role === 'lesionado')) errs.push('quién se lastimó');
+            return errs;
+        },
+        async addIncPhotos(event) {
+            const files = [...event.target.files].slice(0, MAX_PHOTOS - this.incForm.photos.length);
+            event.target.value = '';
+            for (const f of files) {
+                const blob = await shrinkPhoto(f);
+                this.incForm.photos.push({ blob, url: URL.createObjectURL(blob), name: 'incidente.jpg' });
+            }
+        },
+        /** Se guarda en el celular y se envía cuando hay señal (primero el reporte, después las fotos). */
+        async saveIncident() {
+            const f = this.incForm;
+            f.showErrors = true;
+            const errs = this.incErrors();
+            if (errs.length) { alert('Falta: ' + errs.join(', ') + '.'); return; }
+            this.incBusy = true;
+            try {
+                const gps = await this.currentPosition();
+                const occurred = new Date(f.occurred_at).toISOString();
+                for (const p of f.photos) {
+                    await db.put('uploads', { upload_uuid: crypto.randomUUID(), incident_uuid: f.uuid, name: p.name, size: p.blob.size,
+                        sha256: await sha256Hex(p.blob), blob: p.blob, status: 'pending', received: 0 });
+                    URL.revokeObjectURL(p.url);
+                }
+                await db.put('incidents', { uuid: f.uuid, local: true, code: null, type: f.type, type_label: this.incTypes[f.type], status: 'pendiente',
+                    status_label: 'Pendiente de enviar', occurred_at: occurred, sector_uuid: f.sector || null, description: f.description.trim() });
+                await enqueue('incident.create', { uuid: f.uuid, type: f.type, occurred_at: occurred, sector: f.sector || undefined, equipment: f.equipment || undefined,
+                    location_text: f.location_text.trim() || undefined, lat: gps?.lat, lng: gps?.lng, description: f.description.trim(),
+                    immediate_actions: f.immediate_actions.trim() || undefined,
+                    people: f.people.map((p) => ({ employee: p.employee, external_name: p.external_name, role: p.role,
+                        injury_description: p.injury_description.trim() || undefined, statement: p.statement.trim() || undefined })) });
+                const serious = ['accidente_con_baja', 'in_itinere'].includes(f.type);
+                this.incForm = null;
+                this.newMode = 'obs';
+                await this.reloadLocal();
+                const online = await isOnline();
+                if (serious && !online) alert('Sin señal: el reporte quedó guardado y el aviso urgente sale cuando vuelva la conexión. Avisá ahora en persona o por radio.');
+                this.flash(online ? 'Reporte guardado. Enviando…' : 'Reporte guardado en el celular. Se envía cuando haya señal.');
+                this.go('reportes');
+                syncNow('save');
+            } catch (e) {
+                alert('No se pudo guardar: ' + e.message);
+            } finally {
+                this.incBusy = false;
+            }
+        },
+        async openIncident(uuid) {
+            this.incDetailUuid = uuid;
+            this.incDetail = { local: await db.get('incidents', uuid), remote: null, loading: true };
+            try { this.incDetail.remote = await request('GET', '/incidents/' + uuid); } catch (e) { /* sin red o todavía no enviado */ }
+            this.incDetail.loading = false;
+        },
+
         // ── inspecciones (checklists) ───────────────────────────────────
         get canInspect() { return !!this.meta?.permisos?.inspecciones?.acciones?.includes('crear'); },
         /** Programadas a mi cargo ya habilitadas (hoy y vencidas), sin las que ya hice en este celular. */
@@ -572,6 +673,14 @@ document.addEventListener('alpine:init', () => {
                         const m = codes.map((c) => c.rawValue.match(/\/q\/([0-9a-f-]{36})/i)).find(Boolean);
                         if (m) {
                             const eq = this.equipment.find((e) => e.uuid === m[1].toLowerCase());
+                            if (eq && this.newMode === 'inc' && this.incForm) {
+                                this.scanner.open = false;
+                                stream.getTracks().forEach((t) => t.stop());
+                                this.incForm.equipment = eq.uuid;
+                                if (eq.sector_uuid && !this.incForm.sector) this.incForm.sector = eq.sector_uuid;
+                                this.flash('Equipo ' + eq.code + ' seleccionado');
+                                return;
+                            }
                             if (eq && this.newMode === 'insp') {
                                 this.scanner.open = false;
                                 stream.getTracks().forEach((t) => t.stop());

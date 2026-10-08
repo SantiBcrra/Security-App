@@ -103,6 +103,10 @@ async function pushOps() {
                     if (local) await db.put('inspections', { ...local, local: false, code: r.data.code, result: r.data.result, result_label: r.data.result_label,
                         score: r.data.score, actions: r.data.actions, sync_error: null });
                 }
+                if (op.type === 'incident.create') {
+                    const local = await db.get('incidents', op.data.uuid);
+                    if (local) await db.put('incidents', { ...local, local: false, code: r.data.code, status: r.data.status, status_label: r.data.status_label, sync_error: null });
+                }
             } else {
                 // Error de validación: no se reintenta solo (el servidor explicó por qué); queda visible.
                 await db.put('outbox', { ...op, status: 'failed', error: r.error });
@@ -118,6 +122,10 @@ async function pushOps() {
                     const local = await db.get('inspections', op.data.uuid);
                     if (local) await db.put('inspections', { ...local, sync_error: r.error });
                 }
+                if (op.type === 'incident.create') {
+                    const local = await db.get('incidents', op.data.uuid);
+                    if (local) await db.put('incidents', { ...local, sync_error: r.error });
+                }
             }
         }
     }
@@ -130,6 +138,9 @@ async function pushUploads() {
         if (up.inspection_uuid) {
             const ins = await db.get('inspections', up.inspection_uuid);
             if (!ins || ins.local) continue; // la inspección todavía no llegó al servidor: esperar
+        } else if (up.incident_uuid) {
+            const inc = await db.get('incidents', up.incident_uuid);
+            if (!inc || inc.local) continue; // el incidente todavía no llegó al servidor: esperar
         } else if (!up.action_uuid) {
             const obs = await db.get('observations', up.observation_uuid);
             if (!obs || obs.local) continue; // la observación todavía no llegó al servidor: esperar
@@ -138,7 +149,7 @@ async function pushUploads() {
         try {
             state = await request('POST', '/uploads', { json: {
                 upload_uuid: up.upload_uuid, observation_uuid: up.observation_uuid, action_uuid: up.action_uuid,
-                inspection_uuid: up.inspection_uuid, item_key: up.item_key, name: up.name, size: up.size, sha256: up.sha256,
+                inspection_uuid: up.inspection_uuid, item_key: up.item_key, incident_uuid: up.incident_uuid, name: up.name, size: up.size, sha256: up.sha256,
             } });
         } catch (e) {
             // La acción ya no admite evidencia (la cerraron/cancelaron desde la web): no se reintenta.
@@ -183,6 +194,14 @@ async function pull() {
                     merged.push(local?.pending ? { ...row, status: local.status, status_label: local.status_label, closure_text: local.closure_text, pending: true } : row);
                 }
                 await db.putMany('actions', merged);
+            } else if (entity === 'incidents') {
+                // Los que todavía no se enviaron no se pisan (y se conservan sus datos locales).
+                const merged = [];
+                for (const row of rows) {
+                    const local = await db.get('incidents', row.uuid);
+                    merged.push({ ...(local || {}), ...row, local: false });
+                }
+                await db.putMany('incidents', merged);
             } else if (entity === 'observations') {
                 // No pisar lo que todavía no se envió
                 const merged = [];

@@ -25,7 +25,7 @@ components:
       required: [op_id, type, data]
       properties:
         op_id: { type: string, format: uuid, description: "Generado en el celular. Reenviar el mismo op_id devuelve el mismo resultado (idempotente)." }
-        type: { type: string, enum: [observation.create, observation.comment, observation.transition, round.start, round.scan, round.finish, action.start, action.close, inspection.create] }
+        type: { type: string, enum: [observation.create, observation.comment, observation.transition, round.start, round.scan, round.finish, action.start, action.close, inspection.create, incident.create] }
         data:
           type: object
           description: |
@@ -41,6 +41,9 @@ components:
               schedule (programada, opcional), done_at, lat, lng, gps_accuracy, notes, answers { item_key: { value, comment } },
               photo_counts { item_key: n } (fotos que se suben después con POST /uploads + inspection_uuid + item_key).
               Respuesta: code, result, result_label, score, actions (acciones creadas), duplicate.
+            incident.create: uuid, type, occurred_at, sector (opcional en in itinere), equipment, location_text, lat, lng, description,
+              immediate_actions, people [{ employee (uuid) | external_name, role (lesionado|testigo|involucrado), injury_description, statement }].
+              Fotos después con POST /uploads + incident_uuid. Respuesta: code, status, status_label, duplicate.
 security: [{ bearer: [] }]
 paths:
   /auth/login:
@@ -71,6 +74,7 @@ paths:
         closure_text, evidence (archivos del ciclo actual), can_start, can_close.
         inspection_templates (activas, con structure de la versión vigente; solo si puede hacer inspecciones) e
         inspection_schedule (pendientes a su cargo: template_uuid, equipment_uuid, sector_uuid, due_from, due_on).
+        incidents (solo los que reportó el usuario, últimos 180 días, sin datos de salud).
         `deleted` trae los uuid dados de baja. Paginado: repetir con el cursor devuelto mientras `has_more` sea true.
         El cliente hace upsert por uuid (puede recibir algo dos veces sin duplicar).
       parameters:
@@ -89,7 +93,7 @@ paths:
       summary: Alta de una foto por partes (idempotente)
       description: "Foto de una observación (observation_uuid), evidencia de una acción CAPA abierta (action_uuid) o foto de una inspección propia (inspection_uuid + item_key opcional)."
       requestBody: { content: { application/json: { schema: { type: object, required: [upload_uuid, size, sha256],
-        properties: { upload_uuid: { type: string, format: uuid }, observation_uuid: { type: string, format: uuid }, action_uuid: { type: string, format: uuid }, inspection_uuid: { type: string, format: uuid }, item_key: { type: string, format: uuid }, name: { type: string },
+        properties: { upload_uuid: { type: string, format: uuid }, observation_uuid: { type: string, format: uuid }, action_uuid: { type: string, format: uuid }, inspection_uuid: { type: string, format: uuid }, item_key: { type: string, format: uuid }, incident_uuid: { type: string, format: uuid }, name: { type: string },
           size: { type: integer, maximum: 15728640 }, sha256: { type: string } } } } } }
       responses: { "200": { description: "estado: received_bytes, status" }, "404": { description: la observación todavía no llegó } }
   /uploads/{uuid}:
@@ -112,6 +116,8 @@ paths:
     get: { summary: Miniatura de una foto, parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }, { name: photo, in: path, required: true, schema: { type: string } }], responses: { "200": { description: imagen } } }
   /inspections/{uuid}:
     get: { summary: "Detalle de una inspección: resultado y respuestas (con la acción creada por ítem)", parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+  /incidents/{uuid}:
+    get: { summary: "Detalle de un incidente (sin datos de salud)", parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
   /actions/{uuid}:
     get: { summary: "Detalle de una acción: línea de tiempo y evidencia (files[] con url de miniatura)", parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok }, "404": { description: no existe o fuera de alcance } } }
   /actions/{uuid}/files/{file}:

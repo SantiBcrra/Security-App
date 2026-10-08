@@ -285,10 +285,77 @@
 
     <!-- Reportar -->
     <main class="app-main" x-show="!detailUuid && !actionUuid && tab === 'reportar'">
-        <div class="btn-group w-100 mb-3" x-show="canInspect && !insp">
-            <button type="button" class="btn" :class="newMode === 'obs' ? 'btn-dark' : 'btn-outline-dark'" @click="newMode = 'obs'">Reportar observación</button>
-            <button type="button" class="btn" :class="newMode === 'insp' ? 'btn-dark' : 'btn-outline-dark'" @click="newMode = 'insp'">Hacer inspección</button>
+        <div class="d-grid gap-2 mb-3" style="grid-template-columns: repeat(auto-fit, minmax(100px, 1fr))" x-show="(canInspect || canReportIncident) && !insp">
+            <button type="button" class="btn btn-sm py-2" :class="newMode === 'obs' ? 'btn-dark' : 'btn-outline-dark'" @click="newMode = 'obs'">Observación</button>
+            <button type="button" class="btn btn-sm py-2" x-show="canInspect" :class="newMode === 'insp' ? 'btn-dark' : 'btn-outline-dark'" @click="newMode = 'insp'">Inspección</button>
+            <button type="button" class="btn btn-sm py-2" x-show="canReportIncident" :class="newMode === 'inc' ? 'btn-danger' : 'btn-outline-danger'" @click="incForm ? newMode = 'inc' : startIncident()">Incidente / accidente</button>
         </div>
+
+        <template x-if="newMode === 'inc' && !incForm">
+            <button type="button" class="btn btn-danger btn-lg w-100" @click="startIncident()">Reportar incidente / accidente</button>
+        </template>
+
+        <!-- Incidente / accidente -->
+        <template x-if="newMode === 'inc' && incForm">
+            <div>
+                <div class="alert alert-danger small py-2">Si hay alguien lastimado: primero la atención y avisá al supervisor. Después completá esto.</div>
+                <label class="form-label fw-semibold small mb-1">¿Qué pasó?</label>
+                <div class="d-grid gap-2 mb-3" style="grid-template-columns: 1fr 1fr">
+                    <template x-for="(label, key) in incTypes" :key="key">
+                        <button type="button" class="btn py-2 small" @click="incForm.type = key"
+                                :class="incForm.type === key ? (['accidente_con_baja', 'in_itinere'].includes(key) ? 'btn-danger' : 'btn-dark') : 'btn-outline-secondary'" x-text="label"></button>
+                    </template>
+                </div>
+                <div class="small text-danger mb-2" x-show="incForm.showErrors && !incForm.type">Elegí qué pasó.</div>
+                <label class="form-label small mb-1">Cuándo</label>
+                <input class="form-control mb-3" type="datetime-local" x-model="incForm.occurred_at">
+                <label class="form-label small mb-1">Dónde <span class="text-body-secondary" x-show="incForm.type === 'in_itinere'">(opcional)</span></label>
+                <select class="form-select mb-2" x-model="incForm.sector" :class="incForm.showErrors && !incForm.sector && incForm.type !== 'in_itinere' ? 'is-invalid' : ''">
+                    <option value="">Sector…</option>
+                    <template x-for="sc in sectors" :key="sc.uuid"><option :value="sc.uuid" x-text="sc.label" :selected="sc.uuid === incForm.sector"></option></template>
+                </select>
+                <div class="d-flex gap-2 mb-2">
+                    <select class="form-select" x-model="incForm.equipment"><option value="">Equipo (si hubo uno)</option>
+                        <template x-for="e in equipment" :key="e.uuid"><option :value="e.uuid" x-text="e.code + ' · ' + e.name" :selected="e.uuid === incForm.equipment"></option></template></select>
+                    <button type="button" class="btn btn-outline-secondary text-nowrap" @click="openScanner()">📷 QR</button>
+                </div>
+                <input class="form-control mb-3" x-model="incForm.location_text" placeholder="Lugar exacto (ej. puesto 3)">
+                <label class="form-label small mb-1">Qué pasó</label>
+                <textarea class="form-control mb-3" rows="3" x-model="incForm.description" placeholder="Qué tarea se hacía, qué pasó, cómo" :class="incForm.showErrors && incForm.description.trim().length < 10 ? 'is-invalid' : ''"></textarea>
+                <label class="form-label small mb-1">Personas</label>
+                <input class="form-control mb-1" type="search" x-model="incForm.personQuery" placeholder="Buscar empleado por nombre">
+                <template x-for="emp in employeeResults()" :key="emp.uuid">
+                    <div class="d-flex justify-content-between align-items-center border rounded px-2 py-1 mb-1 small">
+                        <span x-text="emp.name"></span>
+                        <span class="d-flex gap-1"><button type="button" class="btn btn-sm btn-outline-danger" @click="addIncPerson(emp, 'lesionado')">Lesionado</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @click="addIncPerson(emp, 'testigo')">Testigo</button></span>
+                    </div>
+                </template>
+                <div class="small mb-2" x-show="incForm.personQuery.trim().length >= 3 && !employeeResults().length">
+                    No está en la lista: <button type="button" class="btn btn-sm btn-link p-0" @click="addIncExternal('lesionado')">agregar como externo lesionado</button> ·
+                    <button type="button" class="btn btn-sm btn-link p-0" @click="addIncExternal('testigo')">como testigo</button></div>
+                <template x-for="(p, n) in incForm.people" :key="n">
+                    <div class="card mb-2"><div class="card-body p-2 small">
+                        <div class="d-flex justify-content-between"><strong x-text="p.name"></strong>
+                            <span><span class="badge" :class="p.role === 'lesionado' ? 'text-bg-danger' : 'text-bg-secondary'" x-text="p.role === 'lesionado' ? 'Lesionado' : 'Testigo'"></span>
+                                <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-2" @click="incForm.people.splice(n, 1)">quitar</button></span></div>
+                        <input class="form-control form-control-sm mt-1" x-show="p.role === 'lesionado'" x-model="p.injury_description" placeholder="Qué lesión tiene (ej. corte en la mano)">
+                        <input class="form-control form-control-sm mt-1" x-show="p.role === 'testigo'" x-model="p.statement" placeholder="Qué vio (opcional)">
+                    </div></div>
+                </template>
+                <div class="small text-danger mb-2" x-show="incForm.showErrors && isAccidentType && !incForm.people.some((p) => p.role === 'lesionado')">Indicá quién se lastimó.</div>
+                <label class="form-label small mb-1 mt-2">Qué se hizo en el momento</label>
+                <textarea class="form-control mb-3" rows="2" x-model="incForm.immediate_actions" placeholder="Ej: primeros auxilios, se frenó la máquina, se llamó a la ART"></textarea>
+                <label class="btn btn-outline-secondary w-100 mb-2">📷 Fotos del lugar
+                    <input type="file" accept="image/*" capture="environment" multiple hidden @change="addIncPhotos($event)"></label>
+                <div class="photo-grid mb-3" x-show="incForm.photos.length">
+                    <template x-for="(ph, n) in incForm.photos"><div class="position-relative"><img :src="ph.url" alt="Foto">
+                        <button type="button" class="btn btn-sm btn-danger photo-remove" @click="URL.revokeObjectURL(ph.url); incForm.photos.splice(n, 1)">✕</button></div></template>
+                </div>
+                <button type="button" class="btn btn-danger btn-lg w-100 mb-2" :disabled="incBusy" @click="saveIncident()">Registrar</button>
+                <button type="button" class="btn btn-link w-100 mb-4" @click="if (confirm('¿Descartar este reporte?')) { incForm = null; newMode = 'obs'; }">Descartar</button>
+            </div>
+        </template>
 
         <!-- Inspección: elegir checklist -->
         <template x-if="newMode === 'insp' && !insp">
@@ -488,7 +555,45 @@
                 </template>
             </div>
         </template>
-        <div x-show="!inspDetailUuid">
+        <template x-if="incDetailUuid && incDetail">
+            <div>
+                <button class="btn btn-link px-0 mb-2" @click="history.length > 1 ? history.back() : go('reportes')">← Volver</button>
+                <template x-if="incDetail.remote">
+                    <div>
+                        <div class="d-flex flex-wrap gap-2 align-items-center mb-1"><h2 class="h5 m-0" x-text="incDetail.remote.code"></h2>
+                            <span class="badge text-bg-secondary" x-text="incDetail.remote.status_label"></span></div>
+                        <div class="fw-semibold" x-text="incDetail.remote.type_label"></div>
+                        <div class="small text-body-secondary mb-2" x-text="fmtDate(incDetail.remote.occurred_at) + ' · ' + (incDetail.remote.sector || '') + (incDetail.remote.equipment ? ' · ' + incDetail.remote.equipment : '')"></div>
+                        <p style="white-space: pre-wrap" x-text="incDetail.remote.description"></p>
+                        <div class="small mb-2" x-show="incDetail.remote.immediate_actions"><strong>En el momento:</strong> <span x-text="incDetail.remote.immediate_actions"></span></div>
+                        <ul class="list-group small mb-3"><template x-for="p in incDetail.remote.people"><li class="list-group-item d-flex justify-content-between"><span x-text="p.name"></span><span class="text-body-secondary" x-text="p.role"></span></li></template></ul>
+                        <div class="small text-body-secondary">La investigación y el seguimiento se ven en la web.</div>
+                    </div>
+                </template>
+                <template x-if="!incDetail.remote && !incDetail.loading">
+                    <div>
+                        <template x-if="incDetail.local"><div class="mb-2"><strong x-text="incDetail.local.type_label"></strong>
+                            <div class="small text-body-secondary" x-text="fmtDate(incDetail.local.occurred_at)"></div><p x-text="incDetail.local.description"></p></div></template>
+                        <div class="alert alert-secondary small" x-text="incDetail.local && incDetail.local.local ? 'Guardado en el celular: se envía cuando haya señal.' : 'Sin conexión: no se puede mostrar el detalle.'"></div>
+                    </div>
+                </template>
+            </div>
+        </template>
+        <div x-show="!inspDetailUuid && !incDetailUuid">
+        <template x-if="incidents.length">
+            <div class="mb-4">
+                <h2 class="h6 text-body-secondary">Mis incidentes reportados</h2>
+                <template x-for="i in incidents.slice(0, 15)" :key="i.uuid">
+                    <a class="obs-card" :href="'#/incidente/' + i.uuid" :class="['accidente_con_baja', 'in_itinere'].includes(i.type) ? 'obs-imminent' : ''">
+                        <div class="d-flex justify-content-between gap-2"><strong x-text="i.code || i.type_label"></strong>
+                            <span class="badge" :class="i.local ? (i.sync_error ? 'text-bg-danger' : 'text-bg-warning') : 'text-bg-secondary'"
+                                  x-text="i.local ? (i.sync_error ? 'Rechazado' : 'Pendiente de enviar') : i.status_label"></span></div>
+                        <div class="small" x-text="(i.code ? i.type_label + ' · ' : '') + sectorLabel(i.sector_uuid)"></div>
+                        <div class="small text-body-secondary text-truncate" x-text="fmtDate(i.occurred_at) + ' · ' + (i.description || '')"></div>
+                    </a>
+                </template>
+            </div>
+        </template>
         <template x-if="inspToday.length">
             <div class="mb-4">
                 <h2 class="h6 text-body-secondary">Inspecciones para hoy</h2>
@@ -574,6 +679,7 @@
                     <a class="btn btn-outline-secondary btn-sm" x-show="n.observation_uuid" :href="'#/observacion/' + n.observation_uuid">Ver</a>
                     <a class="btn btn-outline-secondary btn-sm" x-show="n.action_uuid" :href="'#/accion/' + n.action_uuid">Ver acción</a>
                     <a class="btn btn-outline-secondary btn-sm" x-show="n.inspection_uuid" :href="'#/inspeccion/' + n.inspection_uuid">Ver inspección</a>
+                    <a class="btn btn-outline-secondary btn-sm" x-show="n.incident_uuid" :href="'#/incidente/' + n.incident_uuid">Ver incidente</a>
                     <a class="btn btn-primary btn-sm" x-show="n.schedule_uuid" :href="'#/programada/' + n.schedule_uuid">Hacer</a>
                 </div>
             </div>

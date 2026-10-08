@@ -395,6 +395,58 @@ return [
         $_SESSION = [];
     },
 
+    'app de campo: reporte offline por sync con foto por partes, solo lo propio y sin datos de salud' => function () use ($setup, &$st, $inbox) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['rep2']);
+        $uuid = Uuid::v4();
+        $data = ['uuid' => $uuid, 'type' => 'accidente_con_baja', 'occurred_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 1800), 'sector' => Sectors::findById($st['nave2'])['uuid'],
+            'description' => 'Se golpeó la rodilla al bajar de la plataforma', 'immediate_actions' => 'Hielo y traslado',
+            'people' => [['employee' => $st['emp2']['uuid'], 'role' => 'lesionado', 'injury_description' => 'Golpe en la rodilla derecha']]];
+        $op = fn () => ['op_id' => Uuid::v4(), 'type' => 'incident.create', 'data' => $data];
+        $r = App\Services\Sync\Push::run([$op()])[0];
+        assert_same('ok', $r['status'], json_encode($r));
+        assert_true(str_starts_with($r['data']['code'], 'INC-'));
+        assert_same(true, App\Services\Sync\Push::run([$op()])[0]['data']['duplicate'], 'reenvío con otro op_id: no duplica');
+        $bad = App\Services\Sync\Push::run([['op_id' => Uuid::v4(), 'type' => 'incident.create', 'data' => ['uuid' => Uuid::v4(), 'type' => 'accidente_con_baja',
+            'description' => 'corto', 'people' => []]]])[0];
+        assert_same('error', $bad['status']);
+        $title = '⚠ Accidente con baja · ' . $r['data']['code'];
+        assert_true(isset($inbox($st['sup2'])[$title]), 'aviso crítico al supervisor de la nave 2');
+        // Foto por partes
+        $img = imagecreatetruecolor(200, 150);
+        $tmp = tempnam(sys_get_temp_dir(), 'ic');
+        imagejpeg($img, $tmp, 80);
+        $bytes = file_get_contents($tmp);
+        $up = Uuid::v4();
+        $init = App\Services\Uploads::init(['upload_uuid' => $up, 'incident_uuid' => $uuid, 'name' => 'lugar.jpg', 'size' => strlen($bytes), 'sha256' => hash('sha256', $bytes)]);
+        assert_same('receiving', $init['status'] ?? null, json_encode($init));
+        App\Services\Uploads::chunk($up, 0, $bytes);
+        assert_same('completed', App\Services\Uploads::complete($up)['status'] ?? null);
+        $i = Incidents::findByUuid($uuid);
+        assert_same(1, count(Incidents::attachments((int) $i['id'], false)));
+        UserAuth::setCurrent($st['rep']);
+        assert_same(404, App\Services\Uploads::init(['upload_uuid' => Uuid::v4(), 'incident_uuid' => $uuid, 'size' => 10, 'sha256' => str_repeat('a', 64)])['code'] ?? null,
+            'otro no sube fotos a un incidente ajeno');
+        // Pull: solo los míos
+        DB::tenant()->exec('UPDATE incidents SET updated_at = updated_at - INTERVAL 60 SECOND');
+        $mine = function (array $u) {
+            UserAuth::setCurrent($u);
+            return array_column((array) (App\Services\Sync\Pull::run(null, 1000)['changes']->incidents ?? []), null, 'uuid');
+        };
+        $rep2 = $mine($st['rep2']);
+        assert_true(isset($rep2[$uuid]) && count($rep2) === 1);
+        assert_true(!isset($rep2[$uuid]['injury_description']) && !str_contains(json_encode($rep2[$uuid], JSON_UNESCAPED_UNICODE), 'rodilla derecha'), 'sin datos de salud');
+        assert_true(!isset($mine($st['hys'])[$uuid]), 'al celular de SyH no le llegan los ajenos (se gestionan en la web)');
+        // Detalle por API: sin datos de salud, aunque el que mira sea SyH
+        UserAuth::setCurrent($st['hys']);
+        $api = json_decode((new App\Controllers\Api\IncidentsController())->show(new App\Core\Request('GET', '/x'), $uuid)->body, true)['data'];
+        assert_same(['Accidente con baja', 'Lesionado'], [$api['type_label'], $api['people'][0]['role']]);
+        assert_true(!str_contains(json_encode($api, JSON_UNESCAPED_UNICODE), 'rodilla derecha'));
+        UserAuth::setCurrent($st['sup']);
+        assert_same(404, (new App\Controllers\Api\IncidentsController())->show(new App\Core\Request('GET', '/x'), $uuid)->status, 'fuera de su alcance');
+    },
+
     'aislamiento: la empresa B no ve incidentes de A' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['b']);
