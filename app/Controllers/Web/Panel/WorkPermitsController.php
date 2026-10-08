@@ -13,7 +13,11 @@ use App\Models\Contractors;
 use App\Models\Employees;
 use App\Models\Equipment;
 use App\Models\Sectors;
+use App\Models\Sites;
 use App\Models\WorkPermits;
+use App\Services\Audit;
+use App\Services\UserAuth;
+use App\Services\WorkPermitControls;
 use App\Services\WorkPermitService;
 
 /** Permisos de trabajo (Etapa 13): activos ahora, solicitar, autorizar, iniciar, cerrar. */
@@ -37,6 +41,33 @@ final class WorkPermitsController
         ], 'layouts/app'));
     }
 
+    /** Historial con filtros (estado, tipo, planta, sector, fechas, texto). */
+    public function list(Request $request): Response
+    {
+        [$f, $form] = $this->filters($request);
+        $scope = WorkPermitService::scope();
+        return Response::html(View::render('panel/permits/list', [
+            'title'   => 'Permisos de trabajo · historial',
+            'rows'    => WorkPermits::search($f, $scope, 300),
+            'total'   => WorkPermits::count($f, $scope),
+            'form'    => $form,
+            'sites'   => Sites::options(),
+            'sectors' => Sectors::options(),
+            'canExport' => UserAuth::can(WorkPermitService::MODULE, 'exportar'),
+        ], 'layouts/app'));
+    }
+
+    public function export(Request $request): Response
+    {
+        [$f] = $this->filters($request);
+        $rows = WorkPermits::search($f, WorkPermitService::scope(), 5000);
+        Audit::tenant('permit.export', 'work_permit', null, null, ['filas' => count($rows)]);
+        return new Response(WorkPermitService::csv($rows), 200, [
+            'Content-Type'        => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="permisos-' . fecha(gmdate('Y-m-d H:i:s'), 'Y-m-d') . '.csv"',
+        ]);
+    }
+
     public function create(Request $request): Response
     {
         [$old, $errors] = Flash::pullInput();
@@ -54,6 +85,7 @@ final class WorkPermitsController
             'contractors' => Contractors::options(),
             'employees'   => Employees::options(),
             'maxHours'    => WorkPermitService::maxHours(),
+            'fireWatch'   => (int) \App\Models\Settings::get('permisos.vigia_minutos', '30'),
         ], 'layouts/app'));
     }
 
@@ -71,6 +103,9 @@ final class WorkPermitsController
         $p = $result['permit'];
         Flash::add((int) $p['critical_fails'] > 0 ? 'warning' : 'success', WorkPermits::format((int) $p['number']) . ' solicitado. '
             . ((int) $p['critical_fails'] > 0 ? 'Ojo: hay ítems críticos sin cumplir, así no se va a poder autorizar.' : 'Se avisó a quienes autorizan.'));
+        if (($n = count(WorkPermits::conflicts($p))) > 0) {
+            Flash::add('warning', "Hay {$n} permiso(s) más en el mismo lugar y horario: revisalos en el detalle.");
+        }
         return Response::redirect('/panel/permisos/' . $p['uuid']);
     }
 
@@ -83,7 +118,7 @@ final class WorkPermitsController
         return Response::html(View::render('panel/permits/show', $this->detail($p) + ['title' => WorkPermits::format((int) $p['number'])], 'layouts/app'));
     }
 
-    /** autorizar | rechazar | iniciar | cerrar | recibir | cancelar */
+    /** autorizar | rechazar | iniciar | cerrar | recibir | cancelar | medir | bloquear | desbloquear | suspender | reanudar | extender */
     public function step(Request $request, string $uuid, string $step): Response
     {
         $p = $this->find($uuid);
@@ -100,10 +135,21 @@ final class WorkPermitsController
             'cerrar'    => WorkPermitService::close($p, $sig, $reason, $meta),
             'recibir'   => WorkPermitService::receive($p, $sig, $meta),
             'cancelar'  => WorkPermitService::cancel($p, $reason),
+            'medir'     => $this->measure($p, $request),
+            'bloquear'  => WorkPermitControls::isolate($p, $request->post),
+            'desbloquear' => WorkPermitControls::release($p, (string) $request->input('isolation', ''), (string) $request->input('removed_by', '')),
+            'suspender' => WorkPermitControls::suspend($p, $reason),
+            'reanudar'  => WorkPermitControls::resume($p, $reason),
+            'extender'  => WorkPermitControls::extend($p, (string) $request->input('until', ''), $sig, $meta),
             default     => 'Paso desconocido.',
         };
+        if ($step === 'medir' && is_array($error)) { // la medición devuelve su propio resultado
+            Flash::add($error[0], $error[1]);
+            return Response::redirect('/panel/permisos/' . $uuid);
+        }
         $done = ['autorizar' => 'Permiso autorizado.', 'rechazar' => 'Permiso rechazado: se avisó al solicitante.', 'iniciar' => 'Trabajo iniciado.',
-            'cerrar' => 'Permiso cerrado.', 'recibir' => 'Área recibida.', 'cancelar' => 'Permiso cancelado.'];
+            'cerrar' => 'Permiso cerrado.', 'recibir' => 'Área recibida.', 'cancelar' => 'Permiso cancelado.', 'bloquear' => 'Bloqueo registrado.',
+            'desbloquear' => 'Bloqueo retirado.', 'suspender' => 'Trabajo suspendido: se avisó.', 'reanudar' => 'Trabajo reanudado.', 'extender' => 'Permiso extendido.'];
         Flash::add($error ? 'danger' : 'success', $error ?? ($done[$step] ?? 'Listo.'));
         return Response::redirect('/panel/permisos/' . $uuid);
     }
@@ -141,10 +187,63 @@ final class WorkPermitsController
 
     // ── helpers ───────────────────────────────────────────────────────
 
+    /** @return array{0: string, 1: string} [tipo de aviso, mensaje] */
+    private function measure(array $p, Request $request): array
+    {
+        $r = WorkPermitControls::measure($p, $request->post);
+        if (isset($r['error'])) {
+            return ['danger', $r['error']];
+        }
+        if ($r['out']) {
+            return ['danger', 'FUERA DE RANGO: ' . implode('; ', $r['out']) . '.' . ($r['suspended'] ? ' El permiso quedó SUSPENDIDO: evacuar y ventilar.' : ' No ingresar.')
+                . ' Se avisó a SyH y a quienes autorizan.'];
+        }
+        return ['success', 'Medición en rango registrada.'];
+    }
+
+    /** @return array{0: array, 1: array} [filtros del modelo, valores del formulario] */
+    private function filters(Request $request): array
+    {
+        $form = [];
+        foreach (['estado', 'tipo', 'planta', 'sector', 'desde', 'hasta', 'q', 'mios'] as $k) {
+            $form[$k] = trim((string) $request->input($k, ''));
+        }
+        $f = ['q' => $form['q']];
+        if (isset(WorkPermitService::STATES[$form['estado']])) {
+            $f['status'] = $form['estado'];
+        } elseif ($form['estado'] === 'activos') {
+            $f['status'] = WorkPermits::ACTIVE;
+        }
+        if (isset(WorkPermitService::TYPES[$form['tipo']])) {
+            $f['type'] = $form['tipo'];
+        }
+        if ($form['planta'] !== '' && ($s = Sites::findByUuid($form['planta'])) !== null) {
+            $f['site_id'] = (int) $s['id'];
+        }
+        if ($form['sector'] !== '' && ($s = Sectors::findByUuid($form['sector'])) !== null) {
+            $f['sector_ids'] = Sectors::withDescendants([(int) $s['id']]);
+        }
+        foreach (['desde' => 'from', 'hasta' => 'to'] as $k => $col) {
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $form[$k])) {
+                $day = $k === 'hasta' ? (new \DateTimeImmutable($form[$k]))->modify('+1 day')->format('Y-m-d') : $form[$k];
+                $f[$col] = WorkPermitService::parseTime($day . ' 00:00');
+            }
+        }
+        if ($form['mios'] === '1') {
+            $f['requested_by'] = (int) (UserAuth::user()['id'] ?? 0);
+        }
+        return [$f, $form];
+    }
+
     private function detail(array $p): array
     {
+        $active = in_array($p['status'], ['solicitado', 'aprobado', 'en_ejecucion', 'suspendido'], true);
         return [
             'p'          => $p,
+            'measurements' => WorkPermits::measurements((int) $p['id']),
+            'isolations' => WorkPermits::isolations((int) $p['id']),
+            'conflicts'  => $active ? array_values(array_filter(WorkPermits::conflicts($p), [WorkPermitService::class, 'canView'])) : [],
+            'gasLimits'  => WorkPermitControls::gasLimits(),
             'workers'    => WorkPermits::workers((int) $p['id']),
             'checklists' => WorkPermits::checklists((int) $p['id']),
             'signatures' => WorkPermits::signatures((int) $p['id']),

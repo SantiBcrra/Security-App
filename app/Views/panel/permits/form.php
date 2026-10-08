@@ -45,6 +45,9 @@ $answers = $old['checklists'] ?? [];
         <div class="col-md-6"><label class="form-label">Inicio</label><input class="form-control" type="datetime-local" name="valid_from" value="<?= e($old['valid_from']) ?>"></div>
         <div class="col-md-6"><label class="form-label">Fin</label><input class="form-control" type="datetime-local" name="valid_until" value="<?= e($old['valid_until']) ?>">
             <div class="form-text">Máximo <?= e($maxHours) ?> horas. Vence solo al llegar a esta hora.</div></div>
+        <div class="col-md-6" x-show="types.includes('caliente')" x-cloak><label class="form-label">Guardia de fuego después del cierre (minutos)</label>
+            <input class="form-control" type="number" min="0" max="240" name="fire_watch_minutes" value="<?= e($old['fire_watch_minutes'] ?? $fireWatch) ?>">
+            <div class="form-text">El vigía se queda controlando el área; recién después se recibe.</div><?= $err('fire_watch') ?></div>
         <div class="col-12"><?= $err('valid') ?></div>
     </div></div>
 

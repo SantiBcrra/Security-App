@@ -268,6 +268,18 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - `/panel/permisos` = activos ahora por planta (se refresca cada minuto) + para autorizar + recientes; imprimible con QR
   a `/panel/permisos/{uuid}/verificar` (cualquier usuario de la empresa: VIGENTE / NO VIGENTE). Destinatario de avisos
   `approvers` = permiso `permisos_trabajo.aprobar`.
+- Controles (`WorkPermitControls`, entrega 2): mediciones de gases en espacio confinado (`work_permit_measurements`,
+  límites en settings `permisos.gas_*` editables en /panel/configuracion; O₂ y LIE obligatorios). Fuera de rango con el
+  trabajo en ejecución → se suspende solo (evento "Sistema") + `permit.gas_alarm` (CRÍTICO). Para iniciar/reanudar un
+  confinado hace falta una medición en rango de los últimos 60 min (al reanudar, posterior a `suspended_at`).
+  LOTO (`work_permit_isolations`): iniciar exige ≥1 bloqueo con energía cero verificada; cerrar exige todos retirados.
+  Caliente: `fire_watch_minutes` al solicitar (setting `permisos.vigia_minutos`, 30); al cerrar se fija
+  `fire_watch_until` y la recepción del área espera a que termine. Suspender/reanudar: el equipo (`canWork`) o quien
+  tiene `aprobar` (`permit.suspended`). Extensión: UNA vez, la firma el autorizante (no el solicitante), antes de
+  vencer, hasta `valid_until + max_horas` (`extended_until/by/at`, firma rol `extension`). Conflictos =
+  `WorkPermits::conflicts()` (otro permiso vigente o pedido en el mismo equipo/sector y franja): aviso en el detalle y al solicitar.
+- `/panel/permisos/historial` (filtros estado/tipo/planta/sector/fechas/texto/míos) y `/panel/permisos/exportar`
+  (CSV, permiso exportar). "Mis permisos de trabajo" en el inicio (activos propios + para autorizar).
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

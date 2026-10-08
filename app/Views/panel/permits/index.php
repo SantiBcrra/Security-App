@@ -8,6 +8,7 @@ require __DIR__ . '/_badges.php';
     <h1 class="h4 m-0">Permisos de trabajo</h1>
     <div class="d-flex gap-2 align-items-center">
         <span class="small text-body-secondary">Se actualiza solo cada minuto</span>
+        <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/panel/permisos/historial')) ?>">Historial y filtros</a>
         <?php if (UserAuth::can('permisos_trabajo', 'crear')): ?><a class="btn btn-primary btn-sm" href="<?= e(url('/panel/permisos/nuevo')) ?>">+ Solicitar permiso</a><?php endif; ?>
     </div>
 </div>

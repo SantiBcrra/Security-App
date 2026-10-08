@@ -151,6 +151,13 @@ final class WorkPermitService
         } elseif (strtotime($from) < time() - 3600) {
             $errors['valid'] = 'El inicio no puede ser de hace más de una hora.';
         }
+        $fireWatch = null;
+        if (in_array('caliente', $types, true)) {
+            $fireWatch = ($in['fire_watch_minutes'] ?? '') !== '' ? (int) $in['fire_watch_minutes'] : (int) Settings::get('permisos.vigia_minutos', '30');
+            if ($fireWatch < 0 || $fireWatch > 240) {
+                $errors['fire_watch'] = 'Guardia de fuego: entre 0 y 240 minutos.';
+            }
+        }
         $workers = [];
         foreach ((array) ($in['workers'] ?? []) as $w) {
             $emp = ($w['employee'] ?? '') !== '' ? Employees::findByUuid((string) $w['employee']) : null;
@@ -212,7 +219,8 @@ final class WorkPermitService
                 'location_text' => $original['lugar'] ? mb_substr($original['lugar'], 0, 191) : null,
                 'lat' => is_numeric($in['lat'] ?? null) ? (float) $in['lat'] : null, 'lng' => is_numeric($in['lng'] ?? null) ? (float) $in['lng'] : null,
                 'task' => $task, 'contractor_id' => $contractor ? (int) $contractor['id'] : null, 'valid_from' => $from, 'valid_until' => $until,
-                'requested_by' => $user['id'] ?? null, 'critical_fails' => $criticalFails, 'original_data' => $json, 'original_hash' => hash('sha256', $json),
+                'requested_by' => $user['id'] ?? null, 'critical_fails' => $criticalFails, 'fire_watch_minutes' => $fireWatch,
+                'original_data' => $json, 'original_hash' => hash('sha256', $json),
             ], fn ($v) => $v !== null));
             foreach ($workers as $w) {
                 unset($w['_label']);
@@ -290,6 +298,9 @@ final class WorkPermitService
         if (time() > strtotime($p['ends_at'])) {
             return 'El permiso ya venció.';
         }
+        if (($ready = WorkPermitControls::readyToWork($p)) !== null) {
+            return $ready;
+        }
         $workers = WorkPermits::workers((int) $p['id']);
         $pending = [];
         $stored = [];
@@ -331,7 +342,13 @@ final class WorkPermitService
         if (mb_strlen(trim($comment)) < 5) {
             return 'Contá cómo quedó el área (mínimo 5 caracteres).';
         }
-        return self::change($p, 'cerrado', ['closed_at' => gmdate('Y-m-d H:i:s'), 'closed_by' => self::me(), 'status_reason' => trim($comment)],
+        if (($pending = WorkPermitControls::readyToClose($p)) !== null) {
+            return $pending;
+        }
+        // Trabajo en caliente: la guardia de fuego sigue N minutos después del cierre; el área se recibe al terminar.
+        $fireWatchUntil = in_array('caliente', $p['type_list'], true) && (int) $p['fire_watch_minutes'] > 0
+            ? gmdate('Y-m-d H:i:s', time() + (int) $p['fire_watch_minutes'] * 60) : null;
+        return self::change($p, 'cerrado', ['closed_at' => gmdate('Y-m-d H:i:s'), 'closed_by' => self::me(), 'status_reason' => trim($comment), 'fire_watch_until' => $fireWatchUntil],
             trim($comment), 'cierre', $signature, $meta);
     }
 
@@ -346,6 +363,9 @@ final class WorkPermitService
         }
         if (array_filter(WorkPermits::signatures((int) $p['id']), fn ($s) => $s['role'] === 'recepcion')) {
             return 'El área ya se recibió.';
+        }
+        if ($p['fire_watch_until'] !== null && strtotime($p['fire_watch_until']) > time()) {
+            return 'La guardia de fuego sigue hasta las ' . fecha($p['fire_watch_until'], 'H:i') . ': el área se recibe después.';
         }
         try {
             $sig = Signatures::store($signature, 'permits');
@@ -393,6 +413,29 @@ final class WorkPermitService
             }
         }
         return $out;
+    }
+
+    /** Planilla de permisos (";" + BOM, para Excel). */
+    public static function csv(array $rows): string
+    {
+        $out = fopen('php://temp', 'r+');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, ['Número', 'Tipos', 'Estado', 'Planta', 'Sector', 'Equipo', 'Lugar', 'Tarea', 'Contratista', 'Desde', 'Hasta', 'Extendido hasta',
+            'Solicitó', 'Autorizó', 'Inicio', 'Cierre', 'Cerró', 'Ítems críticos sin cumplir', 'Motivo / comentario'], ';');
+        foreach ($rows as $p) {
+            fputcsv($out, [
+                WorkPermits::format((int) $p['number']), implode(' + ', array_map(fn ($t) => self::TYPES[$t]['label'] ?? $t, $p['type_list'])),
+                self::STATES[$p['status']]['label'] ?? $p['status'], $p['site_name'] ?? '', $p['sector_name'] ?? '',
+                $p['equipment_code'] ? $p['equipment_code'] . ' · ' . $p['equipment_name'] : '', (string) $p['location_text'], $p['task'], $p['contractor_name'] ?? '',
+                fecha($p['valid_from'], 'd/m/Y H:i'), fecha($p['valid_until'], 'd/m/Y H:i'), fecha($p['extended_until'], 'd/m/Y H:i'),
+                $p['requested_by_name'] ?? '', $p['approved_by_name'] ?? '', fecha($p['started_at'], 'd/m/Y H:i'), fecha($p['closed_at'], 'd/m/Y H:i'),
+                $p['closed_by_name'] ?? '', (int) $p['critical_fails'], (string) ($p['status_reason'] ?? ''),
+            ], ';');
+        }
+        rewind($out);
+        $csv = (string) stream_get_contents($out);
+        fclose($out);
+        return $csv;
     }
 
     // ── helpers ─────────────────────────────────────────────────────
@@ -444,7 +487,7 @@ final class WorkPermitService
             'lat' => is_numeric($in['lat'] ?? null) ? (float) $in['lat'] : null, 'lng' => is_numeric($in['lng'] ?? null) ? (float) $in['lng'] : null];
     }
 
-    private static function parseTime(mixed $value): ?string
+    public static function parseTime(mixed $value): ?string
     {
         if ($value === null || $value === '') {
             return null;

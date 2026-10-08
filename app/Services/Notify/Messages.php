@@ -41,13 +41,15 @@ final class Messages
         'permit.decided'           => 'Permiso de trabajo autorizado o rechazado',
         'permit.expiring'          => 'Permiso de trabajo por vencer',
         'permit.expired'           => 'Permiso de trabajo vencido',
+        'permit.gas_alarm'         => 'Gases fuera de rango en un permiso',
+        'permit.suspended'         => 'Permiso de trabajo suspendido',
     ];
 
     /** Eventos que no se eligen en las reglas (los dispara el sistema con destinatarios fijos). */
     public const INTERNAL = ['observation.escalated'];
 
     /** Eventos críticos: llegan siempre (no se pueden silenciar) y se envían en el momento. */
-    public const CRITICAL = ['observation.imminent', 'observation.escalated', 'incident.serious'];
+    public const CRITICAL = ['observation.imminent', 'observation.escalated', 'incident.serious', 'permit.gas_alarm'];
 
     /** @return array{title:string, body:string, url:string, critical:bool} */
     public static function for(string $event, array $obs, array $extra = []): array
@@ -145,6 +147,9 @@ final class Messages
                 : ["Permiso rechazado · {$num}", "{$types} · {$where}. A corregir: " . ($extra['comment'] ?? '')],
             'permit.expiring'  => ["Permiso por vencer · {$num}", "{$types} · {$where}. Vence a las {$ends}: cerralo o extendelo antes."],
             'permit.expired'   => ["Permiso vencido · {$num}", "{$types} · {$where}. Venció a las {$ends}. Si se sigue trabajando, hace falta un permiso nuevo."],
+            'permit.gas_alarm' => ["⚠ GASES FUERA DE RANGO · {$num}", "{$where}: " . implode('; ', (array) ($extra['out'] ?? []))
+                . ($p['status'] === 'suspendido' ? '. El permiso quedó SUSPENDIDO: evacuar el espacio y ventilar antes de volver a medir.' : '. No ingresar hasta tener una medición en rango.')],
+            'permit.suspended' => ["Permiso suspendido · {$num}", "{$types} · {$where}. Motivo: " . ($extra['comment'] ?? $p['status_reason'] ?? '—')],
             default            => [self::EVENTS[$event] ?? $event, $task],
         };
         return ['title' => $title, 'body' => $body, 'url' => '/panel/permisos/' . $p['uuid'], 'critical' => in_array($event, self::CRITICAL, true)];

@@ -77,6 +77,18 @@ final class WorkPermits
             $where[] = 'w.equipment_id = ?';
             $params[] = (int) $f['equipment_id'];
         }
+        if (!empty($f['from'])) {
+            $where[] = 'w.valid_from >= ?';
+            $params[] = $f['from'];
+        }
+        if (!empty($f['to'])) {
+            $where[] = 'w.valid_from < ?';
+            $params[] = $f['to'];
+        }
+        if (!empty($f['requested_by'])) {
+            $where[] = 'w.requested_by = ?';
+            $params[] = (int) $f['requested_by'];
+        }
         if (!empty($f['ends_before'])) {
             $where[] = 'COALESCE(w.extended_until, w.valid_until) < ?';
             $params[] = $f['ends_before'];
@@ -214,6 +226,52 @@ final class WorkPermits
         $stmt = DB::tenant()->prepare('SELECT * FROM work_permit_events WHERE permit_id = ? ORDER BY id');
         $stmt->execute([$permitId]);
         return $stmt->fetchAll();
+    }
+
+    // ── mediciones de gases y bloqueos (LOTO) ──────────────────────
+
+    public static function addMeasurement(int $permitId, array $m): void
+    {
+        DB::tenant()->prepare('INSERT INTO work_permit_measurements (uuid, permit_id, measured_at, o2, lel, co, h2s, instrument, measured_by, ok, out_of_range,
+            user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())')
+            ->execute([$m['uuid'] ?? Uuid::v4(), $permitId, $m['measured_at'], $m['o2'], $m['lel'], $m['co'], $m['h2s'], $m['instrument'], $m['measured_by'],
+                $m['ok'] ? 1 : 0, $m['out_of_range'], $m['user_id']]);
+    }
+
+    public static function measurements(int $permitId): array
+    {
+        $stmt = DB::tenant()->prepare('SELECT * FROM work_permit_measurements WHERE permit_id = ? ORDER BY measured_at DESC, id DESC');
+        $stmt->execute([$permitId]);
+        return $stmt->fetchAll();
+    }
+
+    public static function addIsolation(int $permitId, array $i): void
+    {
+        DB::tenant()->prepare('INSERT INTO work_permit_isolations (uuid, permit_id, point, energy, device, lock_number, placed_by, placed_at, zero_verified, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), ?, ?)')
+            ->execute([$i['uuid'] ?? Uuid::v4(), $permitId, $i['point'], $i['energy'], $i['device'], $i['lock_number'], $i['placed_by'], $i['zero_verified'] ? 1 : 0, $i['user_id']]);
+    }
+
+    public static function removeIsolation(int $id, string $by): void
+    {
+        DB::tenant()->prepare('UPDATE work_permit_isolations SET removed_by = ?, removed_at = UTC_TIMESTAMP() WHERE id = ? AND removed_at IS NULL')->execute([$by, $id]);
+    }
+
+    public static function isolations(int $permitId): array
+    {
+        $stmt = DB::tenant()->prepare('SELECT * FROM work_permit_isolations WHERE permit_id = ? ORDER BY id');
+        $stmt->execute([$permitId]);
+        return $stmt->fetchAll();
+    }
+
+    /** Otros permisos activos (o para autorizar) en el mismo equipo o sector. */
+    public static function conflicts(array $p): array
+    {
+        $stmt = DB::tenant()->prepare(self::SELECT . " WHERE w.id <> ? AND w.deleted_at IS NULL AND w.status IN ('solicitado', 'aprobado', 'en_ejecucion', 'suspendido')
+            AND ((w.equipment_id IS NOT NULL AND w.equipment_id = ?) OR w.sector_id = ?)
+            AND w.valid_from < ? AND COALESCE(w.extended_until, w.valid_until) > ? ORDER BY w.valid_from");
+        $stmt->execute([(int) ($p['id'] ?? 0), $p['equipment_id'], $p['sector_id'], $p['ends_at'] ?? $p['valid_until'], $p['valid_from']]);
+        return array_map([self::class, 'decode'], $stmt->fetchAll());
     }
 
     public static function format(int $number): string

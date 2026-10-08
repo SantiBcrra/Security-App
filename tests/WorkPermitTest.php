@@ -25,10 +25,11 @@ use App\Services\Notify\MailTransport;
 use App\Services\Signatures;
 use App\Services\TenantProvisioner;
 use App\Services\UserAuth;
+use App\Services\WorkPermitControls;
 use App\Services\WorkPermitService;
 
 /**
- * Etapa 13 (entrega 1): permisos de trabajo. Maestra `securityapp_test_ptw`.
+ * Etapa 13 (entregas 1 y 2): permisos de trabajo y sus controles (gases, LOTO, vigía, suspensión, extensión). Maestra `securityapp_test_ptw`.
  */
 $server = [
     'host' => getenv('TEST_DB_HOST') ?: '127.0.0.1', 'port' => 3306,
@@ -238,7 +239,11 @@ return [
         assert_same(null, WorkPermitService::close($p, $sign(), 'Área limpia, sin brasas, guardia cumplida'));
         $p = WorkPermits::findById((int) $p['id']);
         assert_same('cerrado', $p['status']);
+        assert_true($p['fire_watch_until'] !== null && strtotime($p['fire_watch_until']) > time() + 25 * 60, 'trabajo en caliente: guardia de 30 min');
         UserAuth::setCurrent($st['hys2']);
+        assert_true(str_contains((string) WorkPermitService::receive($p, $sign()), 'guardia de fuego'), 'no se recibe durante la guardia');
+        DB::tenant()->prepare('UPDATE work_permits SET fire_watch_until = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE id = ?')->execute([(int) $p['id']]);
+        $p = WorkPermits::findById((int) $p['id']);
         assert_same(null, WorkPermitService::receive($p, $sign()));
         assert_true(str_contains((string) WorkPermitService::receive($p, $sign()), 'ya se recibió'));
         $roles = array_column(WorkPermits::signatures((int) $p['id']), 'role');
@@ -296,6 +301,150 @@ return [
         assert_same(403, $call($st['rep'], '/panel/permisos')->status, 'el operario no entra al módulo');
         $verify = $call($st['rep'], '/panel/permisos/' . $p['uuid'] . '/verificar');
         assert_true($verify->status === 200 && str_contains($verify->body, 'NO VIGENTE'), 'el QR lo puede ver cualquiera de la empresa (está cerrado)');
+        $_SESSION = [];
+    },
+
+    'espacio confinado: medición en rango para iniciar; fuera de rango suspende solo y avisa (crítico)' => function () use ($setup, &$st, $request, $sign, $okAnswers, $inbox) {
+        $setup();
+        $p = $request($st['sup'], ['types' => ['espacio_confinado'], 'checklists' => ['espacio_confinado' => $okAnswers('espacio_confinado')],
+            'workers' => [['employee' => $st['emp']['uuid'], 'role' => 'ejecutor']]])['permit'];
+        assert_same(null, $p['fire_watch_minutes'], 'sin caliente no hay guardia');
+        UserAuth::setCurrent($st['hys']);
+        assert_same(null, WorkPermitService::approve($p, $sign()));
+        $p = WorkPermits::findById((int) $p['id']);
+        $worker = WorkPermits::workers((int) $p['id'])[0];
+        UserAuth::setCurrent($st['sup']);
+        assert_true(str_contains((string) WorkPermitService::start($p, [$worker['uuid'] => $sign()]), 'medición de gases'), 'sin medición no arranca');
+        UserAuth::setCurrent($st['rep']);
+        assert_true(isset(WorkPermitControls::measure($p, ['o2' => '20.9', 'lel' => '0'])['error']), 'el operario sin permiso no mide');
+        UserAuth::setCurrent($st['sup']);
+        assert_true(str_contains(WorkPermitControls::measure($p, ['o2' => '20,9'])['error'] ?? '', 'O₂'), 'O2 y LIE obligatorios');
+        $uuid = App\Core\Uuid::v4();
+        $r = WorkPermitControls::measure($p, ['uuid' => $uuid, 'o2' => '20,9', 'lel' => '0', 'co' => '2', 'instrument' => 'Altair 4X']);
+        assert_same([true, []], [$r['ok'], $r['out']]);
+        assert_true(!empty(WorkPermitControls::measure($p, ['uuid' => $uuid, 'o2' => '20,9', 'lel' => '0'])['duplicate']), 'reenvío idempotente');
+        assert_same(1, count(WorkPermits::measurements((int) $p['id'])));
+        assert_same(null, WorkPermitService::start($p, [$worker['uuid'] => $sign()]));
+        $p = WorkPermits::findById((int) $p['id']);
+        $r = WorkPermitControls::measure($p, ['o2' => '18.2', 'lel' => '12']);
+        assert_same([false, true, 2], [$r['ok'], $r['suspended'], count($r['out'])]);
+        $p = WorkPermits::findById((int) $p['id']);
+        assert_same('suspendido', $p['status']);
+        assert_true($p['suspended_at'] !== null && str_contains((string) $p['status_reason'], 'O₂'));
+        $num = WorkPermits::format((int) $p['number']);
+        assert_true(in_array('⚠ GASES FUERA DE RANGO · ' . $num, $inbox($st['hys']), true), 'aviso al autorizante');
+        assert_true(in_array('⚠ GASES FUERA DE RANGO · ' . $num, $inbox($st['sup']), true), 'crítico: también a quien midió');
+        $critical = (int) DB::tenant()->query("SELECT COUNT(*) FROM notification_queue WHERE event = 'permit.gas_alarm'")->fetchColumn();
+        assert_true($critical > 0, 'sale por email/push');
+        assert_true(str_contains((string) WorkPermitControls::resume($p, 'Se ventiló 20 minutos'), 'posterior a la suspensión'));
+        assert_true(WorkPermitControls::measure($p, ['o2' => '20.8', 'lel' => '1'])['ok']);
+        assert_same(null, WorkPermitControls::resume($p, 'Se ventiló 20 minutos y se volvió a medir'));
+        assert_same('en_ejecucion', WorkPermits::findById((int) $p['id'])['status']);
+        // Límites configurables
+        App\Models\Settings::set('permisos.gas_o2_min', '20');
+        assert_same(1, count(WorkPermitControls::evaluateGas(19.8, 0, null, null)));
+        App\Models\Settings::set('permisos.gas_o2_min', '19.5');
+        assert_same([], WorkPermitControls::evaluateGas(19.8, 0, null, null));
+        $alt = $request($st['sup'], ['types' => ['altura'], 'checklists' => ['altura' => $okAnswers('altura')]])['permit'];
+        assert_true(str_contains(WorkPermitControls::measure($alt, ['o2' => '20', 'lel' => '0'])['error'] ?? '', 'espacio confinado'));
+    },
+
+    'LOTO: bloqueos con energía cero para iniciar; no se cierra con candados puestos' => function () use ($setup, &$st, $request, $sign, $okAnswers) {
+        $setup();
+        $p = $request($st['sup'], ['types' => ['loto'], 'checklists' => ['loto' => $okAnswers('loto')],
+            'workers' => [['employee' => $st['emp']['uuid'], 'role' => 'ejecutor']]])['permit'];
+        UserAuth::setCurrent($st['hys']);
+        WorkPermitService::approve($p, $sign());
+        $p = WorkPermits::findById((int) $p['id']);
+        $sigs = [WorkPermits::workers((int) $p['id'])[0]['uuid'] => $sign()];
+        UserAuth::setCurrent($st['sup']);
+        assert_true(str_contains((string) WorkPermitService::start($p, $sigs), 'puntos de bloqueo'));
+        assert_true(str_contains((string) WorkPermitControls::isolate($p, ['point' => 'TG-2', 'energy' => 'nuclear']), 'energía'));
+        assert_same(null, WorkPermitControls::isolate($p, ['point' => 'Seccionador TG-2', 'energy' => 'electrica', 'lock_number' => 'C-14']));
+        assert_true(str_contains((string) WorkPermitService::start($p, $sigs), 'energía cero'));
+        $first = WorkPermits::isolations((int) $p['id'])[0];
+        assert_same(null, WorkPermitControls::release($p, $first['uuid'], ''));
+        assert_true(str_contains((string) WorkPermitControls::release($p, $first['uuid'], ''), 'ya se retiró'));
+        assert_same(null, WorkPermitControls::isolate($p, ['point' => 'Seccionador TG-2', 'energy' => 'electrica', 'lock_number' => 'C-14', 'zero_verified' => '1']));
+        assert_same(null, WorkPermitControls::isolate($p, ['point' => 'Válvula aire V-3', 'energy' => 'neumatica', 'zero_verified' => '1']));
+        assert_same(null, WorkPermitService::start($p, $sigs));
+        $p = WorkPermits::findById((int) $p['id']);
+        assert_true(str_contains((string) WorkPermitService::close($p, $sign(), 'Equipo armado y probado'), '2 punto(s) de bloqueo'));
+        foreach (WorkPermits::isolations((int) $p['id']) as $iso) {
+            if ($iso['removed_at'] === null) {
+                assert_same(null, WorkPermitControls::release($p, $iso['uuid'], 'Pérez'));
+            }
+        }
+        assert_same(null, WorkPermitService::close($p, $sign(), 'Equipo armado y probado'));
+        $p = WorkPermits::findById((int) $p['id']);
+        assert_same([null, 'cerrado'], [$p['fire_watch_until'], $p['status']]);
+    },
+
+    'suspender a mano, extensión única firmada por el autorizante y conflictos' => function () use ($setup, &$st, $request, $sign, $okAnswers, $inbox) {
+        $setup();
+        $p = $request($st['sup'], ['types' => ['altura'], 'checklists' => ['altura' => $okAnswers('altura')],
+            'workers' => [['employee' => $st['emp']['uuid'], 'role' => 'ejecutor']]])['permit'];
+        $other = $request($st['sup'], ['types' => ['altura'], 'checklists' => ['altura' => $okAnswers('altura')]])['permit'];
+        assert_true(in_array((int) $other['id'], array_map('intval', array_column(WorkPermits::conflicts($p), 'id')), true), 'mismo sector y horario');
+        UserAuth::setCurrent($st['hys']);
+        WorkPermitService::approve($p, $sign());
+        $p = WorkPermits::findById((int) $p['id']);
+        UserAuth::setCurrent($st['sup']);
+        assert_true(str_contains((string) WorkPermitControls::extend($p, gmdate('c', time() + 6 * 3600), $sign()), 'quien autoriza'), 'el solicitante no extiende');
+        UserAuth::setCurrent($st['hys']);
+        $tooFar = gmdate('Y-m-d\TH:i:s\Z', strtotime($p['valid_until']) + 13 * 3600);
+        assert_true(str_contains((string) WorkPermitControls::extend($p, $tooFar, $sign()), 'hasta 12 horas'));
+        assert_true(str_contains((string) WorkPermitControls::extend($p, gmdate('Y-m-d\TH:i:s\Z', strtotime($p['valid_until']) - 600), $sign()), 'posterior'));
+        $until = gmdate('Y-m-d\TH:i:s\Z', strtotime($p['valid_until']) + 2 * 3600);
+        assert_same(null, WorkPermitControls::extend($p, $until, $sign()));
+        $p = WorkPermits::findById((int) $p['id']);
+        assert_same([gmdate('Y-m-d H:i:s', strtotime($until)), (int) $st['hys']['id']], [$p['ends_at'], (int) $p['extended_by']]);
+        assert_true(in_array('extension', array_column(WorkPermits::signatures((int) $p['id']), 'role'), true));
+        assert_true(str_contains((string) WorkPermitControls::extend($p, gmdate('c', strtotime($p['ends_at']) + 600), $sign()), 'una vez'));
+        UserAuth::setCurrent($st['sup']);
+        WorkPermitService::start($p, [WorkPermits::workers((int) $p['id'])[0]['uuid'] => $sign()]);
+        $p = WorkPermits::findById((int) $p['id']);
+        assert_same('en_ejecucion', $p['status']);
+        UserAuth::setCurrent($st['rep']);
+        assert_true(str_contains((string) WorkPermitControls::suspend($p, 'Viento fuerte'), 'permiso'));
+        UserAuth::setCurrent($st['hys']); // autorizante: puede frenar aunque no sea del equipo
+        assert_same(null, WorkPermitControls::suspend($p, 'Viento fuerte en el techo'));
+        assert_true(in_array('Permiso suspendido · ' . WorkPermits::format((int) $p['number']), $inbox($st['sup']), true));
+        $p = WorkPermits::findById((int) $p['id']);
+        assert_same(null, WorkPermitControls::resume($p, 'Bajó el viento, se revisó la línea de vida'));
+        $types = array_column(WorkPermits::events((int) $p['id']), 'type');
+        assert_true(in_array('extended', $types, true));
+    },
+
+    'HTTP: historial con filtros, CSV, configuración y "Mis permisos" en el inicio' => function () use ($setup, &$st) {
+        $setup();
+        $call = function (array $user, string $path, array $query = []) use (&$st) {
+            UserAuth::setCurrent(null);
+            Tenant::deactivate();
+            $_SESSION = [];
+            \App\Core\Session::put(\App\Services\Impersonation::TENANT_KEY, $st['a']['uuid']);
+            \App\Core\Session::put(UserAuth::USER_KEY, $user['uuid']);
+            $router = new \App\Core\Router();
+            (require BASE_PATH . '/app/routes.php')($router);
+            return $router->dispatch(new \App\Core\Request('GET', $path, $query));
+        };
+        $list = $call($st['hys'], '/panel/permisos/historial', ['tipo' => 'loto']);
+        assert_true($list->status === 200 && str_contains($list->body, '1 permiso(s)'), 'filtra por tipo (un solo LOTO)');
+        $csv = $call($st['hys'], '/panel/permisos/exportar');
+        assert_true($csv->status === 200 && str_starts_with($csv->body, "\xEF\xBB\xBF") && str_contains($csv->body, 'PT-000001'));
+        assert_same(403, $call($st['rep'], '/panel/permisos/exportar')->status);
+        Tenant::activate($st['a']);
+        $loto = WorkPermits::search(['type' => 'loto'], null, 1)[0];
+        $confined = WorkPermits::search(['type' => 'espacio_confinado'], null, 1)[0];
+        $show = $call($st['hys'], '/panel/permisos/' . $loto['uuid']);
+        assert_true($show->status === 200 && str_contains($show->body, 'Bloqueos (LOTO)') && str_contains($show->body, 'Válvula aire V-3'));
+        $show = $call($st['sup'], '/panel/permisos/' . $confined['uuid']);
+        assert_true($show->status === 200 && str_contains($show->body, 'Mediciones de gases') && str_contains($show->body, 'fuera de rango')
+            && str_contains($show->body, 'Suspender el trabajo') && str_contains($show->body, 'Registrar medición'));
+        $home = $call($st['sup'], '/panel');
+        assert_true(str_contains($home->body, 'Mis permisos de trabajo'));
+        $settings = $call($st['admin'], '/panel/configuracion');
+        assert_true(str_contains($settings->body, 'Límites de gases'));
         $_SESSION = [];
     },
 

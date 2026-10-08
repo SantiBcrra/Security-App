@@ -150,6 +150,8 @@ return static function (Router $r): void {
 
         // Permisos de trabajo (Etapa 13). Los pasos (autorizar, iniciar…) validan el permiso fino en WorkPermitService.
         $r->get('/permisos', [WorkPermitsController::class, 'index'], [$can('permisos_trabajo', 'ver')]);
+        $r->get('/permisos/historial', [WorkPermitsController::class, 'list'], [$can('permisos_trabajo', 'ver')]);
+        $r->get('/permisos/exportar', [WorkPermitsController::class, 'export'], [$can('permisos_trabajo', 'exportar')]);
         $r->get('/permisos/nuevo', [WorkPermitsController::class, 'create'], [$can('permisos_trabajo', 'crear')]);
         $r->post('/permisos', [WorkPermitsController::class, 'store'], [$can('permisos_trabajo', 'crear')]);
         $r->get('/permisos/{uuid}', [WorkPermitsController::class, 'show'], [$can('permisos_trabajo', 'ver')]);
@@ -227,6 +229,7 @@ return static function (Router $r): void {
         $r->get('/configuracion', [SettingsController::class, 'show'], [$can('configuracion', 'ver')]);
         $r->post('/configuracion', [SettingsController::class, 'update'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/empresa', [SettingsController::class, 'updateCompany'], [$can('configuracion', 'editar')]);
+        $r->post('/configuracion/permisos', [SettingsController::class, 'updatePermits'], [$can('configuracion', 'editar')]);
 
         // Datos maestros (plantas, sectores, puestos, empleados, contratistas, equipos, catálogos).
         // Rutas fijas antes que las genéricas /datos/{resource}/...

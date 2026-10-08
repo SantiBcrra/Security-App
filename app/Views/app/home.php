@@ -17,6 +17,25 @@
         <?php endif; ?>
     </div>
 <?php endif; ?>
+<?php if ($myPermits['active'] || $myPermits['toApprove']): require BASE_PATH . '/app/Views/panel/permits/_badges.php'; ?>
+    <div class="card shadow-sm mb-3 border-primary">
+        <div class="card-header d-flex justify-content-between"><strong>Mis permisos de trabajo</strong><a class="small" href="<?= e(url('/panel/permisos')) ?>">Ver tablero</a></div>
+        <div class="list-group list-group-flush">
+            <?php foreach ($myPermits['toApprove'] as $wp): ?>
+                <a class="list-group-item list-group-item-action list-group-item-warning d-flex justify-content-between gap-2" href="<?= e(url('/panel/permisos/' . $wp['uuid'])) ?>">
+                    <span><strong>Para autorizar</strong> · <?= e(App\Models\WorkPermits::format((int) $wp['number'])) ?> <?= $typeBadges($wp['type_list']) ?> <span class="small"><?= e($wp['sector_name'] ?? '') ?> · <?= e($wp['requested_by_name'] ?? '') ?></span></span>
+                    <span class="small text-nowrap"><?= e(fecha($wp['valid_from'], 'd/m H:i')) ?></span>
+                </a>
+            <?php endforeach; ?>
+            <?php foreach ($myPermits['active'] as $wp): $wpLeft = $minutesLeft($wp); ?>
+                <a class="list-group-item list-group-item-action d-flex justify-content-between gap-2" href="<?= e(url('/panel/permisos/' . $wp['uuid'])) ?>">
+                    <span><?= e(App\Models\WorkPermits::format((int) $wp['number'])) ?> <?= $typeBadges($wp['type_list']) ?> <?= $stateBadge($wp['status']) ?> <span class="small text-body-secondary"><?= e($wp['sector_name'] ?? '') ?></span></span>
+                    <span class="small text-nowrap <?= $wpLeft < 30 ? 'text-danger fw-semibold' : 'text-body-secondary' ?>">vence <?= e(fecha($wp['ends_at'], 'H:i')) ?></span>
+                </a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+<?php endif; ?>
 <?php if ($myInspections): ?>
     <div class="card shadow-sm mb-3 border-info">
         <div class="card-header d-flex justify-content-between"><strong>Inspecciones de hoy</strong><a class="small" href="<?= e(url('/panel/inspecciones/programadas?mias=1')) ?>">Ver todas</a></div>

@@ -31,3 +31,21 @@
         <?php if ($canEdit): ?><div class="col-12"><button class="btn btn-primary btn-sm">Guardar</button></div><?php endif; ?>
     </fieldset>
 </form>
+
+<form class="card shadow-sm mt-3" style="max-width: 640px" method="post" action="<?= e(url('/panel/configuracion/permisos')) ?>">
+    <?= csrf_field() ?>
+    <div class="card-header"><strong>Permisos de trabajo</strong></div>
+    <fieldset class="card-body row g-3" <?= $canEdit ? '' : 'disabled' ?>>
+        <div class="col-md-6"><label class="form-label">Duración máxima (horas)</label><input class="form-control" name="max_horas" inputmode="numeric" value="<?= e($permits['max_horas']) ?>">
+            <div class="form-text">También es lo máximo que se puede extender (una vez).</div></div>
+        <div class="col-md-6"><label class="form-label">Guardia de fuego (min, por defecto)</label><input class="form-control" name="vigia" inputmode="numeric" value="<?= e($permits['vigia']) ?>">
+            <div class="form-text">Después de cerrar un trabajo en caliente.</div></div>
+        <div class="col-12 small fw-semibold">Límites de gases (espacio confinado) — fuera de rango, el trabajo se suspende solo y se avisa</div>
+        <div class="col-6 col-md-2"><label class="form-label small">O₂ mín. %</label><input class="form-control form-control-sm" name="gas_o2_min" inputmode="decimal" value="<?= e($permits['gas_o2_min']) ?>"></div>
+        <div class="col-6 col-md-2"><label class="form-label small">O₂ máx. %</label><input class="form-control form-control-sm" name="gas_o2_max" inputmode="decimal" value="<?= e($permits['gas_o2_max']) ?>"></div>
+        <div class="col-4 col-md-2"><label class="form-label small">LIE máx. %</label><input class="form-control form-control-sm" name="gas_lel_max" inputmode="decimal" value="<?= e($permits['gas_lel_max']) ?>"></div>
+        <div class="col-4 col-md-3"><label class="form-label small">CO máx. ppm</label><input class="form-control form-control-sm" name="gas_co_max" inputmode="decimal" value="<?= e($permits['gas_co_max']) ?>"></div>
+        <div class="col-4 col-md-3"><label class="form-label small">H₂S máx. ppm</label><input class="form-control form-control-sm" name="gas_h2s_max" inputmode="decimal" value="<?= e($permits['gas_h2s_max']) ?>"></div>
+        <?php if ($canEdit): ?><div class="col-12"><button class="btn btn-primary btn-sm">Guardar</button></div><?php endif; ?>
+    </fieldset>
+</form>

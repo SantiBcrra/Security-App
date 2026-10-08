@@ -63,7 +63,22 @@ final class HomeController
                 $myInspections = [];
             }
         }
+        // "Mis permisos": activos que solicité o autoricé + los que esperan mi autorización (Etapa 13).
+        $myPermits = ['active' => [], 'toApprove' => []];
+        if (UserAuth::user() && UserAuth::can('permisos_trabajo', 'ver')) {
+            try {
+                $me = (int) UserAuth::user()['id'];
+                $myPermits['active'] = \App\Models\WorkPermits::search(['status' => \App\Models\WorkPermits::ACTIVE], ['own' => $me], 8);
+                if (UserAuth::can('permisos_trabajo', 'aprobar')) {
+                    $myPermits['toApprove'] = array_values(array_filter(\App\Models\WorkPermits::search(['status' => 'solicitado'],
+                        \App\Services\WorkPermitService::scope(), 20), [\App\Services\WorkPermitService::class, 'canApprove']));
+                }
+            } catch (\PDOException) {
+                $myPermits = ['active' => [], 'toApprove' => []];
+            }
+        }
         return Response::html(View::render('app/home', [
+            'myPermits' => $myPermits,
             'title'   => 'Inicio',
             'obs'     => $obs,
             'myActions' => $myActions,

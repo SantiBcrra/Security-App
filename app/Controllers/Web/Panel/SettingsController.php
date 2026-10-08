@@ -20,6 +20,7 @@ final class SettingsController
             'anonymous' => Settings::bool('observaciones.anonimo_habilitado'),
             'company'   => array_map(fn ($k) => Settings::get($k) ?? '', self::COMPANY),
             'tenant'    => \App\Core\Tenant::current(),
+            'permits'   => self::permitSettings(),
         ], 'layouts/app'));
     }
 
@@ -38,6 +39,46 @@ final class SettingsController
         }
         Audit::tenant('settings.company', 'settings', null, $before, $after);
         Flash::add('success', 'Datos de la empresa guardados.');
+        return Response::redirect('/panel/configuracion');
+    }
+
+    /** Permisos de trabajo (Etapa 13): campo => [setting, defecto, mínimo, máximo]. */
+    public const PERMITS = [
+        'max_horas'   => ['permisos.max_horas', 12, 1, 24],
+        'vigia'       => ['permisos.vigia_minutos', 30, 0, 240],
+        'gas_o2_min'  => ['permisos.gas_o2_min', 19.5, 0, 100],
+        'gas_o2_max'  => ['permisos.gas_o2_max', 23.5, 0, 100],
+        'gas_lel_max' => ['permisos.gas_lel_max', 10, 0, 100],
+        'gas_co_max'  => ['permisos.gas_co_max', 25, 0, 10000],
+        'gas_h2s_max' => ['permisos.gas_h2s_max', 10, 0, 10000],
+    ];
+
+    public static function permitSettings(): array
+    {
+        return array_map(fn ($d) => (string) (Settings::get($d[0]) ?? $d[1]), self::PERMITS);
+    }
+
+    public function updatePermits(Request $request): Response
+    {
+        $before = self::permitSettings();
+        $values = [];
+        foreach (self::PERMITS as $field => [$key, $default, $min, $max]) {
+            $raw = str_replace(',', '.', trim((string) $request->input($field, '')));
+            if (!is_numeric($raw) || (float) $raw < $min || (float) $raw > $max) {
+                Flash::add('danger', "Valor inválido en permisos de trabajo ({$field}): entre {$min} y {$max}.");
+                return Response::redirect('/panel/configuracion');
+            }
+            $values[$key] = (string) (0 + $raw);
+        }
+        if ((float) $values['permisos.gas_o2_min'] >= (float) $values['permisos.gas_o2_max']) {
+            Flash::add('danger', 'El O₂ mínimo tiene que ser menor que el máximo.');
+            return Response::redirect('/panel/configuracion');
+        }
+        foreach ($values as $key => $value) {
+            Settings::set($key, $value);
+        }
+        Audit::tenant('settings.permits', 'settings', null, $before, self::permitSettings());
+        Flash::add('success', 'Configuración de permisos de trabajo guardada.');
         return Response::redirect('/panel/configuracion');
     }
 
