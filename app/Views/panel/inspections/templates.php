@@ -14,7 +14,7 @@
                     <a class="fw-semibold" href="<?= e(url('/panel/inspecciones/plantillas/' . $t['uuid'])) ?>"><?= e($t['name']) ?></a>
                     <?= $t['is_active'] ? '' : '<span class="badge text-bg-secondary">Inactiva</span>' ?>
                     <div class="small text-body-secondary">
-                        <?= e($t['scope'] === 'equipo' ? 'Equipo: ' . ($t['equipment_type_name'] ?? '—') : InspectionTemplateService::SCOPES[$t['scope']]) ?>
+                        <?= e($t['scope'] === 'equipo' ? 'Equipo: ' . ($t['equipment_type_name'] ?? '—') : ($t['scope'] === 'permiso' ? 'Permiso de trabajo: ' . (App\Services\WorkPermitService::TYPES[$t['permit_type']]['label'] ?? '—') : InspectionTemplateService::SCOPES[$t['scope']])) ?>
                         · <?= e($t['item_count']) ?> ítems · versión <?= e($t['current_version']) ?> · <?= e($t['inspections_count']) ?> inspecciones
                     </div>
                 </div>

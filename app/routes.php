@@ -38,6 +38,7 @@ use App\Controllers\Web\Panel\QrController;
 use App\Controllers\Web\Panel\RolesController;
 use App\Controllers\Web\Panel\RoundsController;
 use App\Controllers\Web\Panel\UsersController;
+use App\Controllers\Web\Panel\WorkPermitsController;
 use App\Core\Router;
 use App\Middleware\ApiRateLimit;
 use App\Middleware\ReadOnlyImpersonation;
@@ -146,6 +147,17 @@ return static function (Router $r): void {
         $r->post('/acciones/{uuid}/comentario', [ActionsController::class, 'comment']);
         $r->post('/acciones/{uuid}/evidencia', [ActionsController::class, 'evidence']);
         $r->get('/acciones/{uuid}/archivos/{attachment}', [ActionsController::class, 'file']);
+
+        // Permisos de trabajo (Etapa 13). Los pasos (autorizar, iniciar…) validan el permiso fino en WorkPermitService.
+        $r->get('/permisos', [WorkPermitsController::class, 'index'], [$can('permisos_trabajo', 'ver')]);
+        $r->get('/permisos/nuevo', [WorkPermitsController::class, 'create'], [$can('permisos_trabajo', 'crear')]);
+        $r->post('/permisos', [WorkPermitsController::class, 'store'], [$can('permisos_trabajo', 'crear')]);
+        $r->get('/permisos/{uuid}', [WorkPermitsController::class, 'show'], [$can('permisos_trabajo', 'ver')]);
+        $r->get('/permisos/{uuid}/imprimir', [WorkPermitsController::class, 'printable'], [$can('permisos_trabajo', 'ver')]);
+        $r->get('/permisos/{uuid}/firmas/{sig}', [WorkPermitsController::class, 'signature'], [$can('permisos_trabajo', 'ver')]);
+        $r->post('/permisos/{uuid}/{step}', [WorkPermitsController::class, 'step'], [$can('permisos_trabajo', 'ver')]);
+        // Adonde lleva el QR del permiso colgado: cualquier usuario de la empresa ve si está vigente
+        $r->get('/permisos/{uuid}/verificar', [WorkPermitsController::class, 'verify']);
 
         // Incidentes y accidentes (Etapa 12)
         $r->get('/incidentes', [IncidentsController::class, 'index'], [$can('incidentes', 'ver')]);

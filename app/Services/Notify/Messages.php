@@ -36,6 +36,11 @@ final class Messages
         'incident.investigation_overdue' => 'Investigación de accidente sin empezar',
         'incident.art_pending'     => 'Falta el N° de siniestro de la ART',
         'incident.open_leaves'     => 'Resumen semanal de bajas abiertas',
+        // Permisos de trabajo (Etapa 13). Sujeto = el permiso: reporter = solicitante, assignee = autorizante.
+        'permit.requested'         => 'Permiso de trabajo para autorizar',
+        'permit.decided'           => 'Permiso de trabajo autorizado o rechazado',
+        'permit.expiring'          => 'Permiso de trabajo por vencer',
+        'permit.expired'           => 'Permiso de trabajo vencido',
     ];
 
     /** Eventos que no se eligen en las reglas (los dispara el sistema con destinatarios fijos). */
@@ -55,6 +60,9 @@ final class Messages
         }
         if (str_starts_with($event, 'incident.')) {
             return self::forIncident($event, $obs, $extra);
+        }
+        if (str_starts_with($event, 'permit.')) {
+            return self::forPermit($event, $obs, $extra);
         }
         $num = Observations::format((int) $obs['number']);
         $where = trim(($obs['sector_name'] ?? '') . ($obs['equipment_code'] ? ' · ' . $obs['equipment_code'] : ''), ' ·');
@@ -120,6 +128,26 @@ final class Messages
             default => [self::EVENTS[$event] ?? $event, $what],
         };
         return ['title' => $title, 'body' => $body, 'url' => '/panel/inspecciones/' . $i['uuid'], 'critical' => false];
+    }
+
+    private static function forPermit(string $event, array $p, array $extra): array
+    {
+        $num = \App\Models\WorkPermits::format((int) $p['number']);
+        $types = implode(' + ', array_map(fn ($t) => \App\Services\WorkPermitService::TYPES[$t]['short'] ?? $t, json_decode((string) $p['types'], true) ?: []));
+        $where = trim(($p['sector_name'] ?? '') . ($p['equipment_code'] ? ' · ' . $p['equipment_code'] : '') . ($p['location_text'] ? ' · ' . $p['location_text'] : ''), ' ·');
+        $task = mb_strimwidth((string) $p['task'], 0, 200, '…');
+        $ends = fecha($p['ends_at'] ?? $p['valid_until'], 'd/m H:i');
+        [$title, $body] = match ($event) {
+            'permit.requested' => ["Permiso para autorizar · {$types} · {$num}", "{$where}: {$task}\nSolicita " . ($p['requested_by_name'] ?? '—')
+                . ', de ' . fecha($p['valid_from'], 'd/m H:i') . " a {$ends}."],
+            'permit.decided'   => ($extra['decision'] ?? '') === 'aprobado'
+                ? ["Permiso autorizado · {$num}", "{$types} · {$where}. Autorizó " . ($p['approved_by_name'] ?? '—') . ". Vence {$ends}. Antes de empezar firman los ejecutores."]
+                : ["Permiso rechazado · {$num}", "{$types} · {$where}. A corregir: " . ($extra['comment'] ?? '')],
+            'permit.expiring'  => ["Permiso por vencer · {$num}", "{$types} · {$where}. Vence a las {$ends}: cerralo o extendelo antes."],
+            'permit.expired'   => ["Permiso vencido · {$num}", "{$types} · {$where}. Venció a las {$ends}. Si se sigue trabajando, hace falta un permiso nuevo."],
+            default            => [self::EVENTS[$event] ?? $event, $task],
+        };
+        return ['title' => $title, 'body' => $body, 'url' => '/panel/permisos/' . $p['uuid'], 'critical' => in_array($event, self::CRITICAL, true)];
     }
 
     private static function forIncident(string $event, array $i, array $extra): array

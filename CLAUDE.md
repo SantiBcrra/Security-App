@@ -251,6 +251,24 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   el usuario, sin datos de salud; detalle `GET /api/v1/incidents/{uuid}` (nunca datos de salud). "Mis incidentes" en
   Reportes, detalle `#/incidente/{uuid}`.
 
+## Permisos de trabajo (Etapa 13) — diseño en `docs/design/etapa-13-permisos-trabajo.md`
+- `work_permits` (PT-000001; `types` JSON combinables: altura, caliente, espacio_confinado, loto, electrico;
+  `original_data`/hash congelan lo solicitado), `work_permit_workers` (ejecutores/vigías, empleados o externos),
+  `work_permit_checklists` (un checklist por tipo, evaluado con `InspectionStructure::evaluate`),
+  `work_permit_signatures` (inmutables) y `work_permit_events`.
+- Checklists previos = plantillas de inspección con `scope = permiso` + `permit_type` (`InspectionTemplates::forPermitType`);
+  precargadas en el rubro (sin foto obligatoria: un crítico sin cumplir directamente impide autorizar). No aparecen en
+  Inspecciones (`InspectionTemplates::all()` las excluye salvo `includePermits`), no se programan ni viajan como checklist.
+- Flujo (`WorkPermitService`): solicitar (firma) → autorizar (acción `aprobar`, solo en este módulo; nunca el
+  solicitante; bloqueado con críticos sin cumplir; firma) o rechazar → iniciar (firma de CADA ejecutor/vigía, desde
+  30 min antes del inicio) → cerrar (firma + cómo quedó el área) → recibir (firma del autorizante). Cancelar antes de
+  empezar. Máximo `permisos.max_horas` (12); el cron (`WorkPermitService::expire()`) vence los activos y avisa 30 min antes.
+- Firmas: `Signatures::store($dataUrl, $carpeta)` valida PNG real con trazos y guarda archivo + SHA-256; componente
+  `public/assets/js/signature-pad.js` (`<div data-signature><canvas><input type=hidden>…`), reutilizable (EPP, capacitaciones).
+- `/panel/permisos` = activos ahora por planta (se refresca cada minuto) + para autorizar + recientes; imprimible con QR
+  a `/panel/permisos/{uuid}/verificar` (cualquier usuario de la empresa: VIGENTE / NO VIGENTE). Destinatario de avisos
+  `approvers` = permiso `permisos_trabajo.aprobar`.
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.

@@ -78,6 +78,9 @@ final class InspectionService
         if ($template === null || !$template['current_version_id']) {
             return ['inspection' => null, 'errors' => ['_' => 'Elegí un checklist.']];
         }
+        if ($template['scope'] === 'permiso') {
+            return ['inspection' => null, 'errors' => ['_' => 'Ese checklist es de permisos de trabajo: se completa al solicitar el permiso.']];
+        }
         // La versión: la que trae el celular (si la plantilla cambió mientras estaba sin señal) o la vigente.
         $version = null;
         if (($in['version'] ?? '') !== '') {

@@ -50,7 +50,9 @@ final class InspectionPlanner
         $target = isset(self::TARGETS[$in['target_type'] ?? '']) ? $in['target_type'] : null;
         $data = ['equipment_id' => null, 'equipment_type_id' => null, 'sector_id' => null];
         $sector = ($in['sector'] ?? '') !== '' ? Sectors::findByUuid((string) $in['sector']) : null;
-        if ($template !== null) {
+        if ($template !== null && $template['scope'] === 'permiso') {
+            $errors[] = 'Los checklists de permisos de trabajo no se programan.';
+        } elseif ($template !== null) {
             if ($template['scope'] === 'equipo' && !in_array($target, ['equipo', 'tipo'], true)) {
                 $errors[] = 'Este checklist es de equipos: elegí un equipo o un tipo de equipo.';
             } elseif ($template['scope'] !== 'equipo' && $target !== 'sector') {

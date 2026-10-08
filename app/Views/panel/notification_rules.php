@@ -10,6 +10,7 @@ $recipientLabel = function (array $r) use ($roles, $users): string {
         'assignee' => 'Responsable asignado',
         'reporter' => 'Quien reportó / creó',
         'verifiers' => 'Quienes verifican acciones',
+        'approvers' => 'Quienes autorizan permisos de trabajo',
         default => $r['type'],
     };
 };
@@ -44,7 +45,7 @@ $has = fn (string $type, ?string $value = null) => $form && (bool) array_filter(
                     foreach ($sectors as $u => $n): ?><option value="<?= e($u) ?>" <?= $currentSector === $u ? 'selected' : '' ?>><?= e($n) ?></option><?php endforeach; ?>
                 </select></div>
             <div class="col-md-6"><label class="form-label d-block">Avisar a</label>
-                <?php foreach (['sector_supervisors' => 'Supervisores del sector', 'assignee' => 'Responsable asignado', 'reporter' => 'Quien reportó / creó', 'verifiers' => 'Quienes verifican acciones'] as $t => $l): ?>
+                <?php foreach (['sector_supervisors' => 'Supervisores del sector', 'assignee' => 'Responsable asignado', 'reporter' => 'Quien reportó / creó', 'verifiers' => 'Quienes verifican acciones', 'approvers' => 'Quienes autorizan permisos de trabajo'] as $t => $l): ?>
                     <div class="form-check"><input class="form-check-input" type="checkbox" name="r_<?= e($t) ?>" value="1" id="r_<?= e($t) ?>" <?= $has($t) ? 'checked' : '' ?>><label class="form-check-label" for="r_<?= e($t) ?>"><?= e($l) ?></label></div>
                 <?php endforeach; ?>
                 <?php foreach ($roles as $r): ?>

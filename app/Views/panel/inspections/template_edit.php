@@ -20,6 +20,9 @@ use App\Services\InspectionTemplateService;
         <div class="col-md-6"><label class="form-label">Nombre</label><input class="form-control" name="name" required maxlength="160" value="<?= e($form['name']) ?>"></div>
         <div class="col-md-3"><label class="form-label">Se aplica a</label>
             <select class="form-select" name="scope" x-model="scope"><?php foreach (InspectionTemplateService::SCOPES as $k => $n): ?><option value="<?= e($k) ?>"><?= e($n) ?></option><?php endforeach; ?></select></div>
+        <div class="col-md-3" x-show="scope === 'permiso'"><label class="form-label">Tipo de permiso</label>
+            <select class="form-select" name="permit_type"><option value="">Elegí…</option>
+                <?php foreach (App\Services\WorkPermitService::TYPES as $k => $tp): ?><option value="<?= e($k) ?>" <?= ($form['permit_type'] ?? '') === $k ? 'selected' : '' ?>><?= e($tp['label']) ?></option><?php endforeach; ?></select></div>
         <div class="col-md-3" x-show="scope === 'equipo'"><label class="form-label">Tipo de equipo</label>
             <select class="form-select" name="equipment_type"><option value="">Elegí…</option>
                 <?php foreach ($types as $u => $n): ?><option value="<?= e($u) ?>" <?= $form['equipment_type'] === $u ? 'selected' : '' ?>><?= e($n) ?></option><?php endforeach; ?></select></div>

@@ -13,7 +13,7 @@ use App\Models\InspectionTemplates;
  */
 final class InspectionTemplateService
 {
-    public const SCOPES = ['equipo' => 'Un tipo de equipo', 'sector' => 'Un sector / área', 'general' => 'General'];
+    public const SCOPES = ['equipo' => 'Un tipo de equipo', 'sector' => 'Un sector / área', 'general' => 'General', 'permiso' => 'Un tipo de permiso de trabajo'];
 
     /**
      * @param array $in name, description, scope, equipment_type (uuid), structure (array o JSON)
@@ -36,6 +36,13 @@ final class InspectionTemplateService
                 $typeId = (int) $type['id'];
             }
         }
+        $permitType = null;
+        if ($scope === 'permiso') {
+            $permitType = isset(WorkPermitService::TYPES[$in['permit_type'] ?? '']) ? $in['permit_type'] : null;
+            if ($permitType === null) {
+                $errors[] = 'Elegí el tipo de permiso de trabajo.';
+            }
+        }
         $raw = $in['structure'] ?? [];
         if (is_string($raw)) {
             $raw = json_decode($raw, true) ?: [];
@@ -46,7 +53,7 @@ final class InspectionTemplateService
             return [null, $errors];
         }
         $meta = ['name' => mb_substr($name, 0, 160), 'description' => trim((string) ($in['description'] ?? '')) ?: null,
-            'scope' => $scope, 'equipment_type_id' => $typeId];
+            'scope' => $scope, 'equipment_type_id' => $typeId, 'permit_type' => $permitType];
         $me = UserAuth::user()['id'] ?? null;
         $db = DB::tenant();
         $db->beginTransaction();
@@ -98,17 +105,19 @@ final class InspectionTemplateService
         $type = isset($def['equipment_type']) ? CatalogItems::findByName('tipo_equipo', $def['equipment_type']) : null;
         $sections = [];
         foreach ($def['sections'] as $title => $items) {
-            $sections[] = ['title' => $title, 'items' => array_map(function ($it) {
+            // Ítem crítico: foto si no cumple; en permisos no (un crítico sin cumplir directamente impide autorizar).
+            $criticalPhoto = $def['critical_photo'] ?? (($def['scope'] ?? '') === 'permiso' ? 'nunca' : 'si_no_cumple');
+            $sections[] = ['title' => $title, 'items' => array_map(function ($it) use ($criticalPhoto) {
                 $it = is_array($it) ? $it : ['text' => $it];
                 $text = $it['text'] ?? $it[0];
                 $critical = str_starts_with($text, '*');
                 return ['text' => ltrim($text, '* '), 'critical' => $critical || !empty($it['critical']), 'type' => $it['type'] ?? 'si_no_na',
-                    'ok_when' => $it['ok_when'] ?? 'si', 'photo' => $it['photo'] ?? ($critical ? 'si_no_cumple' : 'nunca'),
+                    'ok_when' => $it['ok_when'] ?? 'si', 'photo' => $it['photo'] ?? ($critical ? $criticalPhoto : 'nunca'),
                     'min' => $it['min'] ?? null, 'max' => $it['max'] ?? null, 'unit' => $it['unit'] ?? null, 'help' => $it['help'] ?? null];
             }, $items)];
         }
         [, $errors] = self::save(null, ['name' => $def['name'], 'description' => $def['description'] ?? null,
-            'scope' => $type ? 'equipo' : ($def['scope'] ?? 'general'), 'equipment_type' => $type['uuid'] ?? '',
+            'scope' => $type ? 'equipo' : ($def['scope'] ?? 'general'), 'equipment_type' => $type['uuid'] ?? '', 'permit_type' => $def['permit_type'] ?? null,
             'structure' => ['sections' => $sections], 'preset_key' => $presetKey]);
         if ($errors) {
             throw new \DomainException('Plantilla precargada inválida (' . $presetKey . '): ' . implode(' ', $errors));

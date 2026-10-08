@@ -19,7 +19,7 @@ final class InspectionTemplatesController
     {
         return Response::html(View::render('panel/inspections/templates', [
             'title'      => 'Plantillas de checklist',
-            'templates'  => InspectionTemplates::all(),
+            'templates'  => InspectionTemplates::all(false, true),
             'industries' => IndustryTemplates::available(),
         ], 'layouts/app'));
     }
@@ -83,6 +83,7 @@ final class InspectionTemplatesController
             'form'      => [
                 'name' => $old['name'] ?? $t['name'] ?? '', 'description' => $old['description'] ?? $t['description'] ?? '',
                 'scope' => $old['scope'] ?? $t['scope'] ?? 'equipo', 'equipment_type' => $old['equipment_type'] ?? $t['equipment_type_uuid'] ?? '',
+                'permit_type' => $old['permit_type'] ?? $t['permit_type'] ?? '',
             ],
             'structure' => $structure ?? ($version['structure'] ?? ['sections' => [['title' => 'Control', 'items' => []]]]),
             'versions'  => $t ? InspectionTemplates::versions((int) $t['id']) : [],

@@ -16,10 +16,20 @@ final class InspectionTemplates
         LEFT JOIN catalog_items ty ON ty.id = t.equipment_type_id
         LEFT JOIN inspection_template_versions v ON v.id = t.current_version_id';
 
-    public static function all(bool $onlyActive = false): array
+    /** Por defecto sin las de permisos de trabajo (esas se usan desde Permisos, no como inspección). */
+    public static function all(bool $onlyActive = false, bool $includePermits = false): array
     {
         return DB::tenant()->query(self::SELECT . ' WHERE t.deleted_at IS NULL' . ($onlyActive ? ' AND t.is_active = 1' : '')
-            . ' ORDER BY t.is_active DESC, t.name')->fetchAll();
+            . ($includePermits ? '' : " AND t.scope <> 'permiso'") . ' ORDER BY t.scope = \'permiso\', t.is_active DESC, t.name')->fetchAll();
+    }
+
+    /** Checklist previo vigente de un tipo de permiso de trabajo (la primera activa, si hubiera varias). */
+    public static function forPermitType(string $type): ?array
+    {
+        $stmt = DB::tenant()->prepare(self::SELECT . " WHERE t.deleted_at IS NULL AND t.is_active = 1 AND t.scope = 'permiso' AND t.permit_type = ?
+            AND t.current_version_id IS NOT NULL ORDER BY t.id LIMIT 1");
+        $stmt->execute([$type]);
+        return $stmt->fetch() ?: null;
     }
 
     public static function findByUuid(string $uuid): ?array

@@ -135,7 +135,7 @@ return [
         assert_true(count($critical) >= 5, 'frenos, bocina, alarma, cinturón, horquillas…');
         $leak = array_values(array_filter(iterator_to_array(InspectionStructure::items($structure), false), fn ($r) => str_contains($r['item']['text'], 'Pierde aceite')))[0];
         assert_same('no', $leak['item']['ok_when'], 'pregunta invertida: cumple con "no"');
-        assert_same(['created' => 0, 'existing' => 6], IndustryTemplates::applyInspections('metalurgica'), 'volver a cargar no duplica');
+        assert_same(['created' => 0, 'existing' => 11], IndustryTemplates::applyInspections('metalurgica'), 'volver a cargar no duplica (6 de inspección + 5 de permisos)');
         assert_same('sector', InspectionTemplates::findByPreset('metalurgica/orden_limpieza')['scope']);
         $st['tplAe'] = $ae;
     },

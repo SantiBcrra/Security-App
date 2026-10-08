@@ -56,7 +56,7 @@ final class Channels
             }
             WebPush::send($sub, [
                 'title' => $row['subject'], 'body' => mb_strimwidth((string) $row['body_text'], 0, 180, '…'),
-                'url' => $payload['app_url'] ?? null, 'critical' => (bool) $row['is_critical'], 'tag' => $payload['observation'] ?? $payload['action'] ?? $payload['inspection'] ?? $payload['schedule'] ?? $payload['incident'] ?? null,
+                'url' => $payload['app_url'] ?? null, 'critical' => (bool) $row['is_critical'], 'tag' => $payload['observation'] ?? $payload['action'] ?? $payload['inspection'] ?? $payload['schedule'] ?? $payload['incident'] ?? $payload['permit'] ?? null,
             ], (bool) $row['is_critical']);
             return;
         }

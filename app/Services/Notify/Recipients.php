@@ -53,14 +53,9 @@ final class Recipients
             case 'reporter':
                 return !empty($obs['reporter_user_id']) ? [(int) $obs['reporter_user_id']] : [];
             case 'verifiers': // quienes pueden verificar acciones (permiso acciones.verificar)
-                $ids = [];
-                $rows = $db->query('SELECT u.id, ro.permissions FROM users u JOIN roles ro ON ro.id = u.role_id WHERE u.is_active = 1')->fetchAll();
-                foreach ($rows as $row) {
-                    if (\App\Policies\Permissions::can(\App\Policies\Permissions::decode($row['permissions']), 'acciones', 'verificar')) {
-                        $ids[] = (int) $row['id'];
-                    }
-                }
-                return $ids;
+                return self::withPermission('acciones', 'verificar');
+            case 'approvers': // quienes autorizan permisos de trabajo (permisos_trabajo.aprobar)
+                return self::withPermission('permisos_trabajo', 'aprobar');
             case 'sector_supervisors':
                 $sector = !empty($obs['sector_id']) ? Sectors::findById((int) $obs['sector_id']) : null;
                 if ($sector === null) {
@@ -73,6 +68,18 @@ final class Recipients
                 return array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
         }
         return [];
+    }
+
+    /** @return list<int> usuarios activos cuyo rol tiene esa acción en ese módulo */
+    private static function withPermission(string $module, string $action): array
+    {
+        $ids = [];
+        foreach (DB::tenant()->query('SELECT u.id, ro.permissions FROM users u JOIN roles ro ON ro.id = u.role_id WHERE u.is_active = 1')->fetchAll() as $row) {
+            if (\App\Policies\Permissions::can(\App\Policies\Permissions::decode($row['permissions']), $module, $action)) {
+                $ids[] = (int) $row['id'];
+            }
+        }
+        return $ids;
     }
 
     /** Todos los responsables SyH y administradores (escalamiento, resúmenes). */

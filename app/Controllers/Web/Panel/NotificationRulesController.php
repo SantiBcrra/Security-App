@@ -60,7 +60,7 @@ final class NotificationRulesController
                 $recipients[] = ['type' => 'role', 'value' => (string) $slug];
             }
         }
-        foreach (['sector_supervisors', 'assignee', 'reporter', 'verifiers'] as $type) {
+        foreach (['sector_supervisors', 'assignee', 'reporter', 'verifiers', 'approvers'] as $type) {
             if ($request->input('r_' . $type)) {
                 $recipients[] = ['type' => $type];
             }

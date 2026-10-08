@@ -52,7 +52,7 @@ final class Pull
                     // Acciones: el alcance se decide en PHP; si dejó de verla (ej. la reasignaron) le llega como baja.
                     || ($entity === 'actions' && !ActionService::canView($row))
                     // Checklists: solo a quien puede hacer inspecciones. Programadas: solo las pendientes a su cargo.
-                    || ($entity === 'inspection_templates' && (!UserAuth::can('inspecciones', 'crear') || $row['version_uuid'] === null))
+                    || ($entity === 'inspection_templates' && (!UserAuth::can('inspecciones', 'crear') || $row['version_uuid'] === null || $row['scope'] === 'permiso'))
                     || ($entity === 'inspection_schedule' && ($row['status'] !== 'pendiente' || !self::scheduleIsMine($row)))
                     // Incidentes: al celular solo llegan los que reportó el usuario (sin datos de salud).
                     || ($entity === 'incidents' && (int) $row['reported_by'] !== (int) (UserAuth::user()['id'] ?? 0));

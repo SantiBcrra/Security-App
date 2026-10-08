@@ -117,5 +117,51 @@ return [
                     'Acceso libre y señalizado', 'Manguera y boquilla en buen estado', 'Tarjeta de control actualizada'],
             ],
         ],
+        // Checklists previos de permisos de trabajo (Etapa 13). Si falla un ítem crítico, el permiso no se puede autorizar.
+        'permiso_altura' => [
+            'name' => 'Permiso: trabajo en altura', 'scope' => 'permiso', 'permit_type' => 'altura',
+            'sections' => [
+                'Protección' => ['*Arnés de cuerpo completo inspeccionado', '*Línea de vida / punto de anclaje verificado (resistencia)',
+                    '*Doble cabo con absorbedor de energía', 'Casco con barbijo'],
+                'Acceso y área' => ['*Andamio o plataforma inspeccionado y con barandas', 'Escalera en buen estado y atada', '*Área de exclusión señalizada debajo',
+                    'Herramientas atadas (sin riesgo de caída de objetos)', 'Condiciones climáticas adecuadas (viento, lluvia)'],
+                'Personal' => ['Personal apto y capacitado para trabajo en altura', 'Plan de rescate definido'],
+            ],
+        ],
+        'permiso_caliente' => [
+            'name' => 'Permiso: trabajo en caliente', 'scope' => 'permiso', 'permit_type' => 'caliente',
+            'sections' => [
+                'Entorno' => ['*Materiales combustibles retirados a 10 m o protegidos', '*Extintor adecuado al lado del trabajo', 'Mantas ignífugas / mamparas colocadas',
+                    ['text' => '¿Hay atmósfera inflamable o recipientes con restos de combustible?', 'ok_when' => 'no', 'critical' => true]],
+                'Equipos' => ['Equipo de soldadura / oxicorte en buen estado', 'Válvulas antirretroceso (oxicorte)', 'Ventilación / extracción de humos'],
+                'Vigía de fuego' => ['*Vigía de fuego designado durante el trabajo', 'Guardia posterior acordada (minutos después de terminar)'],
+            ],
+        ],
+        'permiso_confinado' => [
+            'name' => 'Permiso: espacio confinado', 'scope' => 'permiso', 'permit_type' => 'espacio_confinado',
+            'sections' => [
+                'Antes de entrar' => ['*Espacio aislado (bloqueo de líneas, energías y alimentaciones)', '*Ventilación forzada funcionando',
+                    '*Medición inicial de gases en rango (O₂, explosividad, CO, H₂S)', 'Detector de gases calibrado'],
+                'Rescate y vigía' => ['*Vigía en la entrada durante todo el trabajo', '*Plan y equipo de rescate disponibles (trípode, arnés)', 'Comunicación vigía–ejecutores definida'],
+                'Personal' => ['EPP adecuado (respiratorio si corresponde)', 'Personal capacitado en espacios confinados'],
+            ],
+        ],
+        'permiso_loto' => [
+            'name' => 'Permiso: bloqueo y etiquetado (LOTO)', 'scope' => 'permiso', 'permit_type' => 'loto',
+            'sections' => [
+                'Bloqueo' => ['*Fuentes de energía identificadas (eléctrica, neumática, hidráulica, mecánica, térmica)', '*Cada punto bloqueado con candado personal y tarjeta',
+                    '*Energía residual liberada (presión, resortes, capacitores)', '*Verificación de energía cero (intento de arranque)'],
+                'Coordinación' => ['Personal afectado informado', 'Llaves en poder de cada ejecutor'],
+            ],
+        ],
+        'permiso_electrico' => [
+            'name' => 'Permiso: trabajo eléctrico', 'scope' => 'permiso', 'permit_type' => 'electrico',
+            'sections' => [
+                'Corte y verificación' => ['*Corte visible / seccionamiento de la instalación', '*Bloqueo y señalización del tablero', '*Verificación de ausencia de tensión',
+                    'Puesta a tierra y en cortocircuito (si corresponde)'],
+                'Protección' => ['*EPP dieléctrico (guantes, calzado, protección facial)', 'Herramientas aisladas en buen estado', 'Distancias de seguridad a partes con tensión respetadas'],
+                'Personal' => ['Personal habilitado para trabajos eléctricos'],
+            ],
+        ],
     ],
 ];

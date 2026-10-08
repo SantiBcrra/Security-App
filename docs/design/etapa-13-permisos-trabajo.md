@@ -1,6 +1,6 @@
 # Etapa 13 — Permisos de trabajo · Diseño
 
-Estado: **aprobado**. Decisiones del usuario: autoriza quien tiene `aprobar` y nunca el solicitante; 12 h + una
+Estado: **aprobado** · entrega 1 hecha. Decisiones del usuario: autoriza quien tiene `aprobar` y nunca el solicitante; 12 h + una
 extensión; gases fuera de rango = suspensión automática + aviso crítico; firma cada ejecutor.
 
 ## 1. Qué resuelve
