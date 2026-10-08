@@ -45,9 +45,9 @@ $editable = (int) $role['is_system'] !== 1 && UserAuth::can('roles', 'editar');
                         <tr>
                             <td class="text-start"><?= e($label) ?></td>
                             <?php foreach (Permissions::ACTIONS as $action => $_): ?>
-                                <td><input class="form-check-input" type="checkbox" name="perm[<?= e($module) ?>][acciones][]"
+                                <td><?php if (in_array($action, Permissions::actionsFor($module), true)): ?><input class="form-check-input" type="checkbox" name="perm[<?= e($module) ?>][acciones][]"
                                            value="<?= e($action) ?>" <?= in_array($action, $granted, true) ? 'checked' : '' ?>
-                                           aria-label="<?= e($label . ': ' . $action) ?>"></td>
+                                           aria-label="<?= e($label . ': ' . $action) ?>"><?php endif; ?></td>
                             <?php endforeach; ?>
                             <td>
                                 <select class="form-select form-select-sm" name="perm[<?= e($module) ?>][alcance]">

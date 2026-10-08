@@ -156,6 +156,22 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - `round.start` es idempotente también por uuid de la ronda; el escaneo valida punto activo, uuid y hora del
   celular (máx. 30 días atrás). La PWA recupera la ronda en curso (`mine` + `en_curso`) al reabrir.
 
+## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
+- Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`
+  (solo inserción) y `action_attachments` (evidencia inmutable, fotos o PDF, por `cycle`).
+- Flujo en `ActionWorkflow` (abierta → en_curso → cerrada → verificada; cancelada; rechazar vuelve a en_curso y sube
+  `cycle`). Todo pasa por `ActionService` (`transition`, `update`, `comment`, `addEvidence`). "Vencida" se calcula
+  (`due_on` < `ActionService::today()`, fecha local de la empresa), no es un estado.
+- Cerrar exige texto + ≥1 evidencia del ciclo actual. Verificar/rechazar: permiso `verificar` (solo existe en el
+  módulo acciones: `Permissions::MODULE_ONLY_ACTIONS` / `actionsFor()`) y nunca quien cerró.
+- El responsable siempre ve, toma y cierra la suya aunque su rol no tenga el módulo (`ActionService::scope()` sin
+  permiso = solo las suyas; el menú "Acciones" aparece si tiene alguna abierta).
+- Otros módulos crean acciones con `ActionService::validate()` + `create($data, $origen, $id)` (o `insert()` dentro de
+  su transacción + `afterCreate()` después del commit). `syncOrigin()` avisa al origen.
+- Observaciones: "Asignar acción" crea una acción (puede haber varias). `assigned_user_id`/`action_text`/`action_due_on`
+  de la observación son ahora un **resumen** de la acción abierta que vence primero (`ObservationService::syncActions()`);
+  no escribirlos a mano. Cuando todas quedan verificadas/canceladas, la observación se cierra sola (evento "Sistema").
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.

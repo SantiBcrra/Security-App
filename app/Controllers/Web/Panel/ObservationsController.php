@@ -112,7 +112,9 @@ final class ObservationsController
             'photos'      => ObservationAttachments::forObservation((int) $obs['id']),
             'people'      => Observations::people((int) $obs['id']),
             'actions'     => ObservationWorkflow::available($obs['status']),
-            'users'       => array_filter(Users::all(), fn ($u) => (int) $u['is_active'] === 1 && $u['password_hash']),
+            'users'       => \App\Services\ActionService::assignableUsers(),
+            'obsActions'  => \App\Models\Actions::forOrigin('observacion', (int) $obs['id']),
+            'today'       => \App\Services\ActionService::today(),
             'options'     => $this->options(),
             'old'         => $old,
             'errors'      => $errors,
@@ -131,6 +133,7 @@ final class ObservationsController
             'events'   => ObservationEvents::forObservation((int) $obs['id']),
             'photos'   => ObservationAttachments::forObservation((int) $obs['id']),
             'people'   => Observations::people((int) $obs['id']),
+            'obsActions' => \App\Models\Actions::forOrigin('observacion', (int) $obs['id']),
         ], null));
     }
 

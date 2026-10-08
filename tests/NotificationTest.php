@@ -166,8 +166,11 @@ return [
         NotificationPrefs::set((int) $st['sup2']['id'], 'email', false);
         $obs = $report($st['rep'], $st['nave2'], $st['baja']);
         UserAuth::setCurrent($st['hys']);
-        assert_same(null, ObservationService::transition($obs, 'asignar', ['assigned_user' => $st['sup2']['uuid'], 'action_text' => 'Ordenar el sector', 'action_due_on' => gmdate('Y-m-d', strtotime('-2 days'))]));
+        assert_same(null, ObservationService::transition($obs, 'asignar', ['assigned_user' => $st['sup2']['uuid'], 'action_text' => 'Ordenar el sector', 'action_due_on' => gmdate('Y-m-d', strtotime('+2 days'))]));
         assert_true(str_contains($inbox($st['sup2'])[0]['title'], 'Te asignaron'), 'aviso en la app');
+        // Pasan los días: la acción vence (la fecha no se puede cargar en el pasado, se simula)
+        DB::tenant()->prepare("UPDATE actions SET due_on = ? WHERE origin_type = 'observacion' AND origin_id = ?")->execute([gmdate('Y-m-d', strtotime('-2 days')), (int) $obs['id']]);
+        ObservationService::syncActions((int) $obs['id']);
         QueueRunner::run(5);
         assert_same([], array_values(array_filter($st['mails'], fn ($m) => $m->to === 'sup2@nt.test')), 'silenció el email');
         $st['assigned'] = Observations::findById((int) $obs['id']);

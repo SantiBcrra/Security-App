@@ -19,9 +19,9 @@ final class ImageProcessor
         'GPSLongitude', 'GPSLongitudeRef', 'GPSAltitude', 'ExifImageWidth', 'ExifImageLength', 'Software'];
 
     /** @param bool $isUpload true = viene de $_FILES (move_uploaded_file) */
-    public static function store(string $tenantUuid, string $source, ?string $originalName, bool $isUpload, ?int $userId): array
+    public static function store(string $tenantUuid, string $source, ?string $originalName, bool $isUpload, ?int $userId, string $folder = 'observations'): array
     {
-        $sub = 'observations/' . gmdate('Y') . '/' . gmdate('m');
+        $sub = $folder . '/' . gmdate('Y') . '/' . gmdate('m');
         $relative = TenantFiles::storeFile($tenantUuid, $source, $sub, self::TYPES, self::MAX_BYTES, $isUpload);
         $full = TenantFiles::path($tenantUuid, $relative);
         $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($full);

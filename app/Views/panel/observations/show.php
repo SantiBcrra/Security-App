@@ -44,15 +44,26 @@ $openAction = $old['action'] ?? null;
                 <li class="list-group-item d-flex justify-content-between"><span>Equipo</span><span><?= $obs['equipment_code'] ? e($obs['equipment_code'] . ' · ' . $obs['equipment_name']) : '—' ?></span></li>
                 <li class="list-group-item d-flex justify-content-between"><span>Fecha del hecho</span><span><?= e(fecha($obs['created_at_device'], 'd/m/Y H:i')) ?></span></li>
                 <li class="list-group-item d-flex justify-content-between"><span>Reportado por</span><span><?= $obs['is_anonymous'] ? '<em>Anónimo</em>' : e($obs['reporter_name'] ?? '—') ?></span></li>
-                <?php if ($obs['assigned_name']): ?>
-                    <li class="list-group-item"><div class="d-flex justify-content-between"><span>Responsable</span><strong><?= e($obs['assigned_name']) ?></strong></div>
-                        <div class="mt-1"><?= e($obs['action_text']) ?></div>
-                        <?php if ($obs['action_due_on']): $late = ObservationWorkflow::isOpen($obs['status']) && $obs['action_due_on'] < gmdate('Y-m-d'); ?>
-                            <div class="<?= $late ? 'text-danger fw-semibold' : 'text-body-secondary' ?>">Fecha compromiso: <?= e(date('d/m/Y', strtotime($obs['action_due_on']))) ?><?= $late ? ' (vencida)' : '' ?></div>
-                        <?php endif; ?></li>
-                <?php endif; ?>
             </ul>
         </div>
+
+        <?php if ($obsActions): require __DIR__ . '/../actions/_badges.php'; ?>
+            <div class="card shadow-sm mb-3">
+                <div class="card-header d-flex justify-content-between"><strong>Acciones (<?= count($obsActions) ?>)</strong>
+                    <span class="small text-body-secondary">La observación se cierra sola cuando todas quedan verificadas</span></div>
+                <div class="list-group list-group-flush small">
+                    <?php foreach ($obsActions as $act): ?>
+                        <a class="list-group-item list-group-item-action" href="<?= e(url('/panel/acciones/' . $act['uuid'])) ?>">
+                            <div class="d-flex justify-content-between gap-2">
+                                <span><span class="text-body-secondary"><?= e(App\Models\Actions::format((int) $act['number'])) ?></span> <strong><?= e($act['title']) ?></strong></span>
+                                <span class="text-nowrap"><?= $actionBadge($act['status']) ?></span>
+                            </div>
+                            <div class="d-flex flex-wrap gap-3 mt-1"><span>👤 <?= e($act['responsible_name']) ?></span><?= $dueLabel($act, $today) ?></div>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endif; ?>
 
         <div class="card shadow-sm mb-3">
             <div class="card-header d-flex justify-content-between align-items-center"><strong>Reporte original</strong>
@@ -117,7 +128,7 @@ $openAction = $old['action'] ?? null;
                 <div class="card-body d-grid gap-2" x-data="{ open: <?= json_encode($openAction) ?> }">
                     <?php foreach ($actions as $key => $t): ?>
                         <button type="button" class="btn btn-sm <?= in_array($key, ['cerrar'], true) ? 'btn-success' : ($key === 'descartar' ? 'btn-outline-dark' : 'btn-outline-primary') ?>"
-                                @click="open = open === '<?= e($key) ?>' ? null : '<?= e($key) ?>'"><?= e($t['label']) ?></button>
+                                @click="open = open === '<?= e($key) ?>' ? null : '<?= e($key) ?>'"><?= e($key === 'asignar' && $obsActions ? 'Asignar otra acción' : $t['label']) ?></button>
                         <form method="post" action="<?= e(url($base . '/accion/' . $key)) ?>" class="border rounded p-2" x-show="open === '<?= e($key) ?>'" x-cloak>
                             <?= csrf_field() ?>
                             <?php if ($key === 'asignar'): ?>
@@ -129,9 +140,18 @@ $openAction = $old['action'] ?? null;
                                     <?php endforeach; ?>
                                 </select>
                                 <label class="form-label small mb-0">Acción a realizar</label>
-                                <textarea class="form-control form-control-sm mb-2" name="action_text" rows="2" required><?= e($old['action_text'] ?? $obs['action_text'] ?? '') ?></textarea>
-                                <label class="form-label small mb-0">Fecha compromiso</label>
-                                <input class="form-control form-control-sm mb-2" type="date" name="action_due_on" value="<?= e($old['action_due_on'] ?? $obs['action_due_on'] ?? '') ?>" required>
+                                <input class="form-control form-control-sm mb-2" name="action_text" maxlength="191" required value="<?= e($old['action_text'] ?? '') ?>">
+                                <label class="form-label small mb-0">Detalle (opcional)</label>
+                                <textarea class="form-control form-control-sm mb-2" name="action_detail" rows="2"><?= e($old['action_detail'] ?? '') ?></textarea>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-6"><label class="form-label small mb-0">Fecha límite</label>
+                                        <input class="form-control form-control-sm" type="date" name="action_due_on" min="<?= e($today) ?>" value="<?= e($old['action_due_on'] ?? '') ?>" required></div>
+                                    <div class="col-6"><label class="form-label small mb-0">Prioridad</label>
+                                        <select class="form-select form-select-sm" name="priority"><?php foreach (App\Services\ActionWorkflow::PRIORITIES as $pk => $pn): ?><option value="<?= e($pk) ?>" <?= ($old['priority'] ?? 'media') === $pk ? 'selected' : '' ?>><?= e($pn) ?></option><?php endforeach; ?></select></div>
+                                </div>
+                                <label class="form-label small mb-0">Tipo</label>
+                                <select class="form-select form-select-sm mb-2" name="action_type"><?php foreach (App\Services\ActionWorkflow::TYPES as $tk => $tn): ?><option value="<?= e($tk) ?>" <?= ($old['action_type'] ?? 'correctiva') === $tk ? 'selected' : '' ?>><?= e($tn) ?></option><?php endforeach; ?></select>
+                                <div class="small text-body-secondary mb-2">Se crea una acción con su propio seguimiento. Podés asignar varias.</div>
                             <?php endif; ?>
                             <label class="form-label small mb-0"><?= $t['comment'] ? 'Comentario / motivo (obligatorio)' : 'Comentario (opcional)' ?></label>
                             <textarea class="form-control form-control-sm mb-2" name="comment" rows="2" <?= $t['comment'] ? 'required minlength="5"' : '' ?>><?= e(($old['action'] ?? '') === $key ? ($old['comment'] ?? '') : '') ?></textarea>
@@ -193,7 +213,7 @@ $openAction = $old['action'] ?? null;
                         <div class="text-body-secondary"><?= e($ev['actor_name'] ?? '') ?></div>
                         <?php if ($ev['comment']): ?><div class="mt-1" style="white-space: pre-wrap"><?= e($ev['comment']) ?></div><?php endif; ?>
                         <?php if ($ev['type'] === 'assignment' && $data): ?>
-                            <div class="mt-1">Responsable: <strong><?= e($data['responsable']) ?></strong> · compromiso <?= e(date('d/m/Y', strtotime($data['fecha_compromiso']))) ?><br><?= e($data['accion']) ?></div>
+                            <div class="mt-1"><?php if (!empty($data['accion_uuid'])): ?><a href="<?= e(url('/panel/acciones/' . $data['accion_uuid'])) ?>"><?= e($data['numero']) ?></a> · <?php endif; ?>Responsable: <strong><?= e($data['responsable']) ?></strong> · límite <?= e(date('d/m/Y', strtotime($data['fecha_compromiso']))) ?><br><?= e($data['accion']) ?></div>
                         <?php elseif ($ev['type'] === 'correction' && $data): ?>
                             <?php foreach ($data['despues'] as $label => $value): ?>
                                 <div class="mt-1"><?= e($label) ?>: <s class="text-body-secondary"><?= e($data['antes'][$label] ?? '—') ?></s> → <strong><?= e($value ?? '—') ?></strong></div>

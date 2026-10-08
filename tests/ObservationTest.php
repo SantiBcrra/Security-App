@@ -142,7 +142,7 @@ return [
         $obs = Observations::findById((int) $obs['id']);
         assert_same('en_analisis', $obs['status']);
         assert_true(str_contains((string) ObservationService::transition($obs, 'analizar', []), 'ya está'), 'no se repite');
-        assert_same('Elegí el responsable de la acción.', ObservationService::transition($obs, 'asignar', ['action_text' => 'Limpiar', 'action_due_on' => '2030-01-01']));
+        assert_same('Elegí el responsable (un usuario activo).', ObservationService::transition($obs, 'asignar', ['action_text' => 'Limpiar', 'action_due_on' => '2030-01-01']));
         assert_same(null, ObservationService::transition($obs, 'asignar', ['assigned_user' => $st['sup']['uuid'], 'action_text' => 'Limpiar y poner bandeja', 'action_due_on' => '2030-01-01']));
         $obs = Observations::findById((int) $obs['id']);
         assert_same('accion_asignada', $obs['status']);

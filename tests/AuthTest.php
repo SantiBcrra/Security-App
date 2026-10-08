@@ -137,7 +137,7 @@ return [
         $roles = Permissions::baseRoles();
         $can = fn (string $r, string $m, string $a) => Permissions::can($roles[$r]['permissions'], $m, $a);
         foreach (Permissions::MODULES as $m => $_) {
-            foreach (Permissions::ACTIONS as $a => $__) {
+            foreach (Permissions::actionsFor($m) as $a) {
                 assert_true($can('admin_empresa', $m, $a), "admin: {$m}.{$a}");
             }
         }

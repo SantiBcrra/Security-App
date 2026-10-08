@@ -100,7 +100,7 @@ Reglas:
 | admin_empresa | todo |
 | responsable_hys | todo + verificar |
 | supervisor | ver, crear, editar, cerrar · sus sectores |
-| reportante | ver, cerrar · propios (para poder ser responsable de una acción) |
+| reportante | ver · propios (como responsable toma y cierra las suyas igual; no puede cancelar) |
 | auditor | ver, exportar |
 
 ## 5. Integración con Observaciones
@@ -117,8 +117,9 @@ Reglas:
     - en estado `accion_asignada` → acción `abierta`, con el mismo responsable y la misma fecha;
     - en estado `cerrada` → acción `verificada`, marcada como "migrada" (sin evidencia, con
       una nota en el evento).
-  - Las columnas viejas no se borran, pero se dejan de escribir y de leer: no se borra nada,
-    así que se puede volver atrás.
+  - Las columnas viejas no se borran: quedan como **resumen automático de la acción abierta que
+    vence primero** (las mantiene `ObservationService::syncActions()`), así los listados, los avisos
+    actuales y la app de campo siguen funcionando sin cambios hasta la entrega 2.
 - La app de campo hoy muestra `assigned_name` / `action_due_on` de la observación. Pasa a
   mostrar la acción vigente.
 

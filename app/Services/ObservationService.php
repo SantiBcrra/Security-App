@@ -136,21 +136,24 @@ final class ObservationService
         }
         $changes = ['status' => $t['to']];
         $data = null;
+        $actionData = null;
         if ($action === 'asignar') {
-            $assignee = Users::findByUuid((string) ($input['assigned_user'] ?? ''));
-            $actionText = trim((string) ($input['action_text'] ?? ''));
-            $due = \App\Resources\Resource::parseDate((string) ($input['action_due_on'] ?? ''));
-            if ($assignee === null || (int) $assignee['is_active'] !== 1) {
-                return 'Elegí el responsable de la acción.';
+            // "Asignar acción" crea una acción CAPA (Etapa 10) que hereda planta y sector de la observación.
+            [$actionData, $errors] = ActionService::validate([
+                'title'       => $input['action_text'] ?? '',
+                'description' => $input['action_detail'] ?? '',
+                'type'        => $input['action_type'] ?? 'correctiva',
+                'priority'    => $input['priority'] ?? 'media',
+                'responsible' => $input['assigned_user'] ?? '',
+                'due_on'      => $input['action_due_on'] ?? '',
+            ]);
+            if ($errors) {
+                return reset($errors);
             }
-            if (mb_strlen($actionText) < 5) {
-                return 'Describí la acción a realizar.';
-            }
-            if ($due === null) {
-                return 'Indicá la fecha compromiso.';
-            }
-            $changes += ['assigned_user_id' => (int) $assignee['id'], 'action_text' => $actionText, 'action_due_on' => $due];
-            $data = ['responsable' => $assignee['name'], 'accion' => $actionText, 'fecha_compromiso' => $due];
+            $actionData['site_id'] = $obs['site_id'] !== null ? (int) $obs['site_id'] : null;
+            $actionData['sector_id'] = $obs['sector_id'] !== null ? (int) $obs['sector_id'] : null;
+            $assignee = Users::findById((int) $actionData['responsible_user_id']);
+            $data = ['responsable' => $assignee['name'], 'accion' => $actionData['title'], 'fecha_compromiso' => $actionData['due_on']];
         }
         if ($t['to'] === 'cerrada') {
             $changes['closed_at'] = gmdate('Y-m-d H:i:s');
@@ -167,6 +170,11 @@ final class ObservationService
                 return 'La observación ya está "' . ObservationWorkflow::label($locked['status']) . '": no se puede "' . mb_strtolower($t['label']) . '". Recargá la página.';
             }
             Observations::update((int) $obs['id'], $changes);
+            if ($actionData !== null) {
+                $actionId = ActionService::insert($actionData, 'observacion', (int) $obs['id']);
+                $data['numero'] = \App\Models\Actions::format((int) \App\Models\Actions::findById($actionId)['number']);
+                $data['accion_uuid'] = \App\Models\Actions::findById($actionId)['uuid'];
+            }
             ObservationEvents::add((int) $obs['id'], $action === 'asignar' ? 'assignment' : 'status', [
                 'from' => $locked['status'], 'to' => $t['to'], 'comment' => $comment ?: null, 'data' => $data,
             ] + self::actor(false));
@@ -176,14 +184,74 @@ final class ObservationService
             throw $e;
         }
         Audit::tenant('observation.' . $action, 'observation', $obs['uuid'], ['estado' => $obs['status']], ['estado' => $t['to']] + ($data ?? []));
+        if (isset($actionId)) {
+            ActionService::afterCreate(\App\Models\Actions::findById($actionId));
+        }
         $fresh = Observations::findById((int) $obs['id']);
         if ($action === 'asignar') {
-            Notifier::dispatch('observation.assigned', $fresh);
+            // El aviso habla de la acción recién creada (aunque la observación tenga otras abiertas).
+            Notifier::dispatch('observation.assigned', $fresh, ['obs_override' => [
+                'assigned_user_id' => $actionData['responsible_user_id'], 'assigned_name' => $data['responsable'],
+                'action_text' => $actionData['title'], 'action_due_on' => $actionData['due_on'],
+            ]]);
         } elseif (in_array($action, ['cerrar', 'descartar'], true)) {
             Escalations::closeFor((int) $obs['id']);
             Notifier::dispatch('observation.closed', $fresh, ['comment' => $comment]);
         }
         return null;
+    }
+
+    /**
+     * Después de cualquier cambio en sus acciones (Etapa 10):
+     * - assigned_user_id / action_text / action_due_on quedan como resumen de la acción abierta que
+     *   vence primero (lo usan listados, avisos de vencidas y la app de campo);
+     * - si todas sus acciones quedaron verificadas o canceladas, la observación se cierra sola.
+     */
+    public static function syncActions(int $observationId): void
+    {
+        $obs = Observations::findById($observationId);
+        if ($obs === null) {
+            return;
+        }
+        $actions = \App\Models\Actions::forOrigin('observacion', $observationId);
+        $open = array_values(array_filter($actions, fn ($a) => ActionWorkflow::isOpen($a['status'])));
+        usort($open, fn ($x, $y) => [$x['due_on'], $x['id']] <=> [$y['due_on'], $y['id']]);
+        $summary = [
+            'assigned_user_id' => $open ? (int) $open[0]['responsible_user_id'] : null,
+            'action_text'      => $open ? $open[0]['title'] : null,
+            'action_due_on'    => $open ? $open[0]['due_on'] : null,
+        ];
+        $current = ['assigned_user_id' => $obs['assigned_user_id'] !== null ? (int) $obs['assigned_user_id'] : null,
+            'action_text' => $obs['action_text'], 'action_due_on' => $obs['action_due_on']];
+        if ($summary !== $current) {
+            Observations::update($observationId, $summary);
+        }
+
+        $finished = $actions && !array_filter($actions, fn ($a) => !in_array($a['status'], ['verificada', 'cancelada'], true));
+        if (!$finished || $obs['status'] !== 'accion_asignada') {
+            return;
+        }
+        $verified = count(array_filter($actions, fn ($a) => $a['status'] === 'verificada'));
+        $comment = $verified ? 'Cierre automático: todas sus acciones fueron verificadas como eficaces.' : 'Cierre automático: todas sus acciones fueron canceladas.';
+        $db = DB::tenant();
+        $db->beginTransaction();
+        try {
+            $locked = Observations::findById($observationId, true);
+            if ($locked['status'] !== 'accion_asignada') {
+                $db->rollBack();
+                return;
+            }
+            Observations::update($observationId, ['status' => 'cerrada', 'closed_at' => gmdate('Y-m-d H:i:s')]);
+            ObservationEvents::add($observationId, 'status', ['from' => 'accion_asignada', 'to' => 'cerrada', 'comment' => $comment,
+                'user_id' => null, 'actor_name' => 'Sistema']);
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+        Audit::tenant('observation.autoclose', 'observation', $obs['uuid'], ['estado' => 'accion_asignada'], ['estado' => 'cerrada']);
+        Escalations::closeFor($observationId);
+        Notifier::dispatch('observation.closed', Observations::findById($observationId), ['comment' => $comment]);
     }
 
     public static function comment(array $obs, string $comment): ?string

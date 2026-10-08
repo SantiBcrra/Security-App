@@ -40,6 +40,9 @@ final class Notifier
     private static function run(string $event, array $obs, array $extra, ?array $forceRecipients, ?array $forceChannels): array
     {
         $obs = Observations::findById((int) $obs['id']) ?? $obs; // siempre con los nombres actualizados
+        if (!empty($extra['obs_override'])) {
+            $obs = array_merge($obs, $extra['obs_override']); // ej. la acción recién asignada, no la que vence primero
+        }
         $message = Messages::for($event, $obs, $extra);
         $targets = []; // user_id => [user, canales]
         if ($forceRecipients !== null) {

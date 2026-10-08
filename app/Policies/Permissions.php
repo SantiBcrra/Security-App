@@ -33,6 +33,12 @@ final class Permissions
         'editar'   => 'Editar',
         'cerrar'   => 'Cerrar',
         'exportar' => 'Exportar',
+        'verificar'=> 'Verificar',
+    ];
+
+    /** Acciones que solo existen en algunos módulos (en el resto no se ofrecen ni se guardan). */
+    public const MODULE_ONLY_ACTIONS = [
+        'verificar' => ['acciones'], // verificación de eficacia de una acción CAPA
     ];
 
     /** todo = toda la empresa; sectores = solo sus sectores asignados (Etapa 4); propios = lo que creó. */
@@ -47,6 +53,13 @@ final class Permissions
 
     public const ADMIN_ROLE = 'admin_empresa';
     public const AUDITOR_ROLE = 'auditor';
+
+    /** @return list<string> acciones que tienen sentido en el módulo */
+    public static function actionsFor(string $module): array
+    {
+        return array_values(array_filter(array_keys(self::ACTIONS),
+            fn ($a) => !isset(self::MODULE_ONLY_ACTIONS[$a]) || in_array($module, self::MODULE_ONLY_ACTIONS[$a], true)));
+    }
 
     public static function can(array $permissions, string $module, string $action): bool
     {
@@ -66,7 +79,7 @@ final class Permissions
     {
         $clean = [];
         foreach (self::MODULES as $module => $_) {
-            $actions = array_values(array_intersect(array_keys(self::ACTIONS), (array) ($input[$module]['acciones'] ?? [])));
+            $actions = array_values(array_intersect(self::actionsFor($module), (array) ($input[$module]['acciones'] ?? [])));
             if (!$actions) {
                 continue;
             }
@@ -92,7 +105,7 @@ final class Permissions
         $grant = function (array $modules, array $actions, string $scope): array {
             $perms = [];
             foreach ($modules as $m) {
-                $perms[$m] = ['acciones' => $actions, 'alcance' => $scope];
+                $perms[$m] = ['acciones' => array_values(array_intersect($actions, self::actionsFor($m))), 'alcance' => $scope];
             }
             return $perms;
         };
@@ -122,7 +135,8 @@ final class Permissions
                 'name'        => 'Reportante',
                 'description' => 'Operario o guardia: crea reportes y ve los propios.',
                 'permissions' => $grant(['observaciones', 'incidentes'], ['ver', 'crear'], 'propios')
-                    + $grant(['rondas'], ['ver', 'crear', 'cerrar'], 'propios'),
+                    + $grant(['rondas'], ['ver', 'crear', 'cerrar'], 'propios')
+                    + $grant(['acciones'], ['ver'], 'propios'), // como responsable igual toma y cierra las suyas
             ],
             self::AUDITOR_ROLE => [
                 'name'        => 'Auditor externo',

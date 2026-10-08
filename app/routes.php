@@ -19,6 +19,7 @@ use App\Controllers\Web\DiagController;
 use App\Controllers\Web\HomeController;
 use App\Controllers\Web\InstallController;
 use App\Controllers\Web\MobileController;
+use App\Controllers\Web\Panel\ActionsController;
 use App\Controllers\Web\Panel\ImportController;
 use App\Controllers\Web\Panel\MasterDataController;
 use App\Controllers\Web\Panel\NotificationRulesController;
@@ -123,6 +124,18 @@ return static function (Router $r): void {
         $r->post('/observaciones/{uuid}/comentario', [ObservationsController::class, 'comment'], [$can('observaciones', 'crear')]);
         $r->post('/observaciones/{uuid}/correccion', [ObservationsController::class, 'correct'], [$can('observaciones', 'editar')]);
         $r->post('/observaciones/{uuid}/accion/{action}', [ObservationsController::class, 'transition'], [$can('observaciones', 'ver')]);
+
+        // Acciones CAPA (Etapa 10). Sin permiso del módulo, cada uno igual ve y cierra las suyas:
+        // el alcance y lo que se puede hacer los decide ActionService.
+        $r->get('/acciones', [ActionsController::class, 'index']);
+        $r->get('/acciones/nueva', [ActionsController::class, 'create'], [$can('acciones', 'crear')]);
+        $r->post('/acciones', [ActionsController::class, 'store'], [$can('acciones', 'crear')]);
+        $r->get('/acciones/{uuid}', [ActionsController::class, 'show']);
+        $r->post('/acciones/{uuid}/accion/{key}', [ActionsController::class, 'transition']);
+        $r->post('/acciones/{uuid}/editar', [ActionsController::class, 'update']);
+        $r->post('/acciones/{uuid}/comentario', [ActionsController::class, 'comment']);
+        $r->post('/acciones/{uuid}/evidencia', [ActionsController::class, 'evidence']);
+        $r->get('/acciones/{uuid}/archivos/{attachment}', [ActionsController::class, 'file']);
 
         $r->get('/rondas', [RoundsController::class, 'index'], [$can('rondas', 'ver')]);
         $r->get('/rondas/rutas/nueva', [RoundsController::class, 'routeForm'], [$can('rondas', 'crear')]);

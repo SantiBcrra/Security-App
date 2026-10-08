@@ -4,9 +4,18 @@ $tenant = App\Core\Tenant::current();
 $logoUrl = $tenant ? App\Controllers\Web\App\HomeController::logoUrl($tenant) : null;
 $support = App\Services\Impersonation::active();
 $me = App\Services\UserAuth::user();
+// Sin permiso en "acciones", el menú aparece igual si es responsable de alguna abierta.
+$hasOwnActions = function () use ($me): bool {
+    try {
+        return $me !== null && App\Models\Actions::count(['status' => App\Models\Actions::OPEN], ['responsible' => (int) $me['id']]) > 0;
+    } catch (\PDOException) {
+        return false; // base sin la migración de la Etapa 10 todavía
+    }
+};
 $menu = array_filter([
     ['/panel', 'Inicio', true],
     ['/panel/observaciones', 'Observaciones', App\Services\UserAuth::can('observaciones', 'ver')],
+    ['/panel/acciones', 'Acciones', App\Services\UserAuth::can('acciones', 'ver') || $hasOwnActions()],
     ['/panel/rondas', 'Rondas', App\Services\UserAuth::can('rondas', 'ver')],
     ['/panel/datos/empleados', 'Datos maestros', App\Services\UserAuth::can('datos_maestros', 'ver')],
     ['/panel/usuarios', 'Usuarios', App\Services\UserAuth::can('usuarios', 'ver')],

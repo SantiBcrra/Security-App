@@ -39,10 +39,10 @@ $logo = App\Controllers\Web\App\HomeController::logoUrl($tenant);
         <tr><td>Equipo</td><td><?= $obs['equipment_code'] ? e($obs['equipment_code'] . ' · ' . $obs['equipment_name']) : '—' ?></td></tr>
         <tr><td>Fecha del hecho</td><td><?= e(fecha($obs['created_at_device'], 'd/m/Y H:i')) ?></td></tr>
         <tr><td>Reportado por</td><td><?= $obs['is_anonymous'] ? 'Anónimo' : e($obs['reporter_name'] ?? '—') ?></td></tr>
-        <?php if ($obs['assigned_name']): ?>
-            <tr><td>Responsable de la acción</td><td><?= e($obs['assigned_name']) ?><?= $obs['action_due_on'] ? ' · compromiso ' . e(date('d/m/Y', strtotime($obs['action_due_on']))) : '' ?></td></tr>
-            <tr><td>Acción</td><td><?= e($obs['action_text']) ?></td></tr>
-        <?php endif; ?>
+        <?php foreach ($obsActions as $act): ?>
+            <tr><td><?= e(App\Models\Actions::format((int) $act['number'])) ?></td><td><?= e($act['title']) ?><br>
+                Responsable: <?= e($act['responsible_name']) ?> · límite <?= e(date('d/m/Y', strtotime($act['due_on']))) ?> · <?= e(App\Services\ActionWorkflow::label($act['status'])) ?></td></tr>
+        <?php endforeach; ?>
         <?php if ($people): ?><tr><td>Involucrados</td><td><?= e(implode(', ', array_column($people, 'name'))) ?></td></tr><?php endif; ?>
     </table>
     <h2>Descripción (reporte original)</h2>
