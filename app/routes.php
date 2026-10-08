@@ -37,6 +37,7 @@ use App\Controllers\Web\Panel\SettingsController;
 use App\Controllers\Web\Panel\ProfileController;
 use App\Controllers\Web\Panel\QrController;
 use App\Controllers\Web\Panel\RolesController;
+use App\Controllers\Web\Panel\PpeController;
 use App\Controllers\Web\Panel\RoundsController;
 use App\Controllers\Web\Panel\UsersController;
 use App\Controllers\Web\Panel\WorkPermitsController;
@@ -161,6 +162,24 @@ return static function (Router $r): void {
         $r->post('/permisos/{uuid}/{step}', [WorkPermitsController::class, 'step'], [$can('permisos_trabajo', 'ver')]);
         // Adonde lleva el QR del permiso colgado: cualquier usuario de la empresa ve si está vigente
         $r->get('/permisos/{uuid}/verificar', [WorkPermitsController::class, 'verify']);
+
+        // EPP (Etapa 14). Catálogo y matriz: PpeService::canManage() (editar + alcance toda la empresa).
+        $r->get('/epp', [PpeController::class, 'index'], [$can('epp', 'ver')]);
+        $r->get('/epp/catalogo', [PpeController::class, 'catalog'], [$can('epp', 'ver')]);
+        $r->post('/epp/catalogo', [PpeController::class, 'saveItem'], [$can('epp', 'editar')]);
+        $r->post('/epp/catalogo/plantilla', [PpeController::class, 'applyTemplate'], [$can('epp', 'editar')]);
+        $r->post('/epp/catalogo/{uuid}/estado', [PpeController::class, 'toggleItem'], [$can('epp', 'editar')]);
+        $r->get('/epp/matriz', [PpeController::class, 'matrix'], [$can('epp', 'ver')]);
+        $r->post('/epp/matriz', [PpeController::class, 'saveCell'], [$can('epp', 'editar')]);
+        $r->post('/epp/matriz/copiar', [PpeController::class, 'copyMatrix'], [$can('epp', 'editar')]);
+        $r->get('/epp/empleado/{uuid}', [PpeController::class, 'employee'], [$can('epp', 'ver')]);
+        $r->post('/epp/empleado/{uuid}/talles', [PpeController::class, 'sizes'], [$can('epp', 'crear')]);
+        $r->post('/epp/empleado/{uuid}/extras', [PpeController::class, 'extra'], [$can('epp', 'editar')]);
+        $r->get('/epp/empleado/{uuid}/entregar', [PpeController::class, 'deliverForm'], [$can('epp', 'crear')]);
+        $r->post('/epp/empleado/{uuid}/entregar', [PpeController::class, 'deliver'], [$can('epp', 'crear')]);
+        $r->get('/epp/empleado/{uuid}/constancia', [PpeController::class, 'certificate'], [$can('epp', 'ver')]);
+        $r->get('/epp/entregas/{uuid}/firma', [PpeController::class, 'signature'], [$can('epp', 'ver')]);
+        $r->post('/epp/entregas/{uuid}/anular', [PpeController::class, 'void'], [$can('epp', 'cerrar')]);
 
         // Incidentes y accidentes (Etapa 12)
         $r->get('/incidentes', [IncidentsController::class, 'index'], [$can('incidentes', 'ver')]);

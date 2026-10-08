@@ -17,6 +17,7 @@ $menu = array_filter([
     ['/panel/observaciones', 'Observaciones', App\Services\UserAuth::can('observaciones', 'ver')],
     ['/panel/permisos', 'Permisos', App\Services\UserAuth::can('permisos_trabajo', 'ver')],
     ['/panel/incidentes', 'Incidentes', App\Services\UserAuth::can('incidentes', 'ver')],
+    ['/panel/epp', 'EPP', App\Services\UserAuth::can('epp', 'ver')],
     ['/panel/inspecciones', 'Inspecciones', App\Services\UserAuth::can('inspecciones', 'ver')],
     ['/panel/acciones', 'Acciones', App\Services\UserAuth::can('acciones', 'ver') || $hasOwnActions()],
     ['/panel/rondas', 'Rondas', App\Services\UserAuth::can('rondas', 'ver')],

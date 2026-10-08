@@ -40,6 +40,61 @@ final class IndustryTemplates
         return $out;
     }
 
+    /** Solo el EPP de un rubro (desde EPP → Catálogo). @return array{created:int, existing:int} */
+    public static function applyPpe(string $key): array
+    {
+        if (!isset(self::available()[$key])) {
+            throw new \DomainException('Plantilla inexistente.');
+        }
+        return self::importPpe($key, require BASE_PATH . self::DIR . '/' . $key . '.php');
+    }
+
+    /**
+     * EPP precargado: elementos por preset_key y matriz para los puestos que existan. Solo agrega: no toca lo que la
+     * empresa ya ajustó ni repite celdas existentes (aunque estén dadas de baja).
+     */
+    private static function importPpe(string $key, array $template): array
+    {
+        $out = ['created' => 0, 'existing' => 0];
+        $ids = [];
+        foreach ($template['epp']['items'] ?? [] as $slug => $def) {
+            $preset = $key . '/' . $slug;
+            $row = \App\Models\PpeItems::findByPreset($preset);
+            if ($row !== null) {
+                $ids[$slug] = (int) $row['id'];
+                $out['existing']++;
+                continue;
+            }
+            $ids[$slug] = \App\Models\PpeItems::create(['name' => $def['name'], 'category' => $def['category'], 'life_days' => $def['life_days'] ?? null,
+                'size_type' => $def['size_type'] ?? null, 'certified' => isset($def['certification']) ? 1 : 0, 'certification' => $def['certification'] ?? null,
+                'preset_key' => $preset]);
+            $out['created']++;
+        }
+        $db = \App\Core\DB::tenant();
+        $exists = $db->prepare('SELECT COUNT(*) FROM ppe_matrix WHERE position_id = ? AND item_id = ?');
+        foreach ($template['epp']['matrix'] ?? [] as $positionName => $cells) {
+            $position = Positions::findBy('name', $positionName);
+            if ($position === null) {
+                continue;
+            }
+            foreach ($cells as $cell) {
+                $mandatory = !str_starts_with($cell, '?');
+                [$slug, $qty] = array_pad(explode(':', ltrim($cell, '?')), 2, '1');
+                if (!isset($ids[$slug])) {
+                    continue;
+                }
+                $exists->execute([(int) $position['id'], $ids[$slug]]);
+                if ((int) $exists->fetchColumn() > 0) {
+                    $out['existing']++;
+                    continue;
+                }
+                \App\Models\Ppe::setMatrix((int) $position['id'], $ids[$slug], ['quantity' => (int) $qty, 'life_days' => null, 'mandatory' => $mandatory, 'notes' => null]);
+                $out['created']++;
+            }
+        }
+        return $out;
+    }
+
     /** @return array{created:int, existing:int} */
     public static function apply(string $key): array
     {
@@ -75,6 +130,9 @@ final class IndustryTemplates
         foreach ($template['inspections'] ?? [] as $slug => $def) {
             InspectionTemplateService::importPreset($key . '/' . $slug, $def) ? $created++ : $existing++;
         }
+        $ppe = self::importPpe($key, $template);
+        $created += $ppe['created'];
+        $existing += $ppe['existing'];
         Audit::tenant('template.apply', 'template', null, null, ['plantilla' => $template['name'], 'creados' => $created]);
         return ['created' => $created, 'existing' => $existing];
     }

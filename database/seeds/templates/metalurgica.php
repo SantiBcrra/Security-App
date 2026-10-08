@@ -56,6 +56,45 @@ return [
         'Pintor', 'Operador de autoelevador', 'Operador de puente grúa', 'Pañolero', 'Operario de mantenimiento',
         'Electricista', 'Supervisor de producción', 'Encargado de depósito', 'Responsable de calidad',
     ],
+    // EPP (Etapa 14). Matriz: "clave" = obligatorio, "?clave" = según tarea, "clave:2" = cantidad por entrega.
+    // La vida útil es una referencia: cada empresa la ajusta según el fabricante y el uso real.
+    'epp' => [
+        'items' => [
+            'casco'          => ['name' => 'Casco de seguridad', 'category' => 'cabeza', 'life_days' => 730, 'certification' => 'IRAM 3620'],
+            'anteojos'       => ['name' => 'Anteojos de seguridad', 'category' => 'ojos_cara', 'life_days' => 180, 'certification' => 'IRAM 3630'],
+            'careta'         => ['name' => 'Careta de soldar fotosensible', 'category' => 'ojos_cara', 'life_days' => 730, 'certification' => 'IRAM 3630'],
+            'facial'         => ['name' => 'Protector facial', 'category' => 'ojos_cara', 'life_days' => 365, 'certification' => 'IRAM 3630'],
+            'endoaural'      => ['name' => 'Protector auditivo endoaural', 'category' => 'auditiva', 'life_days' => 30, 'certification' => 'IRAM 4060'],
+            'copa'           => ['name' => 'Protector auditivo de copa', 'category' => 'auditiva', 'life_days' => 365, 'certification' => 'IRAM 4060'],
+            'semimascara'    => ['name' => 'Semimáscara con filtros', 'category' => 'respiratoria', 'life_days' => 90, 'certification' => 'IRAM 3648'],
+            'guantes'        => ['name' => 'Guantes de vaqueta', 'category' => 'manos', 'life_days' => 30, 'size_type' => 'guantes', 'certification' => 'IRAM 3607'],
+            'guantes_soldar' => ['name' => 'Guantes de soldador (puño largo)', 'category' => 'manos', 'life_days' => 60, 'size_type' => 'guantes', 'certification' => 'IRAM 3607'],
+            'dielectricos'   => ['name' => 'Guantes dieléctricos', 'category' => 'manos', 'life_days' => 365, 'size_type' => 'guantes', 'certification' => 'IRAM 3604'],
+            'botin'          => ['name' => 'Botín de seguridad con puntera', 'category' => 'pies', 'life_days' => 365, 'size_type' => 'calzado', 'certification' => 'IRAM 3610'],
+            'ropa'           => ['name' => 'Ropa de trabajo (camisa y pantalón)', 'category' => 'ropa', 'life_days' => 365, 'size_type' => 'ropa'],
+            'delantal'       => ['name' => 'Delantal de cuero para soldador', 'category' => 'ropa', 'life_days' => 365],
+            'chaleco'        => ['name' => 'Chaleco reflectivo', 'category' => 'ropa', 'life_days' => 365, 'size_type' => 'ropa'],
+            'arnes'          => ['name' => 'Arnés de cuerpo completo', 'category' => 'caidas', 'life_days' => 1825, 'certification' => 'IRAM 3622'],
+            'cabo'           => ['name' => 'Cabo de vida doble con absorbedor', 'category' => 'caidas', 'life_days' => 1825, 'certification' => 'IRAM 3605'],
+        ],
+        'matrix' => [
+            'Soldador'                  => ['casco', 'careta', 'endoaural', 'semimascara', 'guantes_soldar:2', 'botin', 'ropa:2', 'delantal'],
+            'Operario de plegadora'     => ['casco', 'anteojos', 'endoaural', 'guantes:2', 'botin', 'ropa:2'],
+            'Operario de guillotina'    => ['casco', 'anteojos', 'endoaural', 'guantes:2', 'botin', 'ropa:2'],
+            'Operario de prensa'        => ['casco', 'anteojos', 'endoaural', 'guantes:2', 'botin', 'ropa:2'],
+            'Tornero'                   => ['anteojos', 'endoaural', 'botin', 'ropa:2', '?facial'], // sin guantes: máquina rotante
+            'Armador'                   => ['casco', 'anteojos', 'endoaural', 'guantes:2', 'botin', 'ropa:2', '?facial'],
+            'Pintor'                    => ['anteojos', 'semimascara', 'guantes', 'botin', 'ropa:2'],
+            'Operador de autoelevador'  => ['casco', 'botin', 'ropa:2', 'chaleco'],
+            'Operador de puente grúa'   => ['casco', 'anteojos', 'guantes:2', 'botin', 'ropa:2', 'chaleco'],
+            'Pañolero'                  => ['botin', 'ropa:2', 'guantes', 'chaleco'],
+            'Operario de mantenimiento' => ['casco', 'anteojos', 'endoaural', 'guantes:2', 'botin', 'ropa:2', '?facial', '?arnes', '?cabo'],
+            'Electricista'              => ['casco', 'anteojos', 'dielectricos', 'botin', 'ropa:2', '?arnes', '?cabo'],
+            'Supervisor de producción'  => ['casco', 'anteojos', 'endoaural', 'botin'],
+            'Encargado de depósito'     => ['casco', 'botin', 'ropa:2', 'chaleco'],
+            'Responsable de calidad'    => ['casco', 'anteojos', 'botin'],
+        ],
+    ],
     // Checklists (Etapa 11). "*" al principio = ítem crítico (pide foto si no cumple).
     // Por defecto los ítems son Sí / No / No aplica y cumplen con "Sí"; ok_when => 'no' invierte la pregunta.
     'inspections' => [

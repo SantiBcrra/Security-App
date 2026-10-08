@@ -1,6 +1,6 @@
 # Etapa 14 — Elementos de protección personal (EPP) · Diseño
 
-Estado: **aprobado**. Decisiones del usuario: sin stock (solo entregas); solo personal propio; firma en pantalla o
+Estado: **aprobado** · entrega 1 hecha. Decisiones del usuario: sin stock (solo entregas); solo personal propio; firma en pantalla o
 planilla en papel escaneada; matriz por puesto + extras por empleado.
 
 ## 1. Qué resuelve

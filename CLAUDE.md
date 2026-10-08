@@ -290,6 +290,26 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   de gases local con alerta "salir del espacio", `pending` hasta que el servidor confirma; si rechaza, se vuelve a pedir el
   permiso con `GET /permits/{uuid}`). El escáner reconoce el QR del permiso. Extender y recibir el área: solo web.
 
+## EPP (Etapa 14) — diseño en `docs/design/etapa-14-epp.md`
+- Decisiones del usuario: **sin stock** (solo entregas), **solo personal propio** (`employees.contractor_id IS NULL`;
+  los de contratistas no aparecen), firma en pantalla **o planilla en papel escaneada** (foto/PDF + motivo), matriz por
+  puesto **+ extras por empleado**.
+- `ppe_items` (catálogo: categoría, marca, modelo, certificación, `life_days`, `size_type` ropa|calzado|guantes,
+  `preset_key`), `ppe_matrix` (puesto × elemento: cantidad, vida útil propia, obligatorio o "según tarea"),
+  `ppe_employee_extras` (pisa al puesto para ese elemento), talles en `employees.size_clothing|size_shoes|size_gloves`
+  (se actualizan con cada entrega).
+- Entregas `ppe_deliveries` (EPP-000001 con `Sequences::next('ppe_deliveries')`, motivo, firma `signature_mode`
+  pantalla|papel con path + SHA-256, `original_data`/hash inmutables; se **anulan** con motivo (permiso `epp.cerrar`),
+  nunca se editan) + `ppe_delivery_items` (copia de nombre/marca/modelo/certificación al entregar y `next_due_on` =
+  fecha local + vida útil efectiva). Idempotente por `uuid` (app de campo). Hasta 60 días atrás.
+- Estado (`PpeService::status` / `summaries`): por elemento obligatorio vencido | nunca | por_vencer (`epp.aviso_dias`,
+  15) | al_dia; "según tarea" = opcional (no falta). Última entrega no anulada con `Ppe::lastDeliveries()` (MAX, sin window).
+- Catálogo y matriz: `PpeService::canManage()` = `epp.editar` con alcance "todo" (el supervisor no). Alcance de
+  empleados por sector del empleado. Precarga del rubro en `templates/{rubro}.php` → `epp` (`items` + `matrix` con
+  "?clave" = según tarea, "clave:2" = cantidad), `IndustryTemplates::applyPpe()`.
+- Pantallas `/panel/epp` (empleados y estado), `/panel/epp/empleado/{uuid}` (ficha, talles, extras, entregas, anular),
+  `/entregar`, `/constancia` (Res. SRT 299/11, imprimible con firma por fila), `/panel/epp/catalogo`, `/panel/epp/matriz`.
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.
