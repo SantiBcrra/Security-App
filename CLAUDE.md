@@ -149,6 +149,8 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Cada escaneo guarda hora del dispositivo, hora de recepción, GPS, precisión, distancia calculada y si quedó dentro del radio. No se duplica un punto dentro de la misma ronda.
 - La PWA guarda rondas y escaneos en IndexedDB y los envía con `round.start`, `round.scan` y `round.finish`; las operaciones son idempotentes por `op_id`.
 - El mapa operativo usa Leaflet/OpenStreetMap ya incluido; no se agrega dependencia de Google Maps.
+- `round.start` es idempotente también por uuid de la ronda; el escaneo valida punto activo, uuid y hora del
+  celular (máx. 30 días atrás). La PWA recupera la ronda en curso (`mine` + `en_curso`) al reabrir.
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
@@ -173,6 +175,8 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - IDs públicos = UUID generados en PHP (o en el celular). PK interna INT AUTO_INCREMENT.
 - Vistas: escapar SIEMPRE con `e()`. URLs con `url()`, assets con `asset()`.
 - API: respuestas `{ ok, data, error }` con `Response::json()` / `Response::jsonError()`.
+- Errores de validación con mensaje para el usuario: `throw new Core\UserError('…')` (la sync los
+  devuelve tal cual; cualquier otra excepción se loguea y se responde con un error genérico).
 - Evidencia original (fotos, firmas, reporte inicial) nunca se edita: enmiendas como eventos.
 - Textos de la interfaz en español (preparados para i18n).
 - Assets locales en `public/assets` (Bootstrap 5.3.3, Alpine 3.14.1). Nada de CDN.

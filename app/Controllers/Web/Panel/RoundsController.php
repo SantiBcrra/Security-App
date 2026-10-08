@@ -6,11 +6,13 @@ namespace App\Controllers\Web\Panel;
 use App\Core\Flash;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\Uuid;
 use App\Core\View;
 use App\Models\Patrols;
 use App\Models\Sectors;
 use App\Models\Sites;
 use App\Models\Users;
+use App\Services\Audit;
 
 final class RoundsController
 {
@@ -35,9 +37,19 @@ final class RoundsController
     {
         $p = $request->post;
         $name = trim((string) ($p['name'] ?? ''));
-        $points = array_values(array_filter(array_map('intval', (array) ($p['points'] ?? []))));
+        $points = Patrols::pointIdsByUuid((array) ($p['points'] ?? []));
         if ($name === '' || !$points) { Flash::add('danger', 'La ruta necesita un nombre y al menos un punto.'); return Response::redirect('/panel/rondas/rutas/nueva'); }
-        Patrols::createRoute(['name' => $name, 'description' => $p['description'] ?? '', 'frequency' => $p['frequency'] ?? 'manual', 'expected_minutes' => (int) ($p['expected_minutes'] ?? 0), 'point_ids' => $points, 'user_ids' => array_values(array_filter(array_map('intval', (array) ($p['users'] ?? []))))]);
+        $users = [];
+        foreach ((array) ($p['users'] ?? []) as $uuid) {
+            $u = Users::findByUuid((string) $uuid);
+            if ($u && (int) $u['is_active'] === 1) $users[] = (int) $u['id'];
+        }
+        $frequency = in_array($p['frequency'] ?? '', ['manual', 'diaria', 'semanal', 'mensual'], true) ? $p['frequency'] : 'manual';
+        $data = ['uuid' => Uuid::v4(), 'name' => $name, 'description' => trim((string) ($p['description'] ?? '')), 'frequency' => $frequency,
+            'expected_minutes' => max(0, (int) ($p['expected_minutes'] ?? 0)), 'point_ids' => $points, 'user_ids' => $users];
+        Patrols::createRoute($data);
+        Audit::tenant('patrol_route.create', 'patrol_route', $data['uuid'], null, ['name' => $name, 'frequency' => $frequency,
+            'points' => count($points), 'users' => count($users)]);
         Flash::add('success', 'Ruta creada y asignada.');
         return Response::redirect('/panel/rondas');
     }
@@ -46,13 +58,21 @@ final class RoundsController
     {
         $p = $request->post;
         $name = trim((string) ($p['name'] ?? '')); $code = trim((string) ($p['code'] ?? ''));
+        $hasCoords = is_numeric($p['lat'] ?? null) && is_numeric($p['lng'] ?? null);
         $lat = (float) ($p['lat'] ?? 0); $lng = (float) ($p['lng'] ?? 0);
-        if ($name === '' || $code === '' || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+        if ($name === '' || $code === '' || !$hasCoords || ($lat == 0 && $lng == 0) || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
             Flash::add('danger', 'Nombre, código y coordenadas válidas son obligatorios.');
             return Response::redirect('/panel/rondas/puntos/nuevo');
         }
         try {
-            Patrols::createPoint(['name' => $name, 'code' => $code, 'description' => $p['description'] ?? '', 'site_id' => $this->idByUuid('sites', $p['site'] ?? ''), 'sector_id' => $this->idByUuid('sectors', $p['sector'] ?? ''), 'lat' => $lat, 'lng' => $lng, 'radius_m' => max(5, (int) ($p['radius_m'] ?? 50)), 'is_critical' => !empty($p['is_critical'])]);
+            $site = Sites::findByUuid((string) ($p['site'] ?? ''));
+            $sector = Sectors::findByUuid((string) ($p['sector'] ?? ''));
+            $data = ['uuid' => Uuid::v4(), 'name' => $name, 'code' => $code, 'description' => trim((string) ($p['description'] ?? '')),
+                'site_id' => $site ? (int) $site['id'] : null, 'sector_id' => $sector ? (int) $sector['id'] : null,
+                'lat' => $lat, 'lng' => $lng, 'radius_m' => max(5, (int) ($p['radius_m'] ?? 50)), 'is_critical' => !empty($p['is_critical'])];
+            Patrols::createPoint($data);
+            Audit::tenant('patrol_point.create', 'patrol_point', $data['uuid'], null, array_diff_key($data, ['uuid' => 1, 'site_id' => 1, 'sector_id' => 1])
+                + ['site' => $site['name'] ?? null, 'sector' => $sector['name'] ?? null]);
             Flash::add('success', 'Punto de ronda creado. Ya podés imprimir su QR.');
         } catch (\Throwable $e) { Flash::add('danger', str_contains($e->getMessage(), 'uq_patrol_points_code') ? 'Ese código ya existe.' : 'No se pudo crear el punto.'); }
         return Response::redirect('/panel/rondas');
@@ -63,12 +83,5 @@ final class RoundsController
         $point = Patrols::point($uuid);
         if (!$point) return new Response('', 404);
         return Response::html(View::render('panel/rounds/qr', ['title' => 'QR ' . $point['code'], 'point' => $point, 'qr' => absolute_url('/ronda/punto/' . $point['uuid'])], null));
-    }
-
-    private function idByUuid(string $table, string $uuid): ?int
-    {
-        if ($uuid === '' || !in_array($table, ['sites', 'sectors'], true)) return null;
-        $s = \App\Core\DB::tenant()->prepare("SELECT id FROM {$table} WHERE uuid=? LIMIT 1"); $s->execute([$uuid]);
-        $id = $s->fetchColumn(); return $id === false ? null : (int) $id;
     }
 }

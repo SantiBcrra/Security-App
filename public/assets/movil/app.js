@@ -182,7 +182,7 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
             if (section === 'ronda' && id === 'punto') {
-                this.roundPointUuid = location.hash.split('/')[2] || null;
+                this.roundPointUuid = (hash.split('/')[2] || '').toLowerCase() || null;
                 this.tab = 'rondas'; this.loadRoundPoint(); return;
             }
             this.detailUuid = null;
@@ -205,6 +205,9 @@ document.addEventListener('alpine:init', () => {
             this.equipment = (await db.all('equipment')).sort((a, b) => a.code.localeCompare(b.code));
             this.patrolPoints = await db.all('patrol_points');
             this.patrolRounds = (await db.all('patrol_rounds')).sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''));
+            // La ronda en curso sobrevive a cerrar la app: es la mía más reciente que no terminó
+            this.activeRound = this.patrolRounds.find((r) => r.mine && r.status === 'en_curso') || null;
+            if (this.roundPointUuid) this.loadRoundPoint();
             this.observations = (await db.all('observations')).sort((a, b) => (b.created_at_device || '').localeCompare(a.created_at_device || ''));
             this.meta = await db.getKv('meta');
             Object.assign(this.sync, await pendingCounts(), { lastSync: await db.getKv('lastSync') });
@@ -312,12 +315,12 @@ document.addEventListener('alpine:init', () => {
 
         async loadRoundPoint() {
             this.roundPoint = this.patrolPoints.find((p) => p.uuid === this.roundPointUuid) || null;
-            if (!this.roundPoint) this.flash('Punto no sincronizado todavía. Conectate y sincronizá.');
+            if (!this.roundPoint && this.patrolPoints.length) this.flash('Punto no sincronizado todavía. Conectate y sincronizá.');
         },
         async startRound() {
             const uuid = crypto.randomUUID();
             const gps = await this.currentPosition();
-            this.activeRound = { uuid, status: 'en_curso', started_at: new Date().toISOString() };
+            this.activeRound = { uuid, status: 'en_curso', started_at: new Date().toISOString(), mine: true, local: true };
             await db.put('patrol_rounds', this.activeRound);
             await enqueue('round.start', { uuid, lat: gps?.lat, lng: gps?.lng });
             this.flash('Ronda iniciada');
@@ -325,10 +328,12 @@ document.addEventListener('alpine:init', () => {
         async scanRoundPoint() {
             if (!this.roundPoint) return;
             if (!this.activeRound) await this.startRound();
+            const done = (await db.all('patrol_scans')).some((x) => x.round_uuid === this.activeRound.uuid && x.point_uuid === this.roundPoint.uuid);
+            if (done) { this.flash('Este punto ya está registrado en la ronda'); return; }
             const gps = await this.currentPosition();
             const scan = { uuid: crypto.randomUUID(), round_uuid: this.activeRound.uuid, point_uuid: this.roundPoint.uuid,
                 lat: gps?.lat, lng: gps?.lng, accuracy_m: gps?.acc, scanned_at_device: new Date().toISOString() };
-            await db.put('patrol_scans', { ...scan, point_id: this.roundPoint.uuid, local: true });
+            await db.put('patrol_scans', { ...scan, local: true });
             await enqueue('round.scan', scan);
             this.flash(gps ? 'Punto registrado con GPS' : 'Punto registrado sin GPS');
         },

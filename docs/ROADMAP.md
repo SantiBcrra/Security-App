@@ -1,4 +1,4 @@
-# Roadmap — Etapas 9 a 18
+# Roadmap — Etapas 9 a 19
 
 Texto del plan original, **ajustado a las decisiones ya tomadas** (ver `AGENTS.md`):
 - No hay librerías: donde el plan decía dompdf o PhpSpreadsheet, se usa una página imprimible o
@@ -8,7 +8,7 @@ Texto del plan original, **ajustado a las decisiones ya tomadas** (ver `AGENTS.m
 
 Las notas marcadas **"Nota"** son las aclaraciones de implementación.
 
-Orden actual: rondas de guardias (Etapa 9 adelantada) → CAPA (Etapa 10) → 11 → 12 → 13 → 14 → 15. Las Etapas 16 a 18 dependen de que exista
+Orden actual: rondas de guardias (Etapa 9 adelantada) → CAPA (Etapa 10) → 11 → 12 → 13 → 14 → 15 → 16. Las Etapas 17 a 19 dependen de que exista
 producción, y el deploy está pendiente.
 
 ## ETAPA 9 — Rondas de guardias (adelantada)
@@ -52,7 +52,7 @@ producción, y el deploy está pendiente.
 - Control de accesos de personas, vehículos y contratistas, si Indumor lo requiere.
 - Alertas por punto crítico omitido, ronda fuera de horario o incumplimiento reiterado.
 
-## ETAPA 10 — Inspecciones y checklists
+## ETAPA 11 — Inspecciones y checklists
 - Constructor de plantillas por empresa, con ítems de tipo:
   - sí/no/N.A.;
   - numéricos (con rango aceptable);
@@ -65,7 +65,7 @@ producción, y el deploy está pendiente.
 - Escanear el QR de un equipo abre su checklist; por ejemplo, el pre-uso del autoelevador.
   - **Nota:** el QR ya existe en `/q/{uuid}`, y la PWA tiene escáner.
   - El checklist tiene que poder completarse **offline** en `/movil/`.
-- Un ítem que no cumple genera automáticamente una acción correctiva de la Etapa 9, con
+- Un ítem que no cumple genera automáticamente una acción correctiva de la Etapa 10 (CAPA), con
   `origen_tipo='inspeccion'`. Un ítem crítico que no cumple puede disparar un aviso crítico.
 - Cumplimiento: inspecciones hechas vs. programadas.
 - Plantillas precargadas para metalúrgica: autoelevador, puente grúa, amoladoras, soldadura,
@@ -73,19 +73,19 @@ producción, y el deploy está pendiente.
   - **Nota:** van en `database/seeds/templates/`, se aplican con `IndustryTemplates` y son
     idempotentes.
 
-## ETAPA 11 — Incidentes, accidentes e investigación
+## ETAPA 12 — Incidentes, accidentes e investigación
 - Tipos: accidentes con o sin baja, incidentes, casi-accidentes y enfermedad profesional.
 - Datos del accidentado (empleado propio o de contratista), lesión, parte del cuerpo
   (catálogos), días perdidos y seguimiento: alta médica y reingreso.
-- Investigación con 5 porqués y árbol de causas, con acciones derivadas de la Etapa 9
+- Investigación con 5 porqués y árbol de causas, con acciones derivadas de la Etapa 10 (CAPA)
   (`origen_tipo='incidente'`).
 - Datos preparados para la denuncia ante la ART: página imprimible con los campos del formulario.
 - Numeración propia con `Sequences`, por ejemplo INC-000001. La evidencia inicial es inmutable,
   igual que en Observaciones.
-- **Nota:** los días perdidos y las horas-hombre trabajadas alimentan los índices de la Etapa 15.
+- **Nota:** los días perdidos y las horas-hombre trabajadas alimentan los índices de la Etapa 16.
   Prever el dato de horas-hombre por mes y por planta, cargado a mano en la configuración.
 
-## ETAPA 12 — Permisos de trabajo
+## ETAPA 13 — Permisos de trabajo
 - Tipos: trabajo en altura, en caliente (soldadura y corte), espacio confinado, LOTO y eléctrico.
 - Cada permiso tiene:
   - un checklist previo obligatorio, por tipo;
@@ -97,21 +97,21 @@ producción, y el deploy está pendiente.
 - **Nota:** las firmas se capturan en el navegador o en la PWA, en un `<canvas>` sin librerías, y
   se guardan con `TenantFiles`.
 
-## ETAPA 13 — EPP
+## ETAPA 14 — EPP
 - Catálogo de EPP y matriz por puesto: qué EPP corresponde a cada puesto y cada cuánto se
   repone.
 - Entrega con firma del empleado en el celular, usando el mismo componente de firma de la
-  Etapa 12.
+  Etapa 13.
 - Vencimientos y reposiciones, con avisos por cron.
 - Constancia en el formato de la Res. SRT 299/11.
   - **Nota:** es una página imprimible con CSS de impresión, sin dompdf.
 
-## ETAPA 14 — Capacitaciones
+## ETAPA 15 — Capacitaciones
 - Cursos, matriz por puesto, asistencia con firma y vencimientos (vigencia por curso).
 - Alertas de capacitaciones vencidas o por vencer, por empleado.
 - Constancia o planilla de asistencia imprimible.
 
-## ETAPA 15 — Indicadores, reportes y exportaciones
+## ETAPA 16 — Indicadores, reportes y exportaciones
 - Dashboard por empresa con gráficos de Chart.js.
   - **Nota:** copiar el archivo minificado a `public/assets/vendor/`, sin CDN.
 - Indicadores:
@@ -128,7 +128,7 @@ producción, y el deploy está pendiente.
 - Informe mensual por email, con `MailTransport` y una tarea del cron.
 - Módulo de permisos: `reportes`, que ya existe.
 
-## ETAPA 16 — Capa comercial SaaS
+## ETAPA 17 — Capa comercial SaaS
 - Planes con límites (usuarios, plantas, almacenamiento y módulos habilitados), guardados en la
   base maestra y validados en un middleware.
 - Alta self-service con período de prueba.
@@ -141,7 +141,7 @@ producción, y el deploy está pendiente.
   PHP (firma verificada e idempotente).
 - Marca blanca opcional: logo y colores por empresa.
 
-## ETAPA 17 — Integraciones
+## ETAPA 18 — Integraciones
 - API pública con tokens por empresa (hasheados, con permisos acotados).
 - Webhooks salientes por la cola de la Etapa 7 (`notification_queue`, o una cola análoga), con
   firma HMAC y reintentos.
@@ -150,7 +150,7 @@ producción, y el deploy está pendiente.
 - Conector MCP para consultar el sistema desde Claude.
   - **Nota:** tiene que ser un endpoint HTTP en PHP, sin un proceso Node en el servidor.
 
-## ETAPA 18 — Hardening y operación
+## ETAPA 19 — Hardening y operación
 - Revisión de seguridad (OWASP):
   - inyección, XSS y CSRF;
   - **IDOR entre empresas**, que aquí significa usar siempre la conexión correcta y no aceptar

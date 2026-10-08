@@ -164,7 +164,7 @@ final class Pull
             ],
             'patrol_points' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'code' => $r['code'], 'description' => $r['description'], 'lat' => (float) $r['lat'], 'lng' => (float) $r['lng'], 'radius_m' => (int) $r['radius_m'], 'critical' => (bool) $r['is_critical']],
             'patrol_routes' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'description' => $r['description'], 'frequency' => $r['frequency'], 'expected_minutes' => $r['expected_minutes']],
-            'patrol_rounds' => ['uuid' => $r['uuid'], 'route_uuid' => $r['route_uuid'], 'user_id' => $r['user_id'], 'status' => $r['status'], 'started_at' => str_replace(' ', 'T', $r['started_at']) . 'Z', 'finished_at' => $r['finished_at'] ? str_replace(' ', 'T', $r['finished_at']) . 'Z' : null],
+            'patrol_rounds' => ['uuid' => $r['uuid'], 'route_uuid' => $r['route_uuid'], 'mine' => (int) $r['user_id'] === (int) (UserAuth::user()['id'] ?? 0), 'status' => $r['status'], 'started_at' => str_replace(' ', 'T', $r['started_at']) . 'Z', 'finished_at' => $r['finished_at'] ? str_replace(' ', 'T', $r['finished_at']) . 'Z' : null],
             'patrol_scans' => ['uuid' => $r['uuid'], 'round_uuid' => $r['round_uuid'], 'point_uuid' => $r['point_uuid'], 'scanned_at_device' => str_replace(' ', 'T', $r['scanned_at_device']) . 'Z', 'lat' => $r['lat'] !== null ? (float) $r['lat'] : null, 'lng' => $r['lng'] !== null ? (float) $r['lng'] : null, 'accuracy_m' => $r['accuracy_m'] !== null ? (float) $r['accuracy_m'] : null, 'distance_m' => $r['distance_m'] !== null ? (float) $r['distance_m'] : null, 'within_radius' => (bool) $r['within_radius'], 'note' => $r['note']],
         };
     }

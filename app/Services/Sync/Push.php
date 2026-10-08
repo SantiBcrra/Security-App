@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services\Sync;
 
 use App\Core\DB;
+use App\Core\UserError;
 use App\Core\Uuid;
 use App\Models\Observations;
 use App\Models\Patrols;
@@ -64,6 +65,8 @@ final class Push
                 'round.finish'           => self::roundFinish($data),
                 default                  => self::error('Tipo de operación desconocido: ' . $type),
             };
+        } catch (UserError $e) {
+            return self::error($e->getMessage()); // validación: el mensaje es para el usuario
         } catch (\Throwable $e) {
             \App\Core\Logger::error('Sync push: falló una operación', ['type' => $type, 'error' => $e->getMessage()]);
             return self::error('Error del servidor al procesar la operación.');
