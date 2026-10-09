@@ -27,8 +27,17 @@ class Locator(private val context: Context) {
         val cts = CancellationTokenSource()
         val loc = runCatching {
             withTimeoutOrNull(timeoutMs) { client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token).await() }
-                ?: client.lastLocation.await()
+                // Respaldo: la última conocida, solo si es reciente (una de hace horas diría que está donde ya no está).
+                ?: client.lastLocation.await()?.takeIf { android.os.SystemClock.elapsedRealtimeNanos() - it.elapsedRealtimeNanos < MAX_AGE_NANOS }
         }.getOrNull().also { cts.cancel() }
-        return loc?.let { Fix(it.latitude, it.longitude, it.accuracy) }
+        return loc?.let { Fix(it.latitude, it.longitude, it.accuracy, isMock(it)) }
+    }
+
+    private companion object {
+        const val MAX_AGE_NANOS = 2 * 60 * 1_000_000_000L
+
+        /** Ubicación inventada por una app de "GPS falso" (ubicación simulada de las opciones de desarrollador). */
+        @Suppress("DEPRECATION")
+        fun isMock(l: android.location.Location): Boolean = if (android.os.Build.VERSION.SDK_INT >= 31) l.isMock else l.isFromMockProvider
     }
 }

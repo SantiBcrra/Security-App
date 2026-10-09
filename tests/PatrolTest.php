@@ -288,6 +288,52 @@ return [
         \App\Services\Notify\Channels::$fakeExternal = null;
     },
 
+    'rondas: estado de la ubicación (lejos, impreciso, sin GPS, GPS falso) y aviso una vez por ronda' => function () use ($setup, &$st, $op) {
+        assert_same(['ok', 'impreciso', 'lejos', 'sin_gps', 'simulada'], [Patrols::locationStatus(40.0, 5.0, 50, false),
+            Patrols::locationStatus(120.0, 80.0, 50, false), Patrols::locationStatus(120.0, 10.0, 50, false),
+            Patrols::locationStatus(null, null, 50, false), Patrols::locationStatus(5.0, 3.0, 50, true)]);
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['g1']);
+        $roundUuid = Uuid::v4();
+        assert_same('ok', Push::run([$op('round.start', ['uuid' => $roundUuid, 'route_uuid' => null,
+            'started_at_device' => gmdate('Y-m-d\TH:i:s\Z', time() - 300)])])[0]['status']);
+        // Puntos a ~150 m al norte del lugar desde donde marca el guardia (-34.6037, -58.3816)
+        $pt = fn (string $code) => Patrols::createPoint(['name' => 'Punto ' . $code, 'code' => $code, 'description' => '', 'site_id' => null,
+            'sector_id' => null, 'lat' => -34.60235, 'lng' => -58.3816, 'radius_m' => 50, 'is_critical' => 0]);
+        $scan = fn (int $point, array $gps) => Push::run([$op('round.scan', $gps + ['uuid' => Uuid::v4(), 'round_uuid' => $roundUuid,
+            'point_uuid' => ($st['uuid'])($point), 'scanned_at_device' => gmdate('Y-m-d\TH:i:s\Z', time() - 30)])])[0];
+        $here = ['lat' => -34.6037, 'lng' => -58.3816];
+        $status = fn () => DB::tenant()->query('SELECT location_status FROM patrol_scans ORDER BY id DESC LIMIT 1')->fetchColumn();
+        $count = fn (string $title) => (int) DB::tenant()->query('SELECT COUNT(*) FROM notifications WHERE user_id = ' . (int) $st['hys']['id']
+            . ' AND title = ' . DB::tenant()->quote($title))->fetchColumn();
+        $before = [];
+        $inbox = function (string $title) use ($count, &$before): int { // avisos nuevos en esta ronda (otros tests ya marcaron lejos)
+            $before[$title] ??= $count($title);
+            return $count($title) - $before[$title];
+        };
+        $inbox('⚠ Punto marcado lejos del lugar · Guardia1');
+        $inbox('⚠ GPS falso en una ronda · Guardia1');
+        $far = '⚠ Punto marcado lejos del lugar · Guardia1';
+        $first = $scan($pt('L1'), $here + ['accuracy_m' => 300]); assert_same('ok', $first['status'], json_encode($first, JSON_UNESCAPED_UNICODE));
+        assert_same('impreciso', $status(), 'a 150 m con ±300 m de error: puede haber estado ahí, no se acusa');
+        assert_same(0, $inbox($far));
+        $scan($pt('L2'), $here + ['accuracy_m' => 10]);
+        assert_same(['lejos', 1], [$status(), $inbox($far)], 'lejos: aviso a SyH');
+        $scan($pt('L3'), $here + ['accuracy_m' => 10]);
+        assert_same(['lejos', 1], [$status(), $inbox($far)], 'el aviso no se repite en la misma ronda');
+        $scan($pt('L4'), ['accuracy_m' => null]);
+        assert_same('sin_gps', $status());
+        $scan($pt('L5'), ['lat' => -34.60235, 'lng' => -58.3816, 'accuracy_m' => 3, 'mock' => 1]);
+        assert_same(['simulada', 0], [$status(), (int) DB::tenant()->query('SELECT within_radius FROM patrol_scans ORDER BY id DESC LIMIT 1')->fetchColumn()],
+            'GPS falso: aunque diga que está en el punto, no vale');
+        assert_same(1, $inbox('⚠ GPS falso en una ronda · Guardia1'));
+        assert_same([], DB::tenant()->query('SELECT title FROM notifications WHERE user_id = ' . (int) $st['g1']['id'] . " AND event = 'guard.off_site'")->fetchAll(PDO::FETCH_COLUMN),
+            'el guardia no recibe estos avisos');
+        $row = array_values(array_filter(Patrols::rounds(), fn ($r) => $r['uuid'] === $roundUuid))[0];
+        assert_same([3, 2], [(int) $row['outside_count'], (int) $row['doubtful_count']], 'lista de rondas: 3 fuera (2 lejos + 1 GPS falso), 2 dudosas');
+    },
+
     'panel: el historial y el detalle de ronda se renderizan' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['a']);

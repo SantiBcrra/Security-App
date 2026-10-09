@@ -160,6 +160,12 @@ misma clave. Si se pierde, hay que desinstalar la app en todos los celulares e i
    En cada versión nueva subir los dos (el versionCode siempre crece).
 La versión final se compila sin R8 a propósito (con la optimización de AGP 9 se cerraba al abrir).
 
+### Ubicación de las marcas (anti-trampa)
+El QR o la etiqueta dicen QUÉ punto es; el GPS del celular dice DÓNDE estaba el guardia. Cada marca queda: en el lugar,
+GPS impreciso, sin GPS, lejos o ubicación simulada (app de GPS falso). Nunca se rechaza (un GPS malo no frena la ronda) y el
+guardia no ve el resultado; "lejos" y "simulada" avisan a SyH y supervisores (una vez por ronda). Pendientes pedidos por el
+usuario: tomar las coordenadas del punto desde la app parado en el lugar y un reporte de marcas fuera de lugar por guardia y punto.
+
 ### NFC
 La etiqueta de cada punto guarda la misma dirección que su QR (`{servidor}/ronda/punto/{uuid}`, NDEF URI). Durante la ronda
 la app la lee al acercar el celular (reader mode, solo con la pantalla de la ronda abierta); el escaneo viaja con

@@ -46,6 +46,7 @@ final class Messages
         // Guardias (app Android). Sujeto = la alerta de pánico o la ronda.
         'guard.panic'              => 'Botón de pánico de un guardia',
         'guard.silent'             => 'Guardia sin señal durante una ronda',
+        'guard.off_site'           => 'Punto de ronda marcado lejos del lugar o con GPS falso',
         'ppe.due_soon' => 'EPP por vencer', 'ppe.overdue' => 'EPP vencido', 'ppe.missing' => 'EPP pendiente',
     ];
 
@@ -95,6 +96,20 @@ final class Messages
 
     private static function forGuard(string $event, array $r, array $extra): array
     {
+        if ($event === 'guard.off_site') {
+            $who = $r['user_name'] ?? 'Un guardia';
+            $point = '«' . ($r['point_code'] ?? '') . ' · ' . ($r['point_name'] ?? '') . '»';
+            $round = ' durante la ronda "' . ($r['route_name'] ?: 'ronda libre') . '", a las ' . fecha($r['scanned_at'] ?? $r['started_at'], 'H:i');
+            $d = (float) ($r['distance_m'] ?? 0);
+            $far = $d >= 1000 ? number_format($d / 1000, 1, ',', '.') . ' km' : (int) round($d) . ' m';
+            return ($r['_kind'] ?? '') === 'simulada'
+                ? ['title' => '⚠ GPS falso en una ronda · ' . $who,
+                    'body' => "{$who} marcó {$point}{$round} con una ubicación simulada (una app que falsea el GPS). No se puede saber dónde estaba: revisá la ronda y hablá con él.",
+                    'url' => '/panel/rondas/ronda/' . $r['uuid'], 'critical' => false]
+                : ['title' => '⚠ Punto marcado lejos del lugar · ' . $who,
+                    'body' => "{$who} marcó {$point}{$round} a {$far} del punto. Puede haber movido el QR o la etiqueta, o marcado desde otro lugar: revisá el recorrido de la ronda. (Si vuelve a pasar en esta ronda no se repite el aviso.)",
+                    'url' => '/panel/rondas/ronda/' . $r['uuid'], 'critical' => false];
+        }
         if ($event === 'guard.silent') {
             return ['title' => 'Guardia sin señal · ' . ($r['user_name'] ?? ''),
                 'body' => ($r['user_name'] ?? 'Un guardia') . ' está en ronda (' . ($r['route_name'] ?: 'ronda libre') . ') y no envía su ubicación desde las '

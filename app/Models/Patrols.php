@@ -87,7 +87,7 @@ final class Patrols
         $round['route_points'] = [];
         if ($round['route_id'] !== null) {
             $s = DB::tenant()->prepare('SELECT p.uuid, p.code, p.name, p.is_critical, p.radius_m, rp.sort_order,
-                    sc.scanned_at_device, sc.method, sc.distance_m, sc.within_radius, sc.accuracy_m, sc.lat, sc.lng
+                    sc.scanned_at_device, sc.method, sc.distance_m, sc.within_radius, sc.location_status, sc.accuracy_m, sc.lat, sc.lng
                 FROM patrol_route_points rp JOIN patrol_points p ON p.id=rp.point_id
                 LEFT JOIN patrol_scans sc ON sc.round_id=? AND sc.point_id=rp.point_id
                 WHERE rp.route_id=? ORDER BY rp.sort_order, rp.id');
@@ -190,7 +190,8 @@ final class Patrols
     {
         $stmt = DB::tenant()->prepare('SELECT r.*, u.name AS user_name, pr.name AS route_name,
             (SELECT COUNT(*) FROM patrol_scans s WHERE s.round_id=r.id) AS scans_count,
-            (SELECT COUNT(*) FROM patrol_scans s WHERE s.round_id=r.id AND s.within_radius=0) AS outside_count,
+            (SELECT COUNT(*) FROM patrol_scans s WHERE s.round_id=r.id AND s.location_status IN (\'lejos\',\'simulada\')) AS outside_count,
+            (SELECT COUNT(*) FROM patrol_scans s WHERE s.round_id=r.id AND s.location_status IN (\'impreciso\',\'sin_gps\')) AS doubtful_count,
             (SELECT COUNT(*) FROM patrol_route_points rp WHERE rp.route_id=r.route_id) AS route_points
             FROM patrol_rounds r JOIN users u ON u.id=r.user_id LEFT JOIN patrol_routes pr ON pr.id=r.route_id'
             . ($userId !== null ? ' WHERE r.user_id = ?' : '') . ' ORDER BY r.started_at DESC LIMIT ' . max(1, min(500, $limit)));
@@ -211,7 +212,10 @@ final class Patrols
         $lat = isset($data['lat']) && $data['lat'] !== '' ? (float) $data['lat'] : null;
         $lng = isset($data['lng']) && $data['lng'] !== '' ? (float) $data['lng'] : null;
         $distance = ($lat !== null && $lng !== null) ? min(self::distance($lat, $lng, (float) $point['lat'], (float) $point['lng']), 999999999.0) : null;
-        $inside = $distance !== null && $distance <= (int) $point['radius_m'];
+        $accuracyIn = isset($data['accuracy_m']) && is_numeric($data['accuracy_m']) ? (float) $data['accuracy_m'] : null;
+        $mock = !empty($data['mock']) && $lat !== null;
+        $status = self::locationStatus($distance, $accuracyIn, (int) $point['radius_m'], $mock);
+        $inside = $status === 'ok';
         $exists = DB::tenant()->prepare('SELECT uuid FROM patrol_scans WHERE round_id=? AND point_id=? LIMIT 1');
         $exists->execute([(int) $round['id'], (int) $point['id']]);
         if ($old = $exists->fetchColumn()) return ['uuid' => $old, 'duplicate' => true, 'within_radius' => $inside, 'distance_m' => $distance];
@@ -219,13 +223,49 @@ final class Patrols
         if (!Uuid::isValid($uuid)) throw new UserError('Identificador de escaneo inválido.');
         $accuracy = isset($data['accuracy_m']) && is_numeric($data['accuracy_m']) ? min(max((float) $data['accuracy_m'], 0.0), 999999999.0) : null;
         $method = in_array($data['method'] ?? null, ['qr', 'nfc'], true) ? $data['method'] : null; // cómo se marcó el punto
-        DB::tenant()->prepare('INSERT INTO patrol_scans (uuid,round_id,point_id,method,user_id,scanned_at_device,received_at,lat,lng,accuracy_m,distance_m,within_radius,note,created_at,updated_at) VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(),?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
-            ->execute([$uuid, (int) $round['id'], (int) $point['id'], $method, (int) UserAuth::user()['id'], $at, $lat, $lng, $accuracy, $distance, $inside ? 1 : 0, $data['note'] ?? null]);
+        DB::tenant()->prepare('INSERT INTO patrol_scans (uuid,round_id,point_id,method,user_id,scanned_at_device,received_at,lat,lng,accuracy_m,distance_m,within_radius,location_status,is_mock,note,created_at,updated_at) VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(),?,?,?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
+            ->execute([$uuid, (int) $round['id'], (int) $point['id'], $method, (int) UserAuth::user()['id'], $at, $lat, $lng, $accuracy, $distance, $inside ? 1 : 0, $status, $mock ? 1 : 0, $data['note'] ?? null]);
+        if (in_array($status, ['lejos', 'simulada'], true)) {
+            self::warnOffSite($round, $point, $status, $distance, $at);
+        }
         if ($late && $round['route_id'] !== null) {
             $status = self::missingPoints((int) $round['id'], (int) $round['route_id']) > 0 ? 'incompleta' : 'completa';
             DB::tenant()->prepare('UPDATE patrol_rounds SET status = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([$status, (int) $round['id']]);
         }
         return ['uuid' => $uuid, 'point_uuid' => $point['uuid'], 'within_radius' => $inside, 'distance_m' => $distance, 'duplicate' => false];
+    }
+
+    public const LOCATION_STATES = [
+        'ok'        => ['label' => 'En el lugar', 'class' => 'success'],
+        'lejos'     => ['label' => 'Lejos del punto', 'class' => 'danger'],
+        'simulada'  => ['label' => 'Ubicación simulada (GPS falso)', 'class' => 'danger'],
+        'impreciso' => ['label' => 'GPS impreciso', 'class' => 'warning'],
+        'sin_gps'   => ['label' => 'Sin GPS', 'class' => 'warning'],
+    ];
+
+    /**
+     * Dónde estaba el celular respecto del punto. "impreciso" = fuera del radio, pero con el margen de error del GPS
+     * podría estar adentro (no se acusa a nadie por un GPS malo); "lejos" = fuera aun descontando ese margen.
+     */
+    public static function locationStatus(?float $distance, ?float $accuracy, int $radius, bool $mock): string
+    {
+        return match (true) {
+            $mock => 'simulada',
+            $distance === null => 'sin_gps',
+            $distance <= $radius => 'ok',
+            $accuracy !== null && $distance - $accuracy <= $radius => 'impreciso',
+            default => 'lejos',
+        };
+    }
+
+    /** Aviso a SyH y supervisores: una vez por ronda y por tipo (lejos / simulada), no por cada punto. */
+    private static function warnOffSite(array $round, array $point, string $status, ?float $distance, string $at): void
+    {
+        if (!\App\Models\NotificationMarks::claim("guard_offsite:{$round['id']}:{$status}")) {
+            return;
+        }
+        \App\Services\Notify\Notifier::dispatch('guard.off_site', $round + ['_kind' => $status, 'point_name' => $point['name'],
+            'point_code' => $point['code'], 'distance_m' => $distance, 'scanned_at' => $at]);
     }
 
     public static function finish(string $uuid, ?string $finishedAt = null): array

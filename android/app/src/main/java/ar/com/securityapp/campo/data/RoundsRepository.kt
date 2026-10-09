@@ -23,7 +23,8 @@ data class PatrolRound(val uuid: String, val routeUuid: String?, val mine: Boole
 data class PatrolScan(val uuid: String, val roundUuid: String, val pointUuid: String, val scannedAt: String, val withinRadius: Boolean?, val local: Boolean)
 
 /** Lugar del celular al escanear (puede no haber GPS: el servidor lo marca como fuera de radio). */
-data class Fix(val lat: Double, val lng: Double, val accuracyM: Float)
+/** @param mock la ubicación la inventó una app de GPS falso (Android lo informa) */
+data class Fix(val lat: Double, val lng: Double, val accuracyM: Float, val mock: Boolean = false)
 
 /**
  * Rondas sin señal: todo se guarda en la base local y se encola (`round.start`, `round.scan`, `round.finish`).
@@ -81,7 +82,7 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
         val now = Instant.now().toString()
         val data = buildJsonObject {
             put("uuid", uuid); put("round_uuid", round.uuid); put("point_uuid", pointUuid); put("scanned_at_device", now); put("method", method)
-            fix?.let { put("lat", it.lat); put("lng", it.lng); put("accuracy_m", it.accuracyM) }
+            fix?.let { put("lat", it.lat); put("lng", it.lng); put("accuracy_m", it.accuracyM); if (it.mock) put("mock", 1) }
         }
         db.upsert("patrol_scans", listOf(uuid to buildJsonObject {
             data.forEach { (k, v) -> put(k, v) }
