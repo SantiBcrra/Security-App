@@ -27,9 +27,8 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
 - [x] Rediseño visual: menú lateral, paleta #353c4f / #f2c014, inicio como tablero, logo configurable
 
 ## Pendiente — web (Codex)
-- [ ] **Mejora rápida: migraciones pendientes**. Si la base de la empresa tiene migraciones sin aplicar, mostrar a los
-      administradores un aviso con link a `/admin/migraciones`, y que un módulo sin tabla muestre un mensaje claro en
-      lugar de la excepción. Hoy Indumor quedó en la 0036 y Inspecciones/Permisos fallan con "table doesn't exist".
+- [x] **Mejora rápida: migraciones pendientes**. El super-admin ve el aviso y el enlace a `/admin/migraciones`; una tabla
+      ausente muestra una pantalla clara (sin exponer migraciones a usuarios de `/panel`).
 - [ ] **Etapa 14 entrega 2 — EPP seguimiento** (diseño ya aprobado: `docs/design/etapa-14-epp.md` secciones 5 y 11):
   - [ ] tablero de cumplimiento (% al día, vencidos/por vencer por sector, nunca entregados)
   - [ ] entrega por lote (por sector o puesto, firma uno por uno)

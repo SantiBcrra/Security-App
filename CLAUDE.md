@@ -320,7 +320,11 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Tablas: `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`, fechas `DATETIME`
   en UTC (`UTC_TIMESTAMP()`), índices con nombre `idx_tabla_campos` / `uq_tabla_campos`.
 - Se aplican desde el panel: `/admin/migraciones` → "Actualizar base de datos"
-  (`Migrator::runAll()`, con lock `GET_LOCK` por base).
+(`Migrator::runAll()`, con lock `GET_LOCK` por base).
+
+## Migraciones pendientes y tablas ausentes
+- El tablero de plataforma `/admin` muestra las migraciones pendientes y enlaza a `/admin/migraciones`; este aviso no se muestra en `/panel`.
+- `ErrorHandler` reconoce el error MySQL/MariaDB 1146 (`42S02`) y muestra una pantalla 503 clara. En `/admin` incluye el enlace a migraciones; en `/panel` solo indica que el módulo no está habilitado y pide contactar al administrador.
 
 ## Convenciones de código
 - PHP **8.2** como mínimo común (nada de 8.3/8.4). `declare(strict_types=1)`, namespace `App\`

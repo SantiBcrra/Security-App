@@ -59,6 +59,19 @@ final class ErrorHandler
     private static function render(\Throwable $e, string $id): Response
     {
         $debug = Config::isDebug();
+        if ($e instanceof \PDOException && self::isMissingTable($e)) {
+            if (self::$request?->wantsJson()) {
+                return Response::jsonError('Este módulo todavía no está habilitado en esta base. Avisá al administrador.', 503, 'migration_pending');
+            }
+            try {
+                return Response::html(View::render('errors/migration', [
+                    'errorId' => $id,
+                    'admin' => self::$request !== null && str_starts_with(self::$request->path, '/admin'),
+                ]), 503);
+            } catch (\Throwable) {
+                return Response::html('<h1>Módulo no disponible</h1><p>Este módulo todavía no está habilitado en esta base.</p><p>Referencia: ' . htmlspecialchars($id, ENT_QUOTES, 'UTF-8') . '</p>', 503);
+            }
+        }
         if (self::$request?->wantsJson()) {
             $message = $debug ? $e->getMessage() : "Error interno (ref. {$id})";
             return Response::jsonError($message, 500, 'server_error');
@@ -73,5 +86,12 @@ final class ErrorHandler
             $html = '<h1>Error interno</h1><p>Referencia: ' . htmlspecialchars($id) . '</p>';
         }
         return Response::html($html, 500);
+    }
+
+    public static function isMissingTable(\PDOException $e): bool
+    {
+        return (string) $e->getCode() === '42S02'
+            || (string) ($e->errorInfo[0] ?? '') === '42S02'
+            || (int) ($e->errorInfo[1] ?? 0) === 1146;
     }
 }
