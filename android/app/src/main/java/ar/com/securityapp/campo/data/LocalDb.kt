@@ -15,10 +15,54 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "campo.db", null, VE
         db.execSQL("CREATE TABLE records (entity TEXT NOT NULL, uuid TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (entity, uuid))")
         db.execSQL("CREATE TABLE outbox (op_id TEXT PRIMARY KEY, type TEXT NOT NULL, data TEXT NOT NULL, status TEXT NOT NULL, " +
             "attempts INTEGER NOT NULL DEFAULT 0, error TEXT, created_at INTEGER NOT NULL)")
+        createTracks(db)
+    }
+
+    /** Posiciones de la ronda en curso: se juntan acá y se mandan en lote (`round.track`). */
+    private fun createTracks(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS tracks (uuid TEXT PRIMARY KEY, round_uuid TEXT NOT NULL, at TEXT NOT NULL, lat REAL NOT NULL, lng REAL NOT NULL, " +
+            "accuracy REAL, battery INTEGER, queued INTEGER NOT NULL DEFAULT 0)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Versiones futuras: migrar acá sin perder la cola de envío.
+        // Nunca se borra la cola de envío: solo se agregan tablas.
+        if (oldVersion < 2) createTracks(db)
+    }
+
+    data class TrackPoint(val uuid: String, val roundUuid: String, val at: String, val lat: Double, val lng: Double, val accuracy: Float?, val battery: Int?)
+
+    fun addTrack(p: TrackPoint) {
+        writableDatabase.insertWithOnConflict("tracks", null, ContentValues().apply {
+            put("uuid", p.uuid); put("round_uuid", p.roundUuid); put("at", p.at); put("lat", p.lat); put("lng", p.lng)
+            put("accuracy", p.accuracy); put("battery", p.battery); put("queued", 0)
+        }, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    fun unqueuedTracks(): List<TrackPoint> =
+        readableDatabase.rawQuery("SELECT uuid, round_uuid, at, lat, lng, accuracy, battery FROM tracks WHERE queued = 0 ORDER BY at", null).use { c ->
+            buildList {
+                while (c.moveToNext()) add(TrackPoint(c.getString(0), c.getString(1), c.getString(2), c.getDouble(3), c.getDouble(4),
+                    if (c.isNull(5)) null else c.getFloat(5), if (c.isNull(6)) null else c.getInt(6)))
+            }
+        }
+
+    fun markTracksQueued(uuids: List<String>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (u in uuids) db.execSQL("UPDATE tracks SET queued = 1 WHERE uuid = ?", arrayOf(u))
+            db.execSQL("DELETE FROM tracks WHERE queued = 1 AND at < ?", arrayOf(java.time.Instant.now().minusSeconds(3 * 86400).toString()))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun trackCount(roundUuid: String): Int =
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM tracks WHERE round_uuid = ?", arrayOf(roundUuid)).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+
+    fun updateOpData(opId: String, data: String) {
+        writableDatabase.update("outbox", ContentValues().apply { put("data", data) }, "op_id = ?", arrayOf(opId))
     }
 
     fun upsert(entity: String, rows: List<Pair<String, String>>) {
@@ -97,10 +141,11 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "campo.db", null, VE
         writableDatabase.apply {
             delete("records", null, null)
             delete("outbox", null, null)
+            delete("tracks", null, null)
         }
     }
 
     private companion object {
-        const val VERSION = 1
+        const val VERSION = 2
     }
 }

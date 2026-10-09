@@ -20,7 +20,7 @@ use App\Services\UserAuth;
 final class Push
 {
     public const MAX_OPS = 50;
-    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
+    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'round.track', 'guard.panic', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
         'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
@@ -64,6 +64,8 @@ final class Push
                 'round.start'            => self::roundStart($data),
                 'round.scan'             => self::roundScan($data),
                 'round.finish'           => self::roundFinish($data),
+                'round.track'            => ['status' => 'ok', 'data' => \App\Services\GuardSafety::track($data)],
+                'guard.panic'            => self::panic($data),
                 'action.start'           => self::actionStep($data, 'tomar'),
                 'action.close'           => self::actionStep($data, 'cerrar'),
                 'inspection.create'      => self::inspectionCreate($data),
@@ -145,6 +147,13 @@ final class Push
     {
         if (!UserAuth::can('rondas', 'crear')) return self::error('Tu rol no puede registrar rondas.');
         return ['status' => 'ok', 'data' => Patrols::scan($data)];
+    }
+
+    /** Pánico que quedó en la cola (sin señal o si falló el envío directo): no duplica si ya llegó por /panic. */
+    private static function panic(array $data): array
+    {
+        $r = \App\Services\GuardSafety::panic($data, 'cola');
+        return ['status' => 'ok', 'data' => ['uuid' => $r['panic']['uuid'], 'duplicate' => $r['duplicate']]];
     }
 
     private static function roundFinish(array $data): array

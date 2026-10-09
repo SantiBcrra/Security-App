@@ -22,6 +22,8 @@
                 <li>Si Android avisa que el navegador no puede instalar apps, tocá <strong>Configuración</strong> → activá <strong>"Permitir de esta fuente"</strong> → volvé atrás.</li>
                 <li>Tocá <strong>Instalar</strong>. Si aparece "Play Protect" o "app no verificada", tocá <strong>Más detalles → Instalar de todas formas</strong>: la app se distribuye directamente por tu empresa, no por Google Play.</li>
                 <li>Abrila e ingresá con la <strong>empresa</strong>, tu <strong>email o DNI</strong> y tu <strong>contraseña</strong>.</li>
+                <li>Guardias: antes de la primera ronda la app pide ubicación, notificaciones, sin ahorro de batería y SMS (para el pánico sin datos).
+                    Si el permiso de SMS aparece bloqueado ("ajuste restringido"): Ajustes → Apps → Security App → menú ⋮ → <strong>Permitir ajustes restringidos</strong>, y volvé a tocar "Permitir".</li>
             </ol>
             <p class="small text-body-secondary mb-0">Las actualizaciones las avisa la misma app: no hace falta volver a esta página.</p>
         <?php endif; ?>

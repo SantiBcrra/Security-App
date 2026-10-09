@@ -13,6 +13,34 @@ $dist = fn ($d) => $d === null ? 'sin GPS' : number_format((float) $d, 0, ',', '
     <?= $round['finished_at'] ? ' · fin ' . e(fecha($round['finished_at'])) : '' ?>
 </p>
 
+<?php
+$mapScans = array_values(array_filter(array_merge($round['route_points'] ?? [], $round['extra_scans'] ?? []), fn ($s) => ($s['lat'] ?? null) !== null && ($s['scanned_at_device'] ?? null) !== null));
+?>
+<?php if ($tracks || $mapScans): ?>
+    <link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>">
+    <div id="track-map" style="height: 340px" class="rounded border mb-2"></div>
+    <div class="small text-body-secondary mb-4">
+        <?= $tracks ? count($tracks) . ' posición(es) del recorrido' . ($round['last_track_at'] ?? null ? ' · última ' . e(fecha($round['last_track_at'], 'H:i')) : '') : 'Sin recorrido registrado (solo los escaneos).' ?>
+        · Línea = recorrido del celular · círculos = escaneos (verde en el lugar, rojo fuera de radio).
+    </div>
+    <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script>
+    <script>
+    (function () {
+        var tracks = <?= json_encode(array_map(fn ($t) => [(float) $t['lat'], (float) $t['lng']], $tracks)) ?>;
+        var scans = <?= json_encode(array_map(fn ($s) => ['lat' => (float) $s['lat'], 'lng' => (float) $s['lng'], 'ok' => (int) ($s['within_radius'] ?? 0) === 1,
+            'label' => ($s['code'] ?? $s['point_code'] ?? '') . ' · ' . ($s['name'] ?? $s['point_name'] ?? '')], $mapScans), JSON_UNESCAPED_UNICODE) ?>;
+        var map = L.map('track-map', { scrollWheelZoom: false });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+        var bounds = [];
+        if (tracks.length) { L.polyline(tracks, { color: '#353c4f', weight: 4, opacity: .8 }).addTo(map); bounds = bounds.concat(tracks);
+            L.circleMarker(tracks[tracks.length - 1], { radius: 7, color: '#f2c014', fillOpacity: 1 }).addTo(map).bindTooltip('Última posición'); }
+        scans.forEach(function (s) { var el = document.createElement('div'); el.textContent = s.label;
+            L.circleMarker([s.lat, s.lng], { radius: 8, color: s.ok ? '#1e7b45' : '#dc3545', fillOpacity: .7 }).addTo(map).bindPopup(el); bounds.push([s.lat, s.lng]); });
+        if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 18 });
+    })();
+    </script>
+<?php endif; ?>
+
 <?php if ($round['route_id'] !== null): ?>
     <?php $missing = count(array_filter($round['route_points'], fn ($p) => $p['scanned_at_device'] === null)); ?>
     <?php if ($missing > 0 && $round['status'] !== 'en_curso'): ?>

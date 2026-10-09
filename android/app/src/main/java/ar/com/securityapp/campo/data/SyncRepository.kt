@@ -3,7 +3,10 @@ package ar.com.securityapp.campo.data
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Sincronización con el servidor: primero manda la cola de lo hecho offline (outbox) y después baja los cambios desde el
@@ -14,6 +17,7 @@ class SyncRepository(private val api: ApiClient, private val prefs: Prefs, priva
     data class Full(val sent: Int, val failed: Int, val pulled: Result)
 
     suspend fun syncAll(): Full {
+        queueTracks()
         val pushed = outbox.push()
         return Full(pushed.sent, pushed.failed, pull())
     }
@@ -38,6 +42,7 @@ class SyncRepository(private val api: ApiClient, private val prefs: Prefs, priva
                 db.delete(entity, list)
                 deleted += list.size
             }
+            data.obj("meta")?.let { prefs.metaJson = it.toString() }
             cursor = data.strOrNull("cursor")
             prefs.cursor = cursor
             pages++
@@ -45,6 +50,25 @@ class SyncRepository(private val api: ApiClient, private val prefs: Prefs, priva
         }
         prefs.lastSync = System.currentTimeMillis()
         return Result(pages, changes, deleted)
+    }
+
+    /** Las posiciones juntadas pasan a la cola en lotes de 100 por ronda (después de su `round.start`, que ya está en la cola). */
+    fun queueTracks() {
+        val pending = db.unqueuedTracks()
+        for ((round, points) in pending.groupBy { it.roundUuid }) {
+            for (chunk in points.chunked(100)) {
+                outbox.enqueue("round.track", buildJsonObject {
+                    put("round_uuid", round)
+                    put("points", buildJsonArray {
+                        for (p in chunk) add(buildJsonObject {
+                            put("uuid", p.uuid); put("at", p.at); put("lat", p.lat); put("lng", p.lng)
+                            p.accuracy?.let { put("accuracy_m", it) }; p.battery?.let { put("battery", it) }
+                        })
+                    })
+                })
+                db.markTracksQueued(chunk.map { it.uuid })
+            }
+        }
     }
 
     private companion object {

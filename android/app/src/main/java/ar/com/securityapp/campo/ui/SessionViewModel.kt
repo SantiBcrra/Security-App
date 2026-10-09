@@ -141,6 +141,21 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
     private fun counts(): Map<String, Int> = listOf("sectors", "equipment", "employees", "patrol_routes", "patrol_points", "actions", "inspection_schedule")
         .associateWith { c.db.count(it) }
 
+    // ── pánico ─────────────────────────────────────────────────────
+    /** null = no hay pánico en curso; Pending = enviando; Done = resultado. */
+    sealed interface PanicState { data object Pending : PanicState; data class Done(val result: ar.com.securityapp.campo.panic.PanicManager.Result) : PanicState }
+    private val _panic = MutableStateFlow<PanicState?>(null)
+    val panic: StateFlow<PanicState?> = _panic
+    private val panicManager by lazy { ar.com.securityapp.campo.panic.PanicManager(getApplication(), c) }
+
+    fun triggerPanic() {
+        if (_panic.value is PanicState.Pending) return
+        _panic.value = PanicState.Pending
+        viewModelScope.launch { _panic.value = PanicState.Done(panicManager.trigger()); refreshCounts() }
+    }
+
+    fun closePanic() { _panic.value = null }
+
     /** Hay envíos sin confirmar: al salir se perderían. */
     fun pendingCount(): Int = c.outbox.pendingCount()
 

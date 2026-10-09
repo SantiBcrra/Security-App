@@ -82,6 +82,8 @@ final class Pull
                 'empresa'           => ['nombre' => Tenant::current()['name'], 'zona_horaria' => Tenant::timezone()],
                 'anonimo_habilitado'=> Settings::bool('observaciones.anonimo_habilitado'),
                 'permisos'          => UserAuth::permissions(),
+                'guardias'          => ['panico_telefonos' => \App\Services\GuardSafety::panicPhones(), 'track_segundos' => \App\Services\GuardSafety::trackSeconds(),
+                    'minutos_sin_senal' => \App\Services\GuardSafety::silentMinutes()],
                 'gases'             => \App\Services\WorkPermitControls::gasLimits() + ['vigencia_min' => \App\Services\WorkPermitControls::MEASUREMENT_VALID_MINUTES],
                 'usuario'           => $user ? ['uuid' => $user['uuid'], 'nombre' => $user['name'], 'rol' => $user['role_name']] : null,
             ],

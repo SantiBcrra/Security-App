@@ -98,6 +98,11 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
         "rondas" -> { ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; vm.refreshCounts() }); return }
     }
     val modules = MODULES.filter { me.can(it.key) }
+    val panic by vm.panic.collectAsStateWithLifecycle()
+    panic?.let { state ->
+        ar.com.securityapp.campo.panic.PanicScreen((state as? SessionViewModel.PanicState.Done)?.result, onClose = { vm.closePanic() })
+        return
+    }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background, topBar = {
         Row(
@@ -125,6 +130,9 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
         ) {
             update.release?.let { release ->
                 item(span = { GridItemSpan(2) }) { UpdateCard(release.versionName, update, onInstall = { vm.installUpdate(openIntent) }) }
+            }
+            if (me.can("rondas", "crear")) {
+                item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.panic.PanicButton(onTrigger = { vm.triggerPanic() }) }
             }
             item(span = { GridItemSpan(2) }) { SyncCard(sync) }
             item(span = { GridItemSpan(2) }) {

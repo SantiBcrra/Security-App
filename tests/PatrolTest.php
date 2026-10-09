@@ -219,6 +219,71 @@ return [
         assert_same([1, 2], [(int) $row['scans_count'], (int) $row['route_points']]);
     },
 
+    'guardias: posiciones en lote, pánico (directo y en cola), re-aviso, atendido y "sin señal"' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        \App\Services\Notify\MailTransport::$fake = fn () => null;
+        \App\Services\Notify\Channels::$fakeExternal = fn () => null;
+        $sup = Users::findById(Users::create(['name' => 'Supervisor Uno', 'email' => 'sup@pa.test', 'role_id' => (int) Roles::findBySlug('supervisor')['id'],
+            'password_hash' => password_hash('clave-larga-123', PASSWORD_DEFAULT)]));
+        UserAuth::setCurrent($st['g1']);
+        $round = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $round, 'started_at_device' => gmdate('Y-m-d\TH:i:s\Z', time() - 1800)])]);
+        $pt = fn (int $ago, float $lat) => ['uuid' => Uuid::v4(), 'at' => gmdate('Y-m-d\TH:i:s\Z', time() - $ago), 'lat' => $lat, 'lng' => -58.38, 'accuracy_m' => 12, 'battery' => 80];
+        $points = [$pt(1500, -34.600), $pt(1440, -34.601), $pt(1380, -34.602), ['uuid' => 'malo', 'lat' => 'x']];
+        $r = Push::run([$op('round.track', ['round_uuid' => $round, 'points' => $points])])[0];
+        assert_same(['ok', 3], [$r['status'], $r['data']['saved']]);
+        assert_same(0, Push::run([$op('round.track', ['round_uuid' => $round, 'points' => $points])])[0]['data']['saved'], 'reenvío: no duplica');
+        $roundRow = Patrols::round($round);
+        assert_same(gmdate('Y-m-d H:i:s', time() - 1380), DB::tenant()->query("SELECT last_track_at FROM patrol_rounds WHERE uuid = '{$round}'")->fetchColumn());
+        assert_same(3, count(\App\Services\GuardSafety::tracks((int) $roundRow['id'])));
+        UserAuth::setCurrent($st['g2']);
+        assert_same('error', Push::run([$op('round.track', ['round_uuid' => $round, 'points' => [$pt(60, -34.6)]])])[0]['status'], 'la ronda de otro no');
+        // Guardia sin señal: última posición hace 23 min (> 10) → un aviso por hueco
+        UserAuth::setCurrent(null);
+        $res = \App\Services\GuardSafety::run();
+        assert_same(1, $res['silent']);
+        assert_same(0, \App\Services\GuardSafety::run()['silent'], 'no se repite por el mismo hueco');
+        $inbox = fn (array $u) => array_column(DB::tenant()->query('SELECT title FROM notifications WHERE user_id = ' . (int) $u['id'])->fetchAll(), 'title');
+        assert_true(in_array('Guardia sin señal · Guardia1', $inbox($sup), true), 'aviso al supervisor');
+        // Pánico: directo + el mismo en la cola = una sola alerta, crítica, a SyH y supervisores (no al guardia)
+        UserAuth::setCurrent($st['g1']);
+        $panicUuid = Uuid::v4();
+        $data = ['uuid' => $panicUuid, 'at' => gmdate('Y-m-d\TH:i:s\Z', time() - 30), 'lat' => -34.6031, 'lng' => -58.3815, 'accuracy_m' => 9, 'round_uuid' => $round];
+        $first = \App\Services\GuardSafety::panic($data, 'datos');
+        assert_same(false, $first['duplicate']);
+        $queued = Push::run([$op('guard.panic', $data + ['sms_sent' => 1])])[0];
+        assert_same([true, 1], [$queued['data']['duplicate'], (int) \App\Services\GuardSafety::findPanic($panicUuid)['sms_sent']]);
+        assert_same(1, (int) DB::tenant()->query('SELECT COUNT(*) FROM panic_alerts')->fetchColumn());
+        assert_true(in_array('⚠ PÁNICO · Guardia1', $inbox($st['hys']), true) && in_array('⚠ PÁNICO · Guardia1', $inbox($sup), true));
+        assert_true(!in_array('⚠ PÁNICO · Guardia1', $inbox($st['g1']), true), 'el guardia no se avisa a sí mismo');
+        assert_same(1, (int) DB::tenant()->query("SELECT is_critical FROM notifications WHERE title = '⚠ PÁNICO · Guardia1' LIMIT 1")->fetchColumn());
+        // Sin atender a los N minutos → re-aviso a los responsables
+        UserAuth::setCurrent(null);
+        assert_same(1, \App\Services\GuardSafety::run(time() + 20 * 60)['escalated']);
+        assert_true(in_array('⚠ PÁNICO SIN ATENDER (nivel 1) · Guardia1', $inbox($st['hys']), true));
+        UserAuth::setCurrent($st['hys']);
+        $p = \App\Services\GuardSafety::findPanic($panicUuid);
+        assert_true(str_contains((string) \App\Services\GuardSafety::ack($p, ''), 'Contá'));
+        assert_same(null, \App\Services\GuardSafety::ack($p, 'Se lo llamó: está bien, se tropezó'));
+        UserAuth::setCurrent(null);
+        assert_same(0, \App\Services\GuardSafety::run(time() + 60 * 60)['escalated'], 'atendida: no se re-avisa');
+        // Ajustes que bajan al celular y pantallas
+        \App\Models\Settings::set('guardias.panico_telefonos', '+5491122334455, 11-2233 (malo), +5491166778899');
+        UserAuth::setCurrent($st['g1']);
+        $meta = Pull::run(null, 50)['meta']['guardias'];
+        assert_same([['+5491122334455', '+5491166778899'], 60, 10], [$meta['panico_telefonos'], $meta['track_segundos'], $meta['minutos_sin_senal']]);
+        UserAuth::setCurrent($st['hys']);
+        $p = \App\Services\GuardSafety::findPanic($panicUuid);
+        $html = \App\Core\View::render('panel/rounds/panic', ['p' => $p, 'tracks' => \App\Services\GuardSafety::tracks((int) $roundRow['id'])], null);
+        assert_true(str_contains($html, 'Se lo llamó') && str_contains($html, 'maps.google.com/?q=-34.6031'));
+        $html = \App\Core\View::render('panel/rounds/round', ['round' => Patrols::roundDetail($round), 'tracks' => \App\Services\GuardSafety::tracks((int) $roundRow['id'])], null);
+        assert_true(str_contains($html, 'track-map') && str_contains($html, '3 posición(es)'));
+        Push::run([$op('round.finish', ['round_uuid' => $round])]);
+        \App\Services\Notify\MailTransport::$fake = null;
+        \App\Services\Notify\Channels::$fakeExternal = null;
+    },
+
     'panel: el historial y el detalle de ronda se renderizan' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['a']);
@@ -227,7 +292,7 @@ return [
         $html = \App\Core\View::render('panel/rounds/index', ['points' => Patrols::points(), 'routes' => Patrols::routes(), 'rounds' => $rounds], null);
         assert_true(str_contains($html, 'incompleta') && str_contains($html, '1 / 2'), 'estado y avance en el historial');
         $partial = array_values(array_filter($rounds, fn ($r) => $r['status'] === 'incompleta'))[0];
-        $html = \App\Core\View::render('panel/rounds/round', ['round' => Patrols::roundDetail($partial['uuid'])], null);
+        $html = \App\Core\View::render('panel/rounds/round', ['round' => Patrols::roundDetail($partial['uuid']), 'tracks' => []], null);
         assert_true(str_contains($html, 'Salteado') && str_contains($html, 'Se saltearon 1 punto'), 'marca el punto salteado');
     },
 

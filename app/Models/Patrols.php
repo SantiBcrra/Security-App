@@ -87,7 +87,7 @@ final class Patrols
         $round['route_points'] = [];
         if ($round['route_id'] !== null) {
             $s = DB::tenant()->prepare('SELECT p.uuid, p.code, p.name, p.is_critical, p.radius_m, rp.sort_order,
-                    sc.scanned_at_device, sc.distance_m, sc.within_radius, sc.accuracy_m
+                    sc.scanned_at_device, sc.distance_m, sc.within_radius, sc.accuracy_m, sc.lat, sc.lng
                 FROM patrol_route_points rp JOIN patrol_points p ON p.id=rp.point_id
                 LEFT JOIN patrol_scans sc ON sc.round_id=? AND sc.point_id=rp.point_id
                 WHERE rp.route_id=? ORDER BY rp.sort_order, rp.id');
@@ -238,7 +238,7 @@ final class Patrols
     }
 
     /** Hora del dispositivo (ISO 8601) en UTC; sin dato usa la del servidor. No acepta fechas absurdas. */
-    private static function deviceTime(mixed $value): string
+    public static function deviceTime(mixed $value): string
     {
         if ($value === null || $value === '') return gmdate('Y-m-d H:i:s');
         try {

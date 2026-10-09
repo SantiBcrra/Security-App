@@ -238,6 +238,8 @@ return static function (Router $r): void {
         $r->get('/rondas', [RoundsController::class, 'index'], [$can('rondas', 'ver')]);
         $r->get('/rondas/rutas/nueva', [RoundsController::class, 'routeForm'], [$can('rondas', 'crear')]);
         $r->get('/rondas/ronda/{uuid}', [RoundsController::class, 'round'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/panico/{uuid}', [RoundsController::class, 'panic'], [$can('rondas', 'ver')]);
+        $r->post('/rondas/panico/{uuid}/atendido', [RoundsController::class, 'ackPanic'], [$can('rondas', 'ver')]);
         $r->post('/rondas/rutas', [RoundsController::class, 'routeStore'], [$can('rondas', 'crear')]);
         $r->get('/rondas/puntos/nuevo', [RoundsController::class, 'pointForm'], [$can('rondas', 'crear')]);
         $r->post('/rondas/puntos', [RoundsController::class, 'pointStore'], [$can('rondas', 'crear')]);
@@ -260,6 +262,7 @@ return static function (Router $r): void {
         $r->post('/configuracion/permisos', [SettingsController::class, 'updatePermits'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/epp', [SettingsController::class, 'updateEpp'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/logo', [SettingsController::class, 'uploadLogo'], [$can('configuracion', 'editar')]);
+        $r->post('/configuracion/guardias', [SettingsController::class, 'updateGuards'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/logo/quitar', [SettingsController::class, 'removeLogo'], [$can('configuracion', 'editar')]);
 
         // Datos maestros (plantas, sectores, puestos, empleados, contratistas, equipos, catálogos).
@@ -299,6 +302,7 @@ return static function (Router $r): void {
             $r->get('/me', [ApiAuthController::class, 'me']);
             $r->get('/consent', [ApiAppController::class, 'consent']);
             $r->post('/consent', [ApiAppController::class, 'accept']);
+            $r->post('/panic', [ApiAppController::class, 'panic']);
 
             // Sincronización offline (Etapa 5)
             $r->get('/sync/pull', [SyncController::class, 'pull']);

@@ -329,6 +329,16 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   QR con CameraX + ML Kit (sin internet), ubicación puntual con Fused Location. En debug: "Simular escaneo" (emulador).
   Servidor: un escaneo que llega después del fin vale si `scanned_at_device` ≤ `finished_at` (recalcula completa/incompleta);
   `distance_m`/`accuracy_m` DECIMAL(11,2) (migración 0062: un GPS a miles de km no rompe el escaneo).
+- Seguridad del guardia (entrega 3, `GuardSafety`): `RoundTrackingService` (servicio en primer plano tipo location, notificación
+  fija "Ronda en curso", SOLO durante la ronda; arranca al iniciar o al reabrir con ronda en curso, se apaga al finalizar)
+  guarda posiciones en `tracks` (SQLite) → `round.track` en lotes de 100 → `patrol_tracks` (+ `patrol_rounds.last_track_at`),
+  recorrido en el mapa del detalle de ronda. Pánico (`PanicManager`): mantener 2 s → se encola `guard.panic` → `POST /api/v1/panic`
+  (≤15 s) → si falla, SMS (`SmsManager`, permiso SEND_SMS) a `guardias.panico_telefonos` y la cola lo manda al volver la señal
+  (idempotente por uuid, `sms_sent`). `panic_alerts`: aviso CRÍTICO `guard.panic` (SyH, supervisores, admins) y re-aviso a
+  managers cada `notif.escalation_minutes` hasta "Atendido" (`/panel/rondas/panico/{uuid}`). Cron `GuardSafety::run()`: re-aviso
+  + `guard.silent` (ronda en curso sin posición en `rondas.minutos_sin_senal`, una vez por hueco). Ajustes en Configuración →
+  Guardias (teléfonos, `rondas.track_segundos`, minutos sin señal); bajan en `meta.guardias` del pull. "Antes de empezar":
+  ubicación (obligatoria), notificaciones, sin ahorro de batería, SMS + consejos por marca. Solo se avisa a usuarios activados.
 - **`targetSdk` 35 a propósito**: apuntando a Android 17 (37) el sistema bloquea las conexiones a la red local y la app no
   llega al XAMPP de la Mac (10.0.2.2 o la IP por Wi-Fi). Sin Google Play no hay exigencia de subirlo.
 - Consentimiento (celular personal, Ley 25.326): `Consent::VERSION` + texto en el servidor, `user_consents` (tenant 0061),

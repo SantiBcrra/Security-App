@@ -43,6 +43,9 @@ final class Messages
         'permit.expired'           => 'Permiso de trabajo vencido',
         'permit.gas_alarm'         => 'Gases fuera de rango en un permiso',
         'permit.suspended'         => 'Permiso de trabajo suspendido',
+        // Guardias (app Android). Sujeto = la alerta de pánico o la ronda.
+        'guard.panic'              => 'Botón de pánico de un guardia',
+        'guard.silent'             => 'Guardia sin señal durante una ronda',
         'ppe.due_soon' => 'EPP por vencer', 'ppe.overdue' => 'EPP vencido', 'ppe.missing' => 'EPP pendiente',
     ];
 
@@ -50,7 +53,7 @@ final class Messages
     public const INTERNAL = ['observation.escalated'];
 
     /** Eventos críticos: llegan siempre (no se pueden silenciar) y se envían en el momento. */
-    public const CRITICAL = ['observation.imminent', 'observation.escalated', 'incident.serious', 'permit.gas_alarm'];
+    public const CRITICAL = ['observation.imminent', 'observation.escalated', 'incident.serious', 'permit.gas_alarm', 'guard.panic'];
 
     /** @return array{title:string, body:string, url:string, critical:bool} */
     public static function for(string $event, array $obs, array $extra = []): array
@@ -68,6 +71,9 @@ final class Messages
             return self::forPermit($event, $obs, $extra);
         }
         if (str_starts_with($event, 'ppe.')) return self::forPpe($event, $obs, $extra);
+        if (str_starts_with($event, 'guard.')) {
+            return self::forGuard($event, $obs, $extra);
+        }
         $num = Observations::format((int) $obs['number']);
         $where = trim(($obs['sector_name'] ?? '') . ($obs['equipment_code'] ? ' · ' . $obs['equipment_code'] : ''), ' ·');
         $desc = mb_strimwidth((string) $obs['description'], 0, 220, '…');
@@ -85,6 +91,25 @@ final class Messages
             'url'      => '/panel/observaciones/' . $obs['uuid'],
             'critical' => in_array($event, self::CRITICAL, true),
         ];
+    }
+
+    private static function forGuard(string $event, array $r, array $extra): array
+    {
+        if ($event === 'guard.silent') {
+            return ['title' => 'Guardia sin señal · ' . ($r['user_name'] ?? ''),
+                'body' => ($r['user_name'] ?? 'Un guardia') . ' está en ronda (' . ($r['route_name'] ?: 'ronda libre') . ') y no envía su ubicación desde las '
+                    . fecha($r['since'] ?? $r['started_at'], 'H:i') . '. Puede estar sin señal o con el celular apagado: comunicate con él.',
+                'url' => '/panel/rondas/ronda/' . $r['uuid'], 'critical' => false];
+        }
+        $level = (int) ($extra['level'] ?? 0);
+        $where = $r['lat'] !== null ? 'Ubicación: https://maps.google.com/?q=' . $r['lat'] . ',' . $r['lng'] . ($r['accuracy_m'] !== null ? ' (±' . (int) $r['accuracy_m'] . ' m)' : '')
+            : 'Sin ubicación (el celular no tenía GPS).';
+        return ['title' => ($level > 0 ? "⚠ PÁNICO SIN ATENDER (nivel {$level}) · " : '⚠ PÁNICO · ') . ($r['user_name'] ?? 'guardia'),
+            'body' => ($r['user_name'] ?? 'Un guardia') . ' activó el botón de pánico a las ' . fecha($r['triggered_at_device'], 'H:i')
+                . ($r['route_name'] ? ' durante la ronda "' . $r['route_name'] . '"' : '') . ".
+{$where}
+Llamalo y marcá la alerta como atendida.",
+            'url' => '/panel/rondas/panico/' . $r['uuid'], 'critical' => true];
     }
 
     private static function forPpe(string $event, array $e, array $extra): array

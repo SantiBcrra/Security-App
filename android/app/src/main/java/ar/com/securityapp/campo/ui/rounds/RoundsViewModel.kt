@@ -42,6 +42,8 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         reload()
+        // Al reabrir la app con una ronda en curso, el recorrido sigue (si Android había cortado el servicio).
+        _ui.value.active?.let { TrackingStarter.ensure(app, it, _ui.value.activeRoute?.name) }
         viewModelScope.launch { c.dataChanged.collect { reload() } }
     }
 
@@ -72,7 +74,8 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
     fun start(route: PatrolRoute?) = viewModelScope.launch {
         _ui.value = _ui.value.copy(busy = true)
         val fix = locator.current(timeoutMs = 6_000)
-        c.rounds.start(route?.uuid, fix)
+        val round = c.rounds.start(route?.uuid, fix)
+        TrackingStarter.ensure(getApplication(), round, route?.name)
         SyncWorker.now(getApplication())
         reload()
     }
@@ -102,9 +105,21 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
     fun finish() {
         val round = _ui.value.active ?: return
         c.rounds.finish(round)
+        ar.com.securityapp.campo.tracking.RoundTrackingService.stop(getApplication())
         SyncWorker.now(getApplication())
         reload()
     }
 
     fun syncNow() = SyncWorker.now(getApplication())
+
+    fun needsSms(): Boolean = ar.com.securityapp.campo.data.GuardSettings.from(c.prefs, c.api).panicPhones.isNotEmpty()
+
+    fun trackPoints(): Int = _ui.value.active?.let { c.db.trackCount(it.uuid) } ?: 0
+}
+
+/** Arranca (o retoma) el servicio del recorrido para la ronda en curso. */
+object TrackingStarter {
+    fun ensure(context: android.content.Context, round: PatrolRound, routeName: String?) {
+        ar.com.securityapp.campo.tracking.RoundTrackingService.start(context, round.uuid, routeName)
+    }
 }

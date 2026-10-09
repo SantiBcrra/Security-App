@@ -21,6 +21,8 @@ final class SettingsController
             'company'   => array_map(fn ($k) => Settings::get($k) ?? '', self::COMPANY),
             'tenant'    => \App\Core\Tenant::current(),
             'permits'   => self::permitSettings(),
+            'guards'    => ['phones' => (string) (Settings::get('guardias.panico_telefonos') ?? ''), 'track' => \App\Services\GuardSafety::trackSeconds(),
+                'silent' => \App\Services\GuardSafety::silentMinutes()],
             'epp'       => self::eppSettings(),
             'logoUrl'   => ($t = \App\Core\Tenant::current()) ? \App\Controllers\Web\App\HomeController::logoUrl($t) : null,
         ], 'layouts/app'));
@@ -42,6 +44,40 @@ final class SettingsController
         Audit::tenant('settings.company', 'settings', null, $before, $after);
         Flash::add('success', 'Datos de la empresa guardados.');
         return Response::redirect('/panel/configuracion');
+    }
+
+    /** Guardias (app Android): teléfonos para el SMS de pánico, cada cuánto manda la posición y cuándo avisar "sin señal". */
+    public function updateGuards(Request $request): Response
+    {
+        $phones = [];
+        foreach (preg_split('/[\s,;]+/', (string) $request->input('phones', '')) ?: [] as $raw) {
+            $p = preg_replace('/[^\d+]/', '', $raw);
+            if ($p === '') {
+                continue;
+            }
+            if (strlen($p) < 8 || strlen($p) > 16) {
+                Flash::add('danger', "Teléfono inválido: {$raw}. Usá el formato internacional, por ejemplo +5491122334455.");
+                return Response::redirect('/panel/configuracion#guardias');
+            }
+            $phones[] = $p;
+        }
+        if (count($phones) > 3) {
+            Flash::add('danger', 'Hasta 3 teléfonos de pánico.');
+            return Response::redirect('/panel/configuracion#guardias');
+        }
+        $track = (int) $request->input('track', 60);
+        $silent = (int) $request->input('silent', 10);
+        if ($track < 15 || $track > 600 || $silent < 3 || $silent > 240 || $silent * 60 < $track * 2) {
+            Flash::add('danger', 'Posición: entre 15 y 600 segundos. "Sin señal": entre 3 y 240 minutos, y al menos el doble que el intervalo de posición.');
+            return Response::redirect('/panel/configuracion#guardias');
+        }
+        $before = ['telefonos' => Settings::get('guardias.panico_telefonos'), 'posicion' => Settings::get('rondas.track_segundos'), 'sin_senal' => Settings::get('rondas.minutos_sin_senal')];
+        Settings::set('guardias.panico_telefonos', implode(',', $phones));
+        Settings::set('rondas.track_segundos', (string) $track);
+        Settings::set('rondas.minutos_sin_senal', (string) $silent);
+        Audit::tenant('settings.guards', 'settings', null, $before, ['telefonos' => implode(',', $phones), 'posicion' => $track, 'sin_senal' => $silent]);
+        Flash::add('success', 'Configuración de guardias guardada. Los celulares la toman en la próxima sincronización.');
+        return Response::redirect('/panel/configuracion#guardias');
     }
 
     private const LOGO_MAX_BYTES = 1024 * 1024;

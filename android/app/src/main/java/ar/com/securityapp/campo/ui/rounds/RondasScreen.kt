@@ -1,9 +1,6 @@
 package ar.com.securityapp.campo.ui.rounds
 
-import android.Manifest
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -72,17 +69,10 @@ fun RondasScreen(onBack: () -> Unit, vm: RoundsViewModel = viewModel()) {
     var scanning by remember { mutableStateOf(false) }
     var confirmFinish by remember { mutableStateOf(false) }
     var simulate by remember { mutableStateOf(false) } // solo en la versión de prueba (emulador sin cámara apuntable)
-    var startRoute by remember { mutableStateOf<Any?>(null) } // ruta elegida (o "libre") esperando el permiso de ubicación
-    val locationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        val pending = startRoute
-        startRoute = null
-        vm.start(pending as? ar.com.securityapp.campo.data.PatrolRoute) // con o sin permiso: sin GPS igual se registra
-    }
+    var startRoute by remember { mutableStateOf<Any?>(null) } // ruta elegida (o "libre") esperando la revisión de permisos
+    val context = androidx.compose.ui.platform.LocalContext.current
     fun begin(route: ar.com.securityapp.campo.data.PatrolRoute?) {
-        if (vm.hasLocationPermission()) vm.start(route) else {
-            startRoute = route ?: "libre"
-            locationLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
-        }
+        if (Readiness.allGood(context, vm.needsSms())) vm.start(route) else startRoute = route ?: "libre"
     }
 
     if (scanning) {
@@ -143,6 +133,12 @@ fun RondasScreen(onBack: () -> Unit, vm: RoundsViewModel = viewModel()) {
         }
     }
 
+    startRoute?.let { pending ->
+        ReadyCheckDialog(needSms = vm.needsSms(), onStart = {
+            startRoute = null
+            vm.start(pending as? ar.com.securityapp.campo.data.PatrolRoute)
+        }, onDismiss = { startRoute = null })
+    }
     if (confirmFinish) {
         val missing = ui.progress.count { !it.done }
         AlertDialog(

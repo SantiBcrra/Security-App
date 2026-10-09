@@ -46,6 +46,7 @@ final class CronRunner
                         'incidents' => IncidentReminders::run(),
                         'permits'   => \App\Services\WorkPermitService::expire(),
                         'ppe'       => PpeReminders::run(),
+                        'guards'    => \App\Services\GuardSafety::run(),
                         'digests'   => Digests::run(),
                         'queue'     => QueueRunner::run($remaining, 100),
                     ];

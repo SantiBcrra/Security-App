@@ -19,6 +19,17 @@ final class AppController
         return $m === null ? Response::jsonError('Todavía no hay una versión publicada.', 404, 'no_release') : Response::json($m);
     }
 
+    /** Pánico directo (sin esperar la cola): la app lo manda apenas se activa; si falla, va por SMS y queda en la cola. */
+    public function panic(Request $request): Response
+    {
+        try {
+            $r = \App\Services\GuardSafety::panic($request->post, 'datos');
+        } catch (\App\Core\UserError $e) {
+            return Response::jsonError($e->getMessage(), 422);
+        }
+        return Response::json(['uuid' => $r['panic']['uuid'], 'duplicate' => $r['duplicate'], 'recibido' => true]);
+    }
+
     public function consent(Request $request): Response
     {
         return Response::json(['version' => Consent::VERSION, 'texto' => Consent::text(), 'aceptado' => Consent::accepted((int) UserAuth::user()['id'])]);

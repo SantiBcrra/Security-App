@@ -21,6 +21,7 @@ final class RoundsController
     {
         return Response::html(View::render('panel/rounds/index', [
             'title' => 'Rondas de guardias', 'points' => Patrols::points(), 'routes' => Patrols::routes(), 'rounds' => Patrols::rounds(100, $this->onlyUser()),
+            'panics' => $this->onlyUser() === null ? \App\Services\GuardSafety::panics(20) : [],
         ], 'layouts/app'));
     }
 
@@ -29,7 +30,30 @@ final class RoundsController
         $round = Patrols::roundDetail($uuid);
         $only = $this->onlyUser();
         if (!$round || ($only !== null && (int) $round['user_id'] !== $only)) return new Response('', 404);
-        return Response::html(View::render('panel/rounds/round', ['title' => 'Ronda de ' . $round['user_name'], 'round' => $round], 'layouts/app'));
+        return Response::html(View::render('panel/rounds/round', ['title' => 'Ronda de ' . $round['user_name'], 'round' => $round,
+            'tracks' => \App\Services\GuardSafety::tracks((int) $round['id'])], 'layouts/app'));
+    }
+
+    /** Alerta de pánico: dónde, cuándo, recorrido de la ronda y "Atendido". Solo con alcance más amplio que "propios". */
+    public function panic(Request $request, string $uuid): Response
+    {
+        $p = \App\Services\GuardSafety::findPanic($uuid);
+        if ($p === null || $this->onlyUser() !== null) {
+            return new Response('', 404);
+        }
+        return Response::html(View::render('panel/rounds/panic', ['title' => 'Pánico · ' . $p['user_name'], 'p' => $p,
+            'tracks' => $p['round_id'] ? \App\Services\GuardSafety::tracks((int) $p['round_id']) : []], 'layouts/app'));
+    }
+
+    public function ackPanic(Request $request, string $uuid): Response
+    {
+        $p = \App\Services\GuardSafety::findPanic($uuid);
+        if ($p === null || $this->onlyUser() !== null) {
+            return new Response('', 404);
+        }
+        $error = \App\Services\GuardSafety::ack($p, (string) $request->input('comment', ''));
+        \App\Core\Flash::add($error ? 'danger' : 'success', $error ?? 'Alerta marcada como atendida.');
+        return Response::redirect('/panel/rondas/panico/' . $uuid);
     }
 
     /** Con alcance "propios" el usuario ve solo sus rondas; si no, todas. */

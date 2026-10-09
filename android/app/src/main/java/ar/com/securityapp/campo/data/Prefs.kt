@@ -30,6 +30,11 @@ class Prefs(context: Context) {
         get() = sp.getString("me", null)
         set(value) { sp.edit().putString("me", value).apply() }
 
+    /** `meta` del último pull (ajustes de la empresa: teléfonos de pánico, intervalos de la ronda). */
+    var metaJson: String?
+        get() = sp.getString("meta", null)
+        set(value) { sp.edit().putString("meta", value).apply() }
+
     var cursor: String?
         get() = sp.getString("cursor", null)
         set(value) { sp.edit().putString("cursor", value).apply() }
@@ -40,6 +45,6 @@ class Prefs(context: Context) {
 
     /** Borra lo de la sesión (al salir o al cambiar de usuario). Conserva el dispositivo, el servidor y la empresa. */
     fun clearSession() {
-        sp.edit().remove("me").remove("cursor").remove("last_sync").apply()
+        sp.edit().remove("me").remove("cursor").remove("last_sync").remove("meta").apply()
     }
 }

@@ -77,3 +77,18 @@
         <?php if ($canEdit): ?><div class="col-12"><button class="btn btn-primary btn-sm">Guardar</button></div><?php endif; ?>
     </fieldset>
 </form>
+
+<form class="card shadow-sm mt-3" style="max-width: 640px" method="post" action="<?= e(url('/panel/configuracion/guardias')) ?>" id="guardias">
+    <?= csrf_field() ?>
+    <div class="card-header"><strong>Guardias (app Android)</strong></div>
+    <fieldset class="card-body row g-3" <?= $canEdit ? '' : 'disabled' ?>>
+        <div class="col-12"><label class="form-label">Teléfonos para el SMS de pánico (hasta 3)</label>
+            <input class="form-control" name="phones" value="<?= e(str_replace(',', ', ', $guards['phones'])) ?>" placeholder="+5491122334455, +5491166778899">
+            <div class="form-text">Si el guardia no tiene datos, la app manda un SMS con su ubicación a estos números (desde su celular). Formato internacional.</div></div>
+        <div class="col-md-6"><label class="form-label">Posición durante la ronda cada (segundos)</label><input class="form-control" name="track" inputmode="numeric" value="<?= e($guards['track']) ?>">
+            <div class="form-text">Menos segundos = recorrido más preciso, más batería.</div></div>
+        <div class="col-md-6"><label class="form-label">Avisar "guardia sin señal" a los (minutos)</label><input class="form-control" name="silent" inputmode="numeric" value="<?= e($guards['silent']) ?>">
+            <div class="form-text">Ronda en curso sin posiciones en ese tiempo → aviso a SyH y supervisores.</div></div>
+        <?php if ($canEdit): ?><div class="col-12"><button class="btn btn-primary btn-sm">Guardar</button></div><?php endif; ?>
+    </fieldset>
+</form>

@@ -25,7 +25,7 @@ components:
       required: [op_id, type, data]
       properties:
         op_id: { type: string, format: uuid, description: "Generado en el celular. Reenviar el mismo op_id devuelve el mismo resultado (idempotente)." }
-        type: { type: string, enum: [observation.create, observation.comment, observation.transition, round.start, round.scan, round.finish, action.start, action.close, inspection.create, incident.create, ppe.delivery, permit.start, permit.measure, permit.isolate, permit.release, permit.suspend, permit.resume, permit.close] }
+        type: { type: string, enum: [observation.create, observation.comment, observation.transition, round.start, round.scan, round.finish, round.track, guard.panic, action.start, action.close, inspection.create, incident.create, ppe.delivery, permit.start, permit.measure, permit.isolate, permit.release, permit.suspend, permit.resume, permit.close] }
         data:
           type: object
           description: |
@@ -33,7 +33,7 @@ components:
               opcionales risk_type, equipment, location_text, lat, lng, gps_accuracy, imminent (0/1), anonymous (0/1), people[].
             observation.comment: uuid, comment.
             observation.transition: uuid, action (analizar|asignar|cerrar|descartar|reabrir), input { comment, assigned_user, action_text, action_due_on, priority, action_type }.
-            round.start: uuid, route_uuid?, lat?, lng?, started_at_device? (ISO, hasta 30 días atrás). round.scan: uuid, round_uuid, point_uuid, lat, lng, accuracy_m, scanned_at_device. round.finish: round_uuid, finished_at_device?.
+            round.start: uuid, route_uuid?, lat?, lng?, started_at_device? (ISO, hasta 30 días atrás). round.scan: uuid, round_uuid, point_uuid, lat, lng, accuracy_m, scanned_at_device. round.finish: round_uuid, finished_at_device?. round.track: round_uuid, points [{uuid, at, lat, lng, accuracy_m, battery}] (hasta 200; idempotente por uuid; responde saved/duplicate). guard.panic: uuid, at, lat, lng, accuracy_m, round_uuid?, sms_sent? (idempotente por uuid: el mismo pánico puede llegar directo por POST /panic y por la cola).
             action.start: uuid (tomar la acción). action.close: uuid, closure_text (≥ 10). El cierre exige evidencia del ciclo actual:
               la app sube las fotos (POST /uploads con action_uuid) ANTES de mandar action.close. Reenviar un paso ya hecho por el
               mismo usuario responde ok con duplicate: true.
@@ -132,6 +132,8 @@ paths:
     get: { summary: Miniatura de una foto, parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }, { name: photo, in: path, required: true, schema: { type: string } }], responses: { "200": { description: imagen } } }
   /inspections/{uuid}:
     get: { summary: "Detalle de una inspección: resultado y respuestas (con la acción creada por ítem)", parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+  /panic:
+    post: { summary: "Botón de pánico (directo, sin esperar la cola): aviso CRÍTICO a SyH, supervisores y admins, con re-aviso hasta que lo atiendan", requestBody: { content: { application/json: { schema: { type: object, required: [uuid], properties: { uuid: { type: string, format: uuid }, at: { type: string }, lat: { type: number }, lng: { type: number }, accuracy_m: { type: number }, round_uuid: { type: string }, sms_sent: { type: integer } } } } } }, responses: { "200": { description: "uuid, duplicate, recibido" } } }
   /permits/{uuid}:
     get: { summary: "Permiso de trabajo: lo del pull + checklists, firmas y línea de tiempo", parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok }, "404": { description: sin acceso } } }
   /permits/{uuid}/approve:
