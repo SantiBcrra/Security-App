@@ -19,6 +19,7 @@ class AppContainer(context: Context) {
     val notifications = NotificationsRepository(appContext, api)
     val actions = ActionsRepository(db, outbox, uploads, api)
     val inspections = InspectionsRepository(db, outbox, uploads, api)
+    val incidents = IncidentsRepository(db, outbox, uploads, api)
     val sync = SyncRepository(api, prefs, db, outbox, uploads, inspections)
     val rounds = RoundsRepository(db, outbox, api)
     /** Se emite después de cada sincronización (la UI vuelve a leer la base local). */

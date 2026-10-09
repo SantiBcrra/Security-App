@@ -71,7 +71,7 @@ import kotlinx.coroutines.launch
 private data class Module(val key: String, val label: String, val hint: String, val icon: ImageVector)
 
 /** Módulos que ya tienen pantalla en la app (el resto se habilita en las próximas entregas). */
-private val READY = setOf("rondas", "observaciones", "acciones", "inspecciones")
+private val READY = setOf("rondas", "observaciones", "acciones", "inspecciones", "incidentes")
 
 private val MODULES = listOf(
     Module("rondas", "Rondas", "Recorridas con QR y NFC", Icons.Filled.LocationOn),
@@ -117,6 +117,10 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
         "inspecciones" -> {
             ar.com.securityapp.campo.ui.inspections.InspeccionesScreen(onBack = { openModule = null; vm.refreshCounts() },
                 canCreate = me.can("inspecciones", "crear"))
+            return
+        }
+        "incidentes" -> {
+            ar.com.securityapp.campo.ui.incidents.IncidentesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("incidentes", "crear"))
             return
         }
         "observaciones" -> {

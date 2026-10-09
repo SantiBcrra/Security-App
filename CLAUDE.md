@@ -362,6 +362,12 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   inspecciones hechas en el celular se guardan en la entidad local `my_inspections` (el pull no las baja) y se actualizan
   con la respuesta del push (número, resultado, acciones creadas). Pantallas en `ui/actions/` y `ui/inspections/` (nueva por
   QR del equipo o lista; equipo por tipo, sector o general). Acciones aparece también para quien tiene acciones a cargo.
+- Incidentes (entrega 6): `IncidentsRepository` + `ui/incidents/` (tipo con explicación, cuándo = ahora o fecha/hora
+  elegida, sector / equipo por QR o lista / lugar + GPS, personas: empleado sincronizado o externo con rol lesionado /
+  involucrado / testigo, lesión que se ve y declaración opcionales, qué pasó, qué se hizo, gravedad potencial, fotos).
+  Validación local = `IncidentService::validate` (lesionado obligatorio en accidentes; sector salvo in itinere).
+  `incident.create` idempotente por uuid, fotos con `target incident`; el registro local (`local: true`) lo pisa el pull.
+  Detalle con `GET /incidents/{uuid}` (nunca datos de salud). Investigación y seguimiento: solo web.
 - **Permisos de trabajo y EPP desactivados en la app** (decisión del usuario, 09/10/2026): comentados en `MODULES` de
   `HomeScreen.kt`; el servidor los sigue soportando. No activarlos hasta que el usuario lo pida.
 - **`targetSdk` 35 a propósito**: apuntando a Android 17 (37) el sistema bloquea las conexiones a la red local y la app no
