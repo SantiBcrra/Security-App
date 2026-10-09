@@ -117,26 +117,19 @@ Son los celulares de los guardias (decidido): no hay MDM ni kiosco, así que el 
 - **Consentimiento**: `POST /api/v1/consent` (usuario, dispositivo, versión del texto, fecha); se audita.
 
 ## 6. Entregas (cada una con tests del servidor y build de la app)
-1. **Base**:
-   - proyecto `android/`, login con 2FA, sesión segura y consentimiento;
-   - pull de datos maestros y rutas a Room;
-   - pantalla de rutas;
-   - distribución propia: subida del APK en el admin, página de descarga con QR y actualización automática desde la
-     app (así los guardias prueban sin cables);
-   - build debug en el emulador y en un celular real.
-2. **Rondas offline**: iniciar, escanear QR (ML Kit), finalizar, outbox con WorkManager y estado de la sincronización.
-3. **GPS y seguridad del guardia**:
-   - asistente de permisos y batería por marca;
-   - foreground service con posiciones;
-   - servidor: `patrol_tracks`, mapa del recorrido y `guard.silent`;
-   - botón de pánico de punta a punta (datos + SMS, números de pánico en Configuración).
-4. **Novedades y avisos**: observaciones con fotos (subida por partes), FCM en el servidor y en la app, canal crítico y
-   "Recibido".
-5. **NFC y salida**:
-   - NFC (alta de tags desde la app y escaneo);
-   - firma de release con keystore propio (respaldo);
-   - versión 1.0 en la página de descarga;
-   - manual corto para guardias.
+Decisión del usuario (09/10/2026): la PWA se eliminó y **todos los empleados** usan esta app (no solo guardias), así que
+además de lo de guardias se suman, por módulo, las pantallas que tenía la PWA. Paquete `ar.com.securityapp.campo`
+(debug: `.debug`), código en `android/`.
+1. **Base** ✅: proyecto Kotlin/Compose, ingreso con 2FA, tokens cifrados (Keystore) con renovación automática,
+   consentimiento (`GET/POST /api/v1/consent`), inicio con los módulos según permisos, sincronización (pull a SQLite
+   local), ajustes; servidor: `/admin/app-android` (publicar APK), `/descargas/android` (QR + guía), `GET /api/v1/app/android`
+   y actualización desde la app (descarga, SHA-256, instalador de Android).
+2. **Rondas offline con QR**: outbox + WorkManager, iniciar/escanear/finalizar.
+3. **Seguridad del guardia**: GPS durante la ronda, pánico (datos + SMS), "guardia sin señal".
+4. **Observaciones y avisos**: observaciones con fotos (subida por partes), FCM y canal crítico, "Recibido".
+5. **Acciones e inspecciones**: mis acciones (tomar, cerrar con evidencia) y checklists con fotos.
+6. **Incidentes y permisos de trabajo**: reporte de incidentes; permisos (firmas, gases, LOTO, suspender, cerrar).
+7. **EPP, NFC y versión 1.0**: entregas de EPP con firma, NFC en rondas, firma de release y publicación.
 
 ## 7. Distribución (decidido: sin Google Play)
 - **Instalación**: el guardia abre la página de descarga del sistema (o escanea su QR), baja el APK y Android le pide

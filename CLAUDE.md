@@ -313,6 +313,18 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   valida permiso y alcance, conserva la entrega inmutable y responde de forma idempotente por `uuid` y `op_id`. `Sync\\Pull`
   expone `ppe_items`, `ppe_matrix` y `ppe_deliveries` solo a usuarios con `epp.crear` dentro de su alcance.
 
+## App Android (todos los empleados) — plan en `docs/design/app-android-guardias.md`
+- Código en `android/` (Kotlin + Jetpack Compose, AGP 9.4, Gradle 9.6, minSdk 26, compile/target 37). Paquete
+  `ar.com.securityapp.campo` (debug `.debug`, servidor `http://10.0.2.2/securityapp`, editable en el ingreso solo en debug).
+  Compilar: `cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew assembleDebug`.
+- App: `ApiClient` (OkHttp, `{ok,data,error}`, renueva el JWT con un mutex), `TokenStore` (Keystore AES-GCM), `LocalDb`
+  (SQLite: `records` entidad+uuid+JSON del pull y `outbox`), `SyncRepository` (pull por cursor), `UpdateManager`.
+- Distribución sin Google Play: tabla maestra `app_releases` (migración master 0007), `/admin/app-android` (subir APK,
+  versión mínima obligatoria), `/descargas/android` (QR + guía), `GET /api/v1/app/android` (sin sesión). La app baja el
+  APK, verifica SHA-256 y abre el instalador. **La clave de firma de release no va al repo: respaldarla.**
+- Consentimiento (celular personal, Ley 25.326): `Consent::VERSION` + texto en el servidor, `user_consents` (tenant 0061),
+  `GET/POST /api/v1/consent`; `/me` informa `consentimiento`.
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.
@@ -390,7 +402,7 @@ tests/             run.php + *Test.php
 1. `php tests/run.php` en verde.
 2. Commit + push a `main`.
 3. Deploy: GitHub → Actions → **Deploy** → Run workflow (FTPS, sube solo cambios; excluye
-   `tests/`, `storage/`, `config/config.local.php`, `.github/`, `PLAN.md`, `CLAUDE.md`).
+   `tests/`, `tools/`, `android/`, `docs/`, `storage/`, `config/config.local.php`, `.github/`, `PLAN.md`, `CLAUDE.md`, `AGENTS.md`).
    Alternativa manual: zip del proyecto con las mismas exclusiones y subirlo por el panel.
 4. Primera vez: si el hosting no deja apuntar el docroot a `/public`, el `.htaccess` de la raíz
    redirige a `public/` y bloquea las carpetas internas.

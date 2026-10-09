@@ -51,12 +51,14 @@ Se conservaron las APIs v1 y la sincronización del servidor para que Android si
 - [ ] **Etapa 18 — Integraciones** (diseño primero)
 - [ ] **Etapa 19 — Hardening y operación** (antes de salir a producción con clientes)
 
-## Pendiente — app Android de guardias (Claude)
-- [ ] Entrega 1 — Base: proyecto `android/`, login con 2FA, consentimiento, pull de rutas, distribución propia del APK
+## App Android (Claude) — para todos los empleados (la PWA se eliminó)
+- [x] Entrega 1 — Base: proyecto `android/`, login con 2FA, consentimiento, sincronización, módulos según permisos, distribución propia del APK
 - [ ] Entrega 2 — Rondas offline con QR
 - [ ] Entrega 3 — GPS durante la ronda, pánico (datos + SMS), "guardia sin señal"
-- [ ] Entrega 4 — Novedades con fotos, notificaciones FCM, canal crítico
-- [ ] Entrega 5 — NFC, firma de release, versión 1.0
+- [ ] Entrega 4 — Observaciones con fotos, notificaciones FCM, canal crítico
+- [ ] Entrega 5 — Acciones e inspecciones
+- [ ] Entrega 6 — Incidentes y permisos de trabajo
+- [ ] Entrega 7 — EPP, NFC, firma de release, versión 1.0
 
 ## Pendiente — operación (usuario)
 - [ ] Aplicar migraciones en Indumor (`/admin/migraciones` → "Actualizar base de datos")
