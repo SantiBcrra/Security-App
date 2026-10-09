@@ -40,7 +40,8 @@ final class RoundsController
 
     public function pointForm(Request $request): Response
     {
-        return Response::html(View::render('panel/rounds/point', ['title' => 'Nuevo punto de ronda', 'sites' => Sites::options(), 'sectors' => Sectors::options()], 'layouts/app'));
+        [$old, $errors] = Flash::pullInput();
+        return Response::html(View::render('panel/rounds/point', ['title' => 'Nuevo punto de ronda', 'sites' => Sites::options(), 'sectors' => Sectors::options(), 'old' => $old, 'errors' => $errors], 'layouts/app'));
     }
 
     public function routeForm(Request $request): Response
@@ -73,10 +74,13 @@ final class RoundsController
     {
         $p = $request->post;
         $name = trim((string) ($p['name'] ?? '')); $code = trim((string) ($p['code'] ?? ''));
-        $hasCoords = is_numeric($p['lat'] ?? null) && is_numeric($p['lng'] ?? null);
-        $lat = (float) ($p['lat'] ?? 0); $lng = (float) ($p['lng'] ?? 0);
+        $latRaw = str_replace(',', '.', trim((string) ($p['lat'] ?? '')));
+        $lngRaw = str_replace(',', '.', trim((string) ($p['lng'] ?? '')));
+        $hasCoords = is_numeric($latRaw) && is_numeric($lngRaw);
+        $lat = (float) $latRaw; $lng = (float) $lngRaw;
         if ($name === '' || $code === '' || !$hasCoords || ($lat == 0 && $lng == 0) || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
             Flash::add('danger', 'Nombre, código y coordenadas válidas son obligatorios.');
+            Flash::withInput(array_diff_key($p, ['csrf_token' => 1]));
             return Response::redirect('/panel/rondas/puntos/nuevo');
         }
         try {
