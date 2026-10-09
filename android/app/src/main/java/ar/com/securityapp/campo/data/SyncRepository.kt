@@ -6,10 +6,17 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 
 /**
- * Sincronización con el servidor: baja los cambios desde el último cursor (datos maestros, rutas, lo visible para el
- * usuario) y los guarda en la base local. El envío de lo hecho offline (outbox) se suma en la entrega 2.
+ * Sincronización con el servidor: primero manda la cola de lo hecho offline (outbox) y después baja los cambios desde el
+ * último cursor (datos maestros, rutas, lo visible para el usuario) a la base local.
  */
-class SyncRepository(private val api: ApiClient, private val prefs: Prefs, private val db: LocalDb) {
+class SyncRepository(private val api: ApiClient, private val prefs: Prefs, private val db: LocalDb, private val outbox: Outbox) {
+
+    data class Full(val sent: Int, val failed: Int, val pulled: Result)
+
+    suspend fun syncAll(): Full {
+        val pushed = outbox.push()
+        return Full(pushed.sent, pushed.failed, pull())
+    }
 
     data class Result(val pages: Int, val changes: Int, val deleted: Int)
 

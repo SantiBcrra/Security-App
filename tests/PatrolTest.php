@@ -93,8 +93,11 @@ return [
         Tenant::activate($st['a']);
         UserAuth::setCurrent($st['g1']);
         $round = Uuid::v4();
-        assert_same('ok', Push::run([$op('round.start', ['uuid' => $round])])[0]['status']);
+        $startedAt = gmdate('Y-m-d\TH:i:s\Z', time() - 300);
+        assert_same('ok', Push::run([$op('round.start', ['uuid' => $round, 'started_at_device' => $startedAt])])[0]['status']);
         assert_same('ok', Push::run([$op('round.start', ['uuid' => $round])])[0]['status'], 'otro op_id, misma ronda');
+        assert_same(gmdate('Y-m-d H:i:s', strtotime($startedAt)), DB::tenant()->query('SELECT started_at FROM patrol_rounds')->fetchColumn(),
+            'la ronda empezada sin señal guarda la hora del celular');
         assert_same(1, (int) DB::tenant()->query('SELECT COUNT(*) FROM patrol_rounds')->fetchColumn());
         UserAuth::setCurrent($st['g2']);
         assert_same('error', Push::run([$op('round.start', ['uuid' => $round])])[0]['status'], 'no puede tomar la ronda de otro');
@@ -117,6 +120,14 @@ return [
         assert_same('error', $scan($st['p2'], ['uuid' => 'x'])['status'], 'uuid inválido');
         $far = $scan($st['p2']);
         assert_same(false, $far['data']['within_radius'], 'a ~150 m del depósito queda fuera del radio');
+        $p3 = Patrols::createPoint(['name' => 'Garita', 'code' => 'P3', 'description' => '', 'site_id' => null, 'sector_id' => null,
+            'lat' => -34.6037, 'lng' => -58.3816, 'radius_m' => 50, 'is_critical' => 0]);
+        $mars = Push::run([$op('round.scan', ['uuid' => Uuid::v4(), 'round_uuid' => $st['round'], 'point_uuid' => ($st['uuid'])($p3),
+            'lat' => 37.42, 'lng' => -122.08, 'accuracy_m' => 5, 'scanned_at_device' => gmdate('Y-m-d\TH:i:s\Z', time() - 60)])])[0];
+        assert_same('ok', $mars['status'], 'un GPS a 10.000 km no hace fallar el escaneo: ' . json_encode($mars));
+        assert_same([false, false], [$mars['data']['within_radius'], $mars['data']['duplicate']]);
+        DB::tenant()->exec('DELETE FROM patrol_scans WHERE point_id = ' . (int) $p3);
+        DB::tenant()->exec('UPDATE patrol_points SET is_active = 0 WHERE id = ' . (int) $p3);
         $saved = DB::tenant()->query('SELECT scanned_at_device, accuracy_m FROM patrol_scans ORDER BY id LIMIT 1')->fetch();
         assert_same(gmdate('Y-m-d H:i:s', time() - 120), $saved['scanned_at_device'], 'conserva la hora del celular en UTC');
         DB::tenant()->exec('UPDATE patrol_points SET is_active = 0 WHERE id = ' . $st['p2']);
@@ -131,8 +142,18 @@ return [
         $setup();
         Tenant::activate($st['a']);
         UserAuth::setCurrent($st['g1']);
-        $r = Push::run([$op('round.finish', ['round_uuid' => $st['round']])])[0];
+        $finishedAt = gmdate('Y-m-d\TH:i:s\Z', time() - 60);
+        // Escaneo hecho sin señal que llega después del fin (reintento): vale si fue antes de terminar.
+        $late = Patrols::createPoint(['name' => 'Tardío', 'code' => 'P9', 'description' => '', 'site_id' => null, 'sector_id' => null,
+            'lat' => -34.6037, 'lng' => -58.3816, 'radius_m' => 30, 'is_critical' => false]);
+        $r = Push::run([$op('round.finish', ['round_uuid' => $st['round'], 'finished_at_device' => $finishedAt])])[0];
         assert_same('completa', $r['data']['status']);
+        $lateScan = fn (int $secondsAgo) => Push::run([$op('round.scan', ['uuid' => Uuid::v4(), 'round_uuid' => $st['round'], 'point_uuid' => ($st['uuid'])($late),
+            'lat' => -34.6037, 'lng' => -58.3816, 'scanned_at_device' => gmdate('Y-m-d\TH:i:s\Z', time() - $secondsAgo)])])[0];
+        assert_same('error', $lateScan(10)['status'], 'después del fin no vale');
+        assert_same('ok', $lateScan(90)['status'], 'antes del fin, llegado tarde, vale');
+        DB::tenant()->exec('UPDATE patrol_points SET is_active = 0 WHERE id = ' . (int) $late);
+        assert_same(gmdate('Y-m-d H:i:s', strtotime($finishedAt)), DB::tenant()->query("SELECT finished_at FROM patrol_rounds WHERE uuid = '{$st['round']}'")->fetchColumn());
         UserAuth::setCurrent($st['g2']);
         Push::run([$op('round.start', ['uuid' => Uuid::v4()])]);
         $rounds = fn () => (array) (Pull::run(null, 1000)['changes']->patrol_rounds ?? []);

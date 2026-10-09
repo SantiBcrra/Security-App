@@ -1,7 +1,6 @@
 package ar.com.securityapp.campo.ui
 
 import android.content.Intent
-import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -70,6 +69,9 @@ import kotlinx.coroutines.launch
 /** Módulo del menú: se muestra solo si el rol tiene el permiso `ver`. Se habilitan de a uno en las próximas entregas. */
 private data class Module(val key: String, val label: String, val hint: String, val icon: ImageVector)
 
+/** Módulos que ya tienen pantalla en la app (el resto se habilita en las próximas entregas). */
+private val READY = setOf("rondas")
+
 private val MODULES = listOf(
     Module("rondas", "Rondas", "Recorridas con QR y NFC", Icons.Filled.LocationOn),
     Module("observaciones", "Observaciones", "Reportar actos y condiciones", Icons.Filled.Search),
@@ -85,11 +87,15 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     val sync by vm.sync.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
+    var openModule by remember { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     if (showSettings) {
         SettingsScreen(vm, me, onBack = { showSettings = false })
         return
+    }
+    when (openModule) {
+        "rondas" -> { ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; vm.refreshCounts() }); return }
     }
     val modules = MODULES.filter { me.can(it.key) }
 
@@ -125,7 +131,10 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
                 Text("Qué podés hacer", style = MaterialTheme.typography.titleSmall, color = Muted, modifier = Modifier.padding(top = 4.dp))
             }
             items(modules, key = { it.key }) { m ->
-                ModuleTile(m) { scope.launch { snackbar.showSnackbar("${m.label}: llega en la próxima versión de la app.") } }
+                ModuleTile(m, ready = m.key in READY) {
+                    if (m.key in READY) openModule = m.key
+                    else scope.launch { snackbar.showSnackbar("${m.label}: llega en la próxima versión de la app.") }
+                }
             }
             if (modules.isEmpty()) {
                 item(span = { GridItemSpan(2) }) {
@@ -137,12 +146,16 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
 }
 
 @Composable
-private fun ModuleTile(m: Module, onClick: () -> Unit) {
+private fun ModuleTile(m: Module, ready: Boolean, onClick: () -> Unit) {
     Card(Modifier.fillMaxWidth().height(128.dp).clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
         Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.SpaceBetween) {
-            Box(Modifier.size(42.dp).background(Color(0xFFE8EAF0), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                Icon(m.icon, null, tint = Brand)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(42.dp).background(if (ready) Accent else Color(0xFFE8EAF0), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                    Icon(m.icon, null, tint = if (ready) BrandDark else Muted)
+                }
+                Spacer(Modifier.weight(1f))
+                if (!ready) Text("Pronto", style = MaterialTheme.typography.labelSmall, color = Muted)
             }
             Column {
                 Text(m.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -161,10 +174,12 @@ private fun SyncCard(sync: SyncState) {
                 Spacer(Modifier.width(8.dp))
                 Text(
                     if (sync.lastSync == 0L) "Todavía no se sincronizó"
-                    else "Sincronizado " + DateUtils.getRelativeTimeSpanString(sync.lastSync, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS),
+                    else "Sincronizado " + ago(sync.lastSync),
                     style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
                 )
             }
+            if (sync.pending > 0) Text("${sync.pending} envío(s) esperando señal", style = MaterialTheme.typography.bodySmall,
+                color = BrandDark, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
             sync.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if (sync.error) Danger else Muted, modifier = Modifier.padding(top = 4.dp)) }
             if (sync.counts.isNotEmpty()) {
                 val labels = mapOf("sectors" to "sectores", "equipment" to "equipos", "employees" to "empleados", "patrol_routes" to "rutas",
@@ -173,6 +188,17 @@ private fun SyncCard(sync: SyncState) {
                     style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 4.dp))
             }
         }
+    }
+}
+
+/** "hace un momento", "hace 5 min", "hace 2 h", "el 09/10 16:20" (siempre en español, aunque el celular esté en otro idioma). */
+private fun ago(ms: Long): String {
+    val min = (System.currentTimeMillis() - ms) / 60_000
+    return when {
+        min < 1 -> "hace un momento"
+        min < 60 -> "hace $min min"
+        min < 24 * 60 -> "hace ${min / 60} h"
+        else -> "el " + java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale("es", "AR")).format(java.util.Date(ms))
     }
 }
 

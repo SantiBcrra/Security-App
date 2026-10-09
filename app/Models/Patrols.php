@@ -150,7 +150,8 @@ final class Patrols
         }
     }
 
-    public static function start(?string $routeUuid, ?float $lat, ?float $lng, ?string $roundUuid = null): array
+    /** @param ?string $startedAt hora del celular (ISO 8601): la ronda pudo empezar sin señal y llegar después */
+    public static function start(?string $routeUuid, ?float $lat, ?float $lng, ?string $roundUuid = null, ?string $startedAt = null): array
     {
         $routeId = null;
         if ($routeUuid !== null && $routeUuid !== '') {
@@ -166,8 +167,8 @@ final class Patrols
             if ((int) $existing['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('La ronda no está disponible.');
             return $existing;
         }
-        DB::tenant()->prepare('INSERT INTO patrol_rounds (uuid,route_id,user_id,status,started_at,started_lat,started_lng,created_at,updated_at) VALUES (?,?,?,\'en_curso\',UTC_TIMESTAMP(),?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
-            ->execute([$uuid, $routeId, (int) UserAuth::user()['id'], $lat, $lng]);
+        DB::tenant()->prepare('INSERT INTO patrol_rounds (uuid,route_id,user_id,status,started_at,started_lat,started_lng,created_at,updated_at) VALUES (?,?,?,\'en_curso\',?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
+            ->execute([$uuid, $routeId, (int) UserAuth::user()['id'], self::deviceTime($startedAt), $lat, $lng]);
         return self::round($uuid) ?? [];
     }
 
@@ -202,29 +203,37 @@ final class Patrols
         $point = self::point((string) ($data['point_uuid'] ?? ''));
         if (!$point || (int) $point['is_active'] !== 1 || $point['deleted_at'] !== null) throw new UserError('El QR no corresponde a un punto activo.');
         $round = self::round((string) ($data['round_uuid'] ?? ''));
-        if (!$round || $round['status'] !== 'en_curso' || (int) $round['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('La ronda no está disponible.');
+        if (!$round || (int) $round['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('La ronda no está disponible.');
+        $at = self::deviceTime($data['scanned_at_device'] ?? null);
+        // Sin señal el escaneo puede llegar después del fin de la ronda (reintento): vale si se hizo antes de terminarla.
+        $late = $round['status'] !== 'en_curso';
+        if ($late && ($round['finished_at'] === null || $at > $round['finished_at'])) throw new UserError('La ronda no está disponible.');
         $lat = isset($data['lat']) && $data['lat'] !== '' ? (float) $data['lat'] : null;
         $lng = isset($data['lng']) && $data['lng'] !== '' ? (float) $data['lng'] : null;
-        $distance = ($lat !== null && $lng !== null) ? self::distance($lat, $lng, (float) $point['lat'], (float) $point['lng']) : null;
+        $distance = ($lat !== null && $lng !== null) ? min(self::distance($lat, $lng, (float) $point['lat'], (float) $point['lng']), 999999999.0) : null;
         $inside = $distance !== null && $distance <= (int) $point['radius_m'];
         $exists = DB::tenant()->prepare('SELECT uuid FROM patrol_scans WHERE round_id=? AND point_id=? LIMIT 1');
         $exists->execute([(int) $round['id'], (int) $point['id']]);
         if ($old = $exists->fetchColumn()) return ['uuid' => $old, 'duplicate' => true, 'within_radius' => $inside, 'distance_m' => $distance];
         $uuid = (string) ($data['uuid'] ?? Uuid::v4());
         if (!Uuid::isValid($uuid)) throw new UserError('Identificador de escaneo inválido.');
-        $at = self::deviceTime($data['scanned_at_device'] ?? null);
-        $accuracy = isset($data['accuracy_m']) && is_numeric($data['accuracy_m']) ? (float) $data['accuracy_m'] : null;
+        $accuracy = isset($data['accuracy_m']) && is_numeric($data['accuracy_m']) ? min(max((float) $data['accuracy_m'], 0.0), 999999999.0) : null;
         DB::tenant()->prepare('INSERT INTO patrol_scans (uuid,round_id,point_id,user_id,scanned_at_device,received_at,lat,lng,accuracy_m,distance_m,within_radius,note,created_at,updated_at) VALUES (?,?,?,?,?,UTC_TIMESTAMP(),?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
             ->execute([$uuid, (int) $round['id'], (int) $point['id'], (int) UserAuth::user()['id'], $at, $lat, $lng, $accuracy, $distance, $inside ? 1 : 0, $data['note'] ?? null]);
+        if ($late && $round['route_id'] !== null) {
+            $status = self::missingPoints((int) $round['id'], (int) $round['route_id']) > 0 ? 'incompleta' : 'completa';
+            DB::tenant()->prepare('UPDATE patrol_rounds SET status = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([$status, (int) $round['id']]);
+        }
         return ['uuid' => $uuid, 'point_uuid' => $point['uuid'], 'within_radius' => $inside, 'distance_m' => $distance, 'duplicate' => false];
     }
 
-    public static function finish(string $uuid): array
+    public static function finish(string $uuid, ?string $finishedAt = null): array
     {
         $round = self::round($uuid);
         if (!$round || (int) $round['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('La ronda no existe.');
         $status = $round['route_id'] !== null && self::missingPoints((int) $round['id'], (int) $round['route_id']) > 0 ? 'incompleta' : 'completa';
-        DB::tenant()->prepare("UPDATE patrol_rounds SET status=?, finished_at=UTC_TIMESTAMP(), updated_at=UTC_TIMESTAMP() WHERE id=? AND status='en_curso'")->execute([$status, (int) $round['id']]);
+        $at = max(self::deviceTime($finishedAt), (string) $round['started_at']); // nunca antes de empezar
+        DB::tenant()->prepare("UPDATE patrol_rounds SET status=?, finished_at=?, updated_at=UTC_TIMESTAMP() WHERE id=? AND status='en_curso'")->execute([$status, $at, (int) $round['id']]);
         return self::round($uuid) ?? $round;
     }
 

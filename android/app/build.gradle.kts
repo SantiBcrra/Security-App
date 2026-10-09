@@ -14,7 +14,9 @@ android {
         // El applicationId NO se puede cambiar una vez instalada la app en los celulares.
         applicationId = "ar.com.securityapp.campo"
         minSdk = 26
-        targetSdk = 37
+        // 35 a propósito: al apuntar a Android 17 (37) el sistema bloquea las conexiones a la red local (la Mac con XAMPP
+        // en 10.0.2.2 o por Wi-Fi) y la app no llega al servidor de desarrollo. Sin Google Play no hay exigencia de subirlo.
+        targetSdk = 35
         // Subir los dos en cada versión publicada en /admin/app-android (versionCode siempre crece).
         versionCode = 1
         versionName = "0.1.0"
@@ -64,6 +66,12 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.play.services.location)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

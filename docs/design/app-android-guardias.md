@@ -124,7 +124,7 @@ además de lo de guardias se suman, por módulo, las pantallas que tenía la PWA
    consentimiento (`GET/POST /api/v1/consent`), inicio con los módulos según permisos, sincronización (pull a SQLite
    local), ajustes; servidor: `/admin/app-android` (publicar APK), `/descargas/android` (QR + guía), `GET /api/v1/app/android`
    y actualización desde la app (descarga, SHA-256, instalador de Android).
-2. **Rondas offline con QR**: outbox + WorkManager, iniciar/escanear/finalizar.
+2. **Rondas offline con QR** ✅: outbox + WorkManager, iniciar/escanear/finalizar, rechazos visibles en Ajustes.
 3. **Seguridad del guardia**: GPS durante la ronda, pánico (datos + SMS), "guardia sin señal".
 4. **Observaciones y avisos**: observaciones con fotos (subida por partes), FCM y canal crítico, "Recibido".
 5. **Acciones e inspecciones**: mis acciones (tomar, cerrar con evidencia) y checklists con fotos.

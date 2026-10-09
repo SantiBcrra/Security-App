@@ -322,6 +322,15 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Distribución sin Google Play: tabla maestra `app_releases` (migración master 0007), `/admin/app-android` (subir APK,
   versión mínima obligatoria), `/descargas/android` (QR + guía), `GET /api/v1/app/android` (sin sesión). La app baja el
   APK, verifica SHA-256 y abre el instalador. **La clave de firma de release no va al repo: respaldarla.**
+- Rondas (entrega 2): `RoundsRepository` guarda ronda/escaneos en la base local y encola `round.start` (con
+  `started_at_device`), `round.scan` y `round.finish` (con `finished_at_device`) en `Outbox` (orden de creación, op_id).
+  `SyncWorker` (WorkManager, requiere red, reintento exponencial + periódico 15 min) manda la cola y baja cambios: lo hecho
+  sin señal sale solo al reconectar. Rechazos del servidor quedan en Ajustes (reintentar con otro op_id / descartar).
+  QR con CameraX + ML Kit (sin internet), ubicación puntual con Fused Location. En debug: "Simular escaneo" (emulador).
+  Servidor: un escaneo que llega después del fin vale si `scanned_at_device` ≤ `finished_at` (recalcula completa/incompleta);
+  `distance_m`/`accuracy_m` DECIMAL(11,2) (migración 0062: un GPS a miles de km no rompe el escaneo).
+- **`targetSdk` 35 a propósito**: apuntando a Android 17 (37) el sistema bloquea las conexiones a la red local y la app no
+  llega al XAMPP de la Mac (10.0.2.2 o la IP por Wi-Fi). Sin Google Play no hay exigencia de subirlo.
 - Consentimiento (celular personal, Ley 25.326): `Consent::VERSION` + texto en el servidor, `user_consents` (tenant 0061),
   `GET/POST /api/v1/consent`; `/me` informa `consentimiento`.
 

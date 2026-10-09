@@ -136,7 +136,8 @@ final class Push
     private static function roundStart(array $data): array
     {
         if (!UserAuth::can('rondas', 'crear')) return self::error('Tu rol no puede iniciar rondas.');
-        $r = Patrols::start(!empty($data['route_uuid']) ? (string) $data['route_uuid'] : null, isset($data['lat']) ? (float) $data['lat'] : null, isset($data['lng']) ? (float) $data['lng'] : null, (string) ($data['uuid'] ?? ''));
+        $r = Patrols::start(!empty($data['route_uuid']) ? (string) $data['route_uuid'] : null, isset($data['lat']) ? (float) $data['lat'] : null, isset($data['lng']) ? (float) $data['lng'] : null, (string) ($data['uuid'] ?? ''),
+            isset($data['started_at_device']) ? (string) $data['started_at_device'] : null);
         return ['status' => 'ok', 'data' => ['uuid' => $r['uuid'], 'status' => $r['status']]];
     }
 
@@ -149,7 +150,7 @@ final class Push
     private static function roundFinish(array $data): array
     {
         if (!UserAuth::can('rondas', 'cerrar')) return self::error('Tu rol no puede cerrar rondas.');
-        $r = Patrols::finish((string) ($data['round_uuid'] ?? ''));
+        $r = Patrols::finish((string) ($data['round_uuid'] ?? ''), isset($data['finished_at_device']) ? (string) $data['finished_at_device'] : null);
         return ['status' => 'ok', 'data' => ['uuid' => $r['uuid'], 'status' => $r['status']]];
     }
 

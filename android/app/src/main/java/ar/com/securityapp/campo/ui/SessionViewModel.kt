@@ -23,7 +23,7 @@ sealed interface Screen {
 }
 
 data class SyncState(val running: Boolean = false, val lastSync: Long = 0L, val message: String? = null, val error: Boolean = false,
-                     val counts: Map<String, Int> = emptyMap())
+                     val counts: Map<String, Int> = emptyMap(), val pending: Int = 0)
 
 data class UpdateState(val release: UpdateManager.Release? = null, val downloading: Boolean = false, val progress: Float = 0f, val error: String? = null)
 
@@ -39,6 +39,7 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { c.sessionLost.collect { _screen.value = Screen.Login(error = "Tu sesión venció o fue cerrada. Ingresá de nuevo.") } }
+        viewModelScope.launch { c.dataChanged.collect { refreshCounts() } }
         start()
     }
 
@@ -87,6 +88,7 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         _screen.value = Screen.Home(me)
+        ar.com.securityapp.campo.sync.SyncWorker.schedulePeriodic(getApplication())
         syncNow()
     }
 
@@ -104,18 +106,43 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
         if (_sync.value.running) return@launch
         _sync.value = _sync.value.copy(running = true, message = null, error = false)
         _sync.value = try {
-            val r = c.sync.pull()
+            val full = c.sync.syncAll()
+            val r = full.pulled
             (_screen.value as? Screen.Home)?.let { runCatching { _screen.value = Screen.Home(c.auth.refreshMe()) } }
-            SyncState(lastSync = c.prefs.lastSync, message = if (r.changes + r.deleted == 0) "Todo al día." else "Se actualizaron ${r.changes} dato(s).", counts = counts())
+            val parts = listOfNotNull(
+                if (full.sent > 0) "Se enviaron ${full.sent} registro(s)." else null,
+                if (full.failed > 0) "${full.failed} rechazado(s): ver Ajustes." else null,
+                if (r.changes + r.deleted > 0) "Se actualizaron ${r.changes} dato(s)." else null,
+            )
+            c.dataChanged.tryEmit(Unit)
+            SyncState(lastSync = c.prefs.lastSync, message = parts.joinToString(" ").ifEmpty { "Todo al día." }, error = full.failed > 0,
+                counts = counts(), pending = c.outbox.pendingCount())
         } catch (e: OfflineException) {
-            SyncState(lastSync = c.prefs.lastSync, message = "Sin señal: se usa lo guardado en el celular.", error = true, counts = counts())
+            SyncState(lastSync = c.prefs.lastSync, message = "Sin señal: se usa lo guardado en el celular y se envía cuando vuelva la conexión.", error = true,
+                counts = counts(), pending = c.outbox.pendingCount())
         } catch (e: ApiException) {
-            SyncState(lastSync = c.prefs.lastSync, message = e.message, error = true, counts = counts())
+            SyncState(lastSync = c.prefs.lastSync, message = e.message, error = true, counts = counts(), pending = c.outbox.pendingCount())
         }
     }
 
+    fun refreshCounts() {
+        _sync.value = _sync.value.copy(counts = counts(), pending = c.outbox.pendingCount(), lastSync = c.prefs.lastSync)
+    }
+
+    fun failedOps() = c.outbox.failed()
+
+    fun retryOp(op: ar.com.securityapp.campo.data.LocalDb.Op) {
+        c.outbox.retry(op)
+        ar.com.securityapp.campo.sync.SyncWorker.now(getApplication())
+    }
+
+    fun discardOp(op: ar.com.securityapp.campo.data.LocalDb.Op) = c.outbox.discard(op)
+
     private fun counts(): Map<String, Int> = listOf("sectors", "equipment", "employees", "patrol_routes", "patrol_points", "actions", "inspection_schedule")
         .associateWith { c.db.count(it) }
+
+    /** Hay envíos sin confirmar: al salir se perderían. */
+    fun pendingCount(): Int = c.outbox.pendingCount()
 
     fun logout() = viewModelScope.launch {
         c.auth.logout()

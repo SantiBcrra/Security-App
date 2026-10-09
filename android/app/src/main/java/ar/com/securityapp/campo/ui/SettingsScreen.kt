@@ -43,7 +43,8 @@ import ar.com.securityapp.campo.ui.theme.Muted
 fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     var confirmLogout by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize()) {
+    var failed by remember { mutableStateOf(vm.failedOps()) }
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(Modifier.fillMaxWidth().background(Brand).statusBarsPadding().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onBack) { Icon(Icons.Filled.ArrowBack, "Volver", tint = Color.White) }
             Text("Ajustes", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -60,6 +61,21 @@ fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit) {
                     Row2("Dispositivo", vm.prefs.deviceUuid.take(8) + "…")
                 }
             }
+            if (failed.isNotEmpty()) {
+                Text("Envíos rechazados por el servidor", style = MaterialTheme.typography.titleSmall, color = Danger, modifier = Modifier.padding(top = 16.dp))
+                for (op in failed) {
+                    Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(OP_LABELS[op.type] ?: op.type, fontWeight = FontWeight.SemiBold)
+                            Text(op.error ?: "", style = MaterialTheme.typography.bodySmall, color = Danger)
+                            Row {
+                                TextButton({ vm.retryOp(op); failed = vm.failedOps() }) { Text("Reintentar") }
+                                TextButton({ vm.discardOp(op); failed = vm.failedOps() }) { Text("Descartar", color = Muted) }
+                            }
+                        }
+                    }
+                }
+            }
             OutlinedButton({ confirmLogout = true }, Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("Cerrar sesión", color = Danger) }
             Text("Al cerrar sesión se borra del celular todo lo descargado.", style = MaterialTheme.typography.bodySmall, color = Muted,
                 modifier = Modifier.padding(top = 6.dp))
@@ -69,12 +85,18 @@ fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit) {
         AlertDialog(
             onDismissRequest = { confirmLogout = false },
             title = { Text("¿Cerrar sesión?") },
-            text = { Text("Vas a tener que volver a ingresar con tu usuario y contraseña.") },
+            text = {
+                val pending = vm.pendingCount()
+                Text(if (pending > 0) "Hay $pending registro(s) sin enviar (sin señal). Si cerrás sesión SE PIERDEN. Conectate y sincronizá antes."
+                     else "Vas a tener que volver a ingresar con tu usuario y contraseña.")
+            },
             confirmButton = { TextButton({ confirmLogout = false; vm.logout() }) { Text("Cerrar sesión", color = Danger) } },
             dismissButton = { TextButton({ confirmLogout = false }) { Text("Cancelar") } },
         )
     }
 }
+
+private val OP_LABELS = mapOf("round.start" to "Inicio de ronda", "round.scan" to "Escaneo de punto", "round.finish" to "Fin de ronda")
 
 @Composable
 private fun Row2(label: String, value: String) {

@@ -57,6 +57,7 @@ class ApiClient(private val prefs: Prefs, private val tokens: TokenStore, privat
             try {
                 http.newCall(builder.build()).execute().use { res -> res.code to (res.body?.string() ?: "") }
             } catch (e: IOException) {
+                android.util.Log.w("SecurityApp", "Sin conexión con $url", e)
                 throw OfflineException()
             }
         }

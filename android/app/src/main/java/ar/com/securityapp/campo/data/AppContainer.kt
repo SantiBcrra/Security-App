@@ -13,6 +13,10 @@ class AppContainer(context: Context) {
     val sessionLost = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val api = ApiClient(prefs, tokens) { sessionLost.tryEmit(Unit) }
     val auth = AuthRepository(appContext, api, prefs, tokens, db)
-    val sync = SyncRepository(api, prefs, db)
+    val outbox = Outbox(api, db)
+    val sync = SyncRepository(api, prefs, db, outbox)
+    val rounds = RoundsRepository(db, outbox, api)
+    /** Se emite después de cada sincronización (la UI vuelve a leer la base local). */
+    val dataChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     val updates = UpdateManager(appContext, api)
 }

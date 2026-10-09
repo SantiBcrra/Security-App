@@ -33,7 +33,7 @@ components:
               opcionales risk_type, equipment, location_text, lat, lng, gps_accuracy, imminent (0/1), anonymous (0/1), people[].
             observation.comment: uuid, comment.
             observation.transition: uuid, action (analizar|asignar|cerrar|descartar|reabrir), input { comment, assigned_user, action_text, action_due_on, priority, action_type }.
-            round.start: uuid, route_uuid?, lat?, lng?. round.scan: uuid, round_uuid, point_uuid, lat, lng, accuracy_m, scanned_at_device. round.finish: round_uuid.
+            round.start: uuid, route_uuid?, lat?, lng?, started_at_device? (ISO, hasta 30 días atrás). round.scan: uuid, round_uuid, point_uuid, lat, lng, accuracy_m, scanned_at_device. round.finish: round_uuid, finished_at_device?.
             action.start: uuid (tomar la acción). action.close: uuid, closure_text (≥ 10). El cierre exige evidencia del ciclo actual:
               la app sube las fotos (POST /uploads con action_uuid) ANTES de mandar action.close. Reenviar un paso ya hecho por el
               mismo usuario responde ok con duplicate: true.
