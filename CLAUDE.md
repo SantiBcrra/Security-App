@@ -371,6 +371,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - NFC y versión 1.0 (entrega 7): la etiqueta NFC de un punto = la misma URL que su QR (NDEF URI); `nfc/NfcTags` + `NfcListener`
   (reader mode solo en la pantalla de la ronda) y `NfcWriterScreen` (permiso `rondas.editar`, opción de bloquear la etiqueta).
   `round.scan` lleva `method` qr | nfc → `patrol_scans.method` (tenant 0065), visible en el detalle de la ronda.
+  Cada escaneo suena y vibra según el resultado (`ScanFeedback`: registrado, ruta completa, ya marcado, error / etiqueta vacía).
   Ícono propio (adaptable, escudo amarillo sobre pizarra + monocromo) e `ic_notification` para los avisos.
   Versión final: `versionCode 10` / `1.0.0`; firma y `serverUrl` desde `android/keystore.properties` (gitignored, ver
   `.example`); sin eso `assembleRelease` se corta. **Sin R8** (con la optimización de AGP 9 se cerraba al abrir). Pasos para

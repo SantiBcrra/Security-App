@@ -32,7 +32,8 @@ data class Fix(val lat: Double, val lng: Double, val accuracyM: Float)
 class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, private val api: ApiClient) {
 
     sealed interface ScanResult {
-        data class Ok(val point: PatrolPoint, val hasGps: Boolean, val remaining: Int) : ScanResult
+        /** @param remaining puntos de la ruta que faltan (null = ronda libre, sin ruta) */
+        data class Ok(val point: PatrolPoint, val hasGps: Boolean, val remaining: Int?) : ScanResult
         data class AlreadyScanned(val point: PatrolPoint) : ScanResult
         data class NotInRoute(val point: PatrolPoint) : ScanResult
         data object UnknownQr : ScanResult
@@ -88,7 +89,7 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
         }.toString()))
         outbox.enqueue("round.scan", data)
         val remaining = route?.points?.count { p -> p != pointUuid && done.none { it.pointUuid == p } } ?: 0
-        return ScanResult.Ok(point, fix != null, remaining)
+        return ScanResult.Ok(point, fix != null, if (route == null) null else remaining)
     }
 
     /** Los puntos de la ruta que faltan quedan como salteados (el servidor marca la ronda "incompleta"). */

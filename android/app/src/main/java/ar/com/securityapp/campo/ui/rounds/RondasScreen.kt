@@ -84,9 +84,14 @@ fun RondasScreen(onBack: () -> Unit, canWriteTags: Boolean = false, vm: RoundsVi
     // Ronda en curso: acercar el celular a la etiqueta NFC del punto marca igual que el QR.
     ar.com.securityapp.campo.nfc.NfcListener(enabled = ui.active != null && !scanning && scan == null) { tag ->
         val raw = ar.com.securityapp.campo.nfc.NfcTags.read(tag)
-        if (raw == null) nfcMessage = "La etiqueta está vacía o no se pudo leer. Mantené el celular quieto sobre ella o escaneá el QR."
+        if (raw == null) {
+            ScanFeedback.play(context, ScanFeedback.Kind.ERROR)
+            nfcMessage = "La etiqueta está vacía o no se pudo leer. Mantené el celular quieto sobre ella o escaneá el QR."
+        }
         else vm.onQr(raw, method = "nfc")
     }
+    // Cada resultado de escaneo (QR o NFC) suena y vibra distinto: registrado, ronda completa, ya marcado o error.
+    androidx.compose.runtime.LaunchedEffect(scan) { scan?.let { ScanFeedback.play(context, ScanFeedback.forResult(it)) } }
     if (scanning) {
         QrScanner("Apuntá al QR del punto de control", onResult = { scanning = false; vm.onQr(it) }, onClose = { scanning = false })
         return
@@ -242,9 +247,13 @@ private fun HistoryRow(r: PatrolRound, routeName: String?) {
 @Composable
 private fun ScanDialog(result: ScanResult, onConfirmOutside: () -> Unit, onDismiss: () -> Unit, onScanAgain: () -> Unit) {
     val (title, text) = when (result) {
-        is ScanResult.Ok -> "✓ ${result.point.name}" to buildString {
+        is ScanResult.Ok -> "✓ Registrado: ${result.point.name}" to buildString {
             append(if (result.hasGps) "Punto registrado con ubicación." else "Punto registrado SIN ubicación (activá el GPS).")
-            if (result.remaining > 0) append("\nFaltan ${result.remaining} punto(s).") else append("\nNo quedan puntos de la ruta.")
+            when (result.remaining) {
+                null -> {}
+                0 -> append("\nNo quedan puntos de la ruta: ya podés finalizar la ronda.")
+                else -> append("\nFaltan ${result.remaining} punto(s).")
+            }
         }
         is ScanResult.AlreadyScanned -> "Ya registrado" to "${result.point.name} ya está registrado en esta ronda."
         is ScanResult.NotInRoute -> "Fuera de la ruta" to "${result.point.name} no es parte de la ruta en curso. ¿Registrarlo igual?"
@@ -253,12 +262,13 @@ private fun ScanDialog(result: ScanResult, onConfirmOutside: () -> Unit, onDismi
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Text(title, color = if (result is ScanResult.Ok) Ok else if (result is ScanResult.AlreadyScanned) MaterialTheme.colorScheme.onSurface else Danger,
+            fontWeight = FontWeight.Bold) },
         text = { Text(text) },
         confirmButton = {
             when (result) {
                 is ScanResult.NotInRoute -> TextButton(onConfirmOutside) { Text("Registrar") }
-                is ScanResult.Ok -> if (result.remaining > 0) TextButton(onScanAgain) { Text("Escanear el próximo") } else TextButton(onDismiss) { Text("Listo") }
+                is ScanResult.Ok -> if (result.remaining != 0) TextButton(onScanAgain) { Text("Escanear el próximo") } else TextButton(onDismiss) { Text("Listo") }
                 else -> TextButton(onScanAgain) { Text("Escanear otro") }
             }
         },
