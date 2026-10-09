@@ -60,6 +60,17 @@ final class Channels
             ], (bool) $row['is_critical']);
             return;
         }
+        if (str_starts_with($row['to_address'], 'fcm:')) { // app Android nativa (Firebase)
+            try {
+                Fcm::send(substr($row['to_address'], 4), [
+                    'title' => $row['subject'], 'body' => mb_strimwidth((string) $row['body_text'], 0, 400, '…'), 'url' => (string) ($payload['url'] ?? ''),
+                    'event' => (string) ($payload['event'] ?? ''), 'critical' => $row['is_critical'] ? '1' : '0', 'entity' => (string) ($row['entity_uuid'] ?? ''),
+                ], (bool) $row['is_critical']);
+            } catch (FcmTokenGone) {
+                \App\Core\DB::tenant()->prepare('UPDATE user_devices SET push_token = NULL WHERE push_token = ?')->execute([$row['to_address']]);
+            }
+            return;
+        }
         $headers = ($token = PlatformSettings::secret('push.expo_token')) ? ['Authorization: Bearer ' . $token] : [];
         $res = Http::postJson('https://exp.host/--/api/v2/push/send', [[
             'to' => $row['to_address'], 'title' => $row['subject'], 'body' => mb_strimwidth((string) $row['body_text'], 0, 180, '…'),

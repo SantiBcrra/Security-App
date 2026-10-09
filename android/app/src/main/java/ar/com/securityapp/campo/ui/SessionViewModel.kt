@@ -36,6 +36,10 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
     private val _update = MutableStateFlow(UpdateState())
     val update: StateFlow<UpdateState> = _update
     val prefs get() = c.prefs
+    private val _unread = MutableStateFlow(0)
+    val unread: StateFlow<Int> = _unread
+    /** Se abrió la app tocando una notificación: mostrar Avisos. */
+    val openAvisos = MutableStateFlow(false)
 
     init {
         viewModelScope.launch { c.sessionLost.collect { _screen.value = Screen.Login(error = "Tu sesión venció o fue cerrada. Ingresá de nuevo.") } }
@@ -90,6 +94,13 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
         _screen.value = Screen.Home(me)
         ar.com.securityapp.campo.sync.SyncWorker.schedulePeriodic(getApplication())
         syncNow()
+        viewModelScope.launch { runCatching { ar.com.securityapp.campo.push.PushRegistrar.register(getApplication(), c) } }
+    }
+
+    /** Sin Firebase, los avisos nuevos también suenan con la app abierta (pánico, riesgo inminente). */
+    fun refreshUnread() = viewModelScope.launch {
+        runCatching { _unread.value = c.notifications.list().second }
+        runCatching { c.notifications.notifyNew() }
     }
 
     fun acceptConsent() = viewModelScope.launch {
@@ -115,6 +126,7 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
                 if (r.changes + r.deleted > 0) "Se actualizaron ${r.changes} dato(s)." else null,
             )
             c.dataChanged.tryEmit(Unit)
+            refreshUnread()
             SyncState(lastSync = c.prefs.lastSync, message = parts.joinToString(" ").ifEmpty { "Todo al día." }, error = full.failed > 0,
                 counts = counts(), pending = c.outbox.pendingCount())
         } catch (e: OfflineException) {

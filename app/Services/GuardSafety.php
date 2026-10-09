@@ -158,6 +158,22 @@ final class GuardSafety
     }
 
     /** "Atendido": corta el re-aviso. Queda quién y qué se hizo. */
+    /** Estado de atención de varios pánicos (para la lista de avisos de la app). @return array<string, ?string> uuid => quién atendió (null = sin atender) */
+    public static function ackState(array $uuids): array
+    {
+        $uuids = array_values(array_unique(array_filter($uuids)));
+        if ($uuids === []) {
+            return [];
+        }
+        $st = DB::tenant()->prepare('SELECT uuid, acked_at, acked_name FROM panic_alerts WHERE uuid IN (' . implode(',', array_fill(0, count($uuids), '?')) . ')');
+        $st->execute($uuids);
+        $out = [];
+        foreach ($st->fetchAll() as $r) {
+            $out[$r['uuid']] = $r['acked_at'] !== null ? (string) ($r['acked_name'] ?: 'alguien') : null;
+        }
+        return $out;
+    }
+
     public static function ack(array $panic, string $comment): ?string
     {
         if ($panic['acked_at'] !== null) {

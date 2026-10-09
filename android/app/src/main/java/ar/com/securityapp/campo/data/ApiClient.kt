@@ -46,6 +46,22 @@ class ApiClient(private val prefs: Prefs, private val tokens: TokenStore, privat
     suspend fun post(path: String, body: JsonObject? = null, auth: Boolean = true): JsonElement =
         call("POST", path, emptyMap(), body, auth)
 
+    /** Archivo protegido de la API (fotos): `path` relativo a /api/v1 o URL completa del servidor. null si no está. */
+    suspend fun bytes(path: String, retried: Boolean = false): ByteArray? {
+        val rel = if (path.startsWith("http")) path.substringAfter("/api/v1", "") else path
+        val usedAccess = tokens.access
+        val (status, bytes) = withContext(Dispatchers.IO) {
+            val req = Request.Builder().url(apiUrl(rel)).apply { usedAccess?.let { header("Authorization", "Bearer $it") } }.build()
+            try {
+                http.newCall(req).execute().use { res -> res.code to (if (res.isSuccessful) res.body?.bytes() else null) }
+            } catch (e: IOException) {
+                throw OfflineException()
+            }
+        }
+        if (status == 401 && !retried && refreshTokens(usedAccess)) return bytes(path, retried = true)
+        return bytes
+    }
+
     private suspend fun call(method: String, path: String, query: Map<String, String>, body: JsonObject?, auth: Boolean, retried: Boolean = false): JsonElement {
         val usedAccess = tokens.access
         val (status, payload) = withContext(Dispatchers.IO) {

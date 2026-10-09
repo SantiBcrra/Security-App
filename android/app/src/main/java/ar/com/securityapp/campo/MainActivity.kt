@@ -17,6 +17,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleIntent(intent)
         setContent {
             SecurityAppTheme {
                 val screen by vm.screen.collectAsStateWithLifecycle()
@@ -25,8 +26,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: android.content.Intent?) {
+        if (intent?.getStringExtra(ar.com.securityapp.campo.push.Notifs.EXTRA_OPEN) == "avisos") vm.openAvisos.value = true
+    }
+
     override fun onResume() {
         super.onResume()
         vm.refreshUpdate() // al volver del instalador o de los ajustes
+        vm.refreshUnread()
     }
 }

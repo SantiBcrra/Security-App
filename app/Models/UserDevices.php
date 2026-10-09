@@ -28,6 +28,16 @@ final class UserDevices
         return $uuid;
     }
 
+    /** Token de notificaciones del celular (FCM: "fcm:{token}"). Un token pertenece a un solo dispositivo. */
+    public static function setPushToken(int $id, ?string $token): void
+    {
+        $db = DB::tenant();
+        if ($token !== null) {
+            $db->prepare('UPDATE user_devices SET push_token = NULL WHERE push_token = ? AND id <> ?')->execute([$token, $id]);
+        }
+        $db->prepare('UPDATE user_devices SET push_token = ? WHERE id = ?')->execute([$token, $id]);
+    }
+
     public static function findByUuid(string $uuid): ?array
     {
         return self::one('uuid', $uuid);

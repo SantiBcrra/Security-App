@@ -30,6 +30,17 @@ final class AppController
         return Response::json(['uuid' => $r['panic']['uuid'], 'duplicate' => $r['duplicate'], 'recibido' => true]);
     }
 
+    /** "Atendido" de un pánico desde el celular (supervisores / SyH con alcance más amplio que "propios"). */
+    public function ackPanic(Request $request, string $uuid): Response
+    {
+        $p = \App\Services\GuardSafety::findPanic($uuid);
+        if ($p === null || !\App\Services\UserAuth::can('rondas', 'ver') || \App\Services\UserAuth::scope('rondas') === 'propios') {
+            return Response::jsonError('Alerta inexistente o sin permiso.', 404);
+        }
+        $error = \App\Services\GuardSafety::ack($p, (string) $request->input('comment', ''));
+        return $error ? Response::jsonError($error, 422) : Response::json(['acked' => true]);
+    }
+
     public function consent(Request $request): Response
     {
         return Response::json(['version' => Consent::VERSION, 'texto' => Consent::text(), 'aceptado' => Consent::accepted((int) UserAuth::user()['id'])]);

@@ -126,7 +126,7 @@ además de lo de guardias se suman, por módulo, las pantallas que tenía la PWA
    y actualización desde la app (descarga, SHA-256, instalador de Android).
 2. **Rondas offline con QR** ✅: outbox + WorkManager, iniciar/escanear/finalizar, rechazos visibles en Ajustes.
 3. **Seguridad del guardia** ✅: GPS durante la ronda, pánico (datos + SMS), "guardia sin señal".
-4. **Observaciones y avisos**: observaciones con fotos (subida por partes), FCM y canal crítico, "Recibido".
+4. **Observaciones y avisos** ✅: observaciones con fotos (subida por partes), FCM y canal crítico, "Recibido" / "Atendido".
 5. **Acciones e inspecciones**: mis acciones (tomar, cerrar con evidencia) y checklists con fotos.
 6. **Incidentes y permisos de trabajo**: reporte de incidentes; permisos (firmas, gases, LOTO, suspender, cerrar).
 7. **EPP, NFC y versión 1.0**: entregas de EPP con firma, NFC en rondas, firma de release y publicación.

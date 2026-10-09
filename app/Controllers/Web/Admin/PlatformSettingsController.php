@@ -29,7 +29,9 @@ final class PlatformSettingsController
             ],
             'wa' => ['enabled' => $s('whatsapp.enabled') === '1', 'phone_id' => $s('whatsapp.phone_id', ''), 'template' => $s('whatsapp.template', 'alerta_seguridad'),
                 'language' => $s('whatsapp.language', 'es_AR'), 'has_token' => (bool) $s('whatsapp.token')],
-            'push' => ['enabled' => $s('push.enabled', '1') === '1', 'has_token' => (bool) $s('push.expo_token')],
+            'push' => ['enabled' => $s('push.enabled', '1') === '1', 'has_token' => (bool) $s('push.expo_token'),
+                'fcm' => \App\Services\Notify\Fcm::configured(), 'fcm_project' => json_decode((string) $s('push.fcm_google_services'), true)['project_info']['project_id'] ?? null,
+                'fcm_debug' => \App\Services\Notify\Fcm::clientConfig('ar.com.securityapp.campo.debug') !== null],
         ], 'layouts/admin'));
     }
 
@@ -51,6 +53,20 @@ final class PlatformSettingsController
             }
             if (($in['token'] ?? '') !== '') {
                 PlatformSettings::setSecret('whatsapp.token', (string) $in['token']);
+            }
+        } elseif ($section === 'fcm') {
+            $gs = trim((string) ($in['google_services'] ?? ''));
+            $sa = trim((string) ($in['service_account'] ?? ''));
+            if ($error = \App\Services\Notify\Fcm::validateConfig($gs, $sa)) {
+                Flash::add('danger', $error);
+                return Response::redirect('/admin/configuracion#fcm');
+            }
+            if ($gs !== '') {
+                PlatformSettings::set('push.fcm_google_services', json_encode(json_decode($gs, true), JSON_UNESCAPED_SLASHES));
+            }
+            if ($sa !== '') {
+                PlatformSettings::setSecret('push.fcm_service_account', $sa);
+                PlatformSettings::setSecret('push.fcm_token_cache', null);
             }
         } elseif ($section === 'push') {
             PlatformSettings::set('push.enabled', !empty($in['enabled']) ? '1' : '0');

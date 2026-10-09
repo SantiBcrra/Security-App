@@ -44,9 +44,24 @@
                 <div class="col-12"><button class="btn btn-primary btn-sm">Guardar</button></div>
             </div>
         </form>
+        <form class="card shadow-sm mb-3" method="post" action="<?= e(url('/admin/configuracion')) ?>" id="fcm">
+            <?= csrf_field() ?><input type="hidden" name="section" value="fcm">
+            <div class="card-header d-flex justify-content-between"><strong>Notificaciones de la app Android (Firebase)</strong>
+                <?= $push['fcm'] ? '<span class="badge text-bg-success">Configurado · ' . e($push['fcm_project']) . '</span>' : '<span class="badge text-bg-secondary">Sin configurar</span>' ?></div>
+            <div class="card-body row g-2">
+                <div class="col-12"><label class="form-label small mb-0">google-services.json (contenido completo)</label>
+                    <textarea class="form-control font-monospace small" name="google_services" rows="3" placeholder="<?= $push['fcm'] ? 'cargado: pegá uno nuevo solo para reemplazarlo' : '{ &quot;project_info&quot;: … }' ?>"></textarea>
+                    <div class="form-text">Firebase → Configuración del proyecto → Tus apps → Android → descargar google-services.json. Tiene que incluir la app <code>ar.com.securityapp.campo</code>
+                        <?= $push['fcm'] && !$push['fcm_debug'] ? ' (y para probar, <code>ar.com.securityapp.campo.debug</code>)' : '' ?>.</div></div>
+                <div class="col-12"><label class="form-label small mb-0">Cuenta de servicio (JSON, se guarda cifrada)</label>
+                    <textarea class="form-control font-monospace small" name="service_account" rows="3" placeholder="<?= $push['fcm'] ? 'guardada (cifrada)' : '{ &quot;type&quot;: &quot;service_account&quot;, … }' ?>"></textarea>
+                    <div class="form-text">Firebase → Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada.</div></div>
+                <div class="col-12"><button class="btn btn-primary btn-sm">Guardar</button></div>
+            </div>
+        </form>
         <form class="card shadow-sm" method="post" action="<?= e(url('/admin/configuracion')) ?>">
             <?= csrf_field() ?><input type="hidden" name="section" value="push">
-            <div class="card-header"><strong>Push (Expo)</strong></div>
+            <div class="card-header"><strong>Push (Expo, en desuso)</strong></div>
             <div class="card-body row g-2">
                 <div class="col-12 form-check form-switch ms-2"><input class="form-check-input" type="checkbox" name="enabled" value="1" id="push_on" <?= $push['enabled'] ? 'checked' : '' ?>><label class="form-check-label" for="push_on">Habilitado</label></div>
                 <div class="col-12"><label class="form-label small mb-0">Access token de Expo (opcional)</label><input class="form-control" type="password" name="token" autocomplete="new-password" placeholder="<?= $push['has_token'] ? 'guardado (cifrado)' : '' ?>"></div>

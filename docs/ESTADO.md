@@ -55,7 +55,7 @@ Se conservaron las APIs v1 y la sincronización del servidor para que Android si
 - [x] Entrega 1 — Base: proyecto `android/`, login con 2FA, consentimiento, sincronización, módulos según permisos, distribución propia del APK
 - [x] Entrega 2 — Rondas offline con QR (cola de envío + WorkManager, CameraX + ML Kit)
 - [x] Entrega 3 — GPS durante la ronda, pánico (datos + SMS), "guardia sin señal"
-- [ ] Entrega 4 — Observaciones con fotos, notificaciones FCM, canal crítico
+- [x] Entrega 4 — Observaciones con fotos, notificaciones FCM, canal crítico, avisos con "Recibido" / "Atendido"
 - [ ] Entrega 5 — Acciones e inspecciones
 - [ ] Entrega 6 — Incidentes y permisos de trabajo
 - [ ] Entrega 7 — EPP, NFC, firma de release, versión 1.0
@@ -65,3 +65,4 @@ Se conservaron las APIs v1 y la sincronización del servidor para que Android si
 - [ ] `gh auth login` y `git push` (hay commits locales sin subir)
 - [ ] Primer deploy al hosting: URL de producción, docroot a `public/`, `/install/check.php` en verde, cron por URL
 - [ ] Respaldar `config/config.local.php` (y más adelante el keystore de la app Android)
+- [ ] Crear el proyecto de Firebase y pegar `google-services.json` + cuenta de servicio en /admin/configuracion (notificaciones con la app cerrada)

@@ -16,6 +16,40 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "campo.db", null, VE
         db.execSQL("CREATE TABLE outbox (op_id TEXT PRIMARY KEY, type TEXT NOT NULL, data TEXT NOT NULL, status TEXT NOT NULL, " +
             "attempts INTEGER NOT NULL DEFAULT 0, error TEXT, created_at INTEGER NOT NULL)")
         createTracks(db)
+        createUploads(db)
+    }
+
+    /** Fotos esperando subir (el archivo vive en el celular hasta que el servidor confirma el hash). */
+    private fun createUploads(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS uploads (upload_uuid TEXT PRIMARY KEY, target TEXT NOT NULL, target_uuid TEXT NOT NULL, path TEXT NOT NULL, " +
+            "name TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, received INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, error TEXT, created_at INTEGER NOT NULL)")
+    }
+
+    data class Upload(val uploadUuid: String, val target: String, val targetUuid: String, val path: String, val name: String, val size: Long, val sha256: String,
+                      val received: Long, val status: String, val error: String?)
+
+    fun addUpload(u: Upload) {
+        writableDatabase.insertWithOnConflict("uploads", null, ContentValues().apply {
+            put("upload_uuid", u.uploadUuid); put("target", u.target); put("target_uuid", u.targetUuid); put("path", u.path); put("name", u.name)
+            put("size", u.size); put("sha256", u.sha256); put("received", u.received); put("status", u.status); put("created_at", System.currentTimeMillis())
+        }, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    fun uploads(status: String? = null, targetUuid: String? = null): List<Upload> {
+        val where = mutableListOf<String>()
+        val args = mutableListOf<String>()
+        status?.let { where += "status = ?"; args += it }
+        targetUuid?.let { where += "target_uuid = ?"; args += it }
+        val sql = "SELECT upload_uuid, target, target_uuid, path, name, size, sha256, received, status, error FROM uploads" +
+            (if (where.isEmpty()) "" else " WHERE " + where.joinToString(" AND ")) + " ORDER BY created_at"
+        return readableDatabase.rawQuery(sql, args.toTypedArray()).use { c ->
+            buildList { while (c.moveToNext()) add(Upload(c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getLong(5), c.getString(6),
+                c.getLong(7), c.getString(8), c.getString(9))) }
+        }
+    }
+
+    fun updateUpload(uuid: String, status: String, received: Long, error: String? = null) {
+        writableDatabase.update("uploads", ContentValues().apply { put("status", status); put("received", received); put("error", error) }, "upload_uuid = ?", arrayOf(uuid))
     }
 
     /** Posiciones de la ronda en curso: se juntan acá y se mandan en lote (`round.track`). */
@@ -27,6 +61,7 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "campo.db", null, VE
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // Nunca se borra la cola de envío: solo se agregan tablas.
         if (oldVersion < 2) createTracks(db)
+        if (oldVersion < 3) createUploads(db)
     }
 
     data class TrackPoint(val uuid: String, val roundUuid: String, val at: String, val lat: Double, val lng: Double, val accuracy: Float?, val battery: Int?)
@@ -142,10 +177,11 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "campo.db", null, VE
             delete("records", null, null)
             delete("outbox", null, null)
             delete("tracks", null, null)
+            delete("uploads", null, null)
         }
     }
 
     private companion object {
-        const val VERSION = 2
+        const val VERSION = 3
     }
 }

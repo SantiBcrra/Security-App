@@ -12,13 +12,16 @@ import kotlinx.serialization.json.put
  * Sincronización con el servidor: primero manda la cola de lo hecho offline (outbox) y después baja los cambios desde el
  * último cursor (datos maestros, rutas, lo visible para el usuario) a la base local.
  */
-class SyncRepository(private val api: ApiClient, private val prefs: Prefs, private val db: LocalDb, private val outbox: Outbox) {
+class SyncRepository(private val api: ApiClient, private val prefs: Prefs, private val db: LocalDb, private val outbox: Outbox,
+                     private val uploads: Uploads, private val observations: ObservationsRepository) {
 
     data class Full(val sent: Int, val failed: Int, val pulled: Result)
 
     suspend fun syncAll(): Full {
         queueTracks()
         val pushed = outbox.push()
+        // Fotos: solo las de registros que ya llegaron al servidor (si no, el servidor las rechaza).
+        uploads.push { up -> up.target != "observation" || observations.onServer(up.targetUuid) }
         return Full(pushed.sent, pushed.failed, pull())
     }
 

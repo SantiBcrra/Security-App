@@ -53,6 +53,15 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <!-- Firebase: notificaciones aunque la app esté cerrada (se inicializa con la configuración que baja del servidor). -->
+        <service
+            android:name=".push.CampoMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <!-- Comparte el APK descargado con el instalador de Android (sin exponer otros archivos). -->
         <provider
             android:name="androidx.core.content.FileProvider"

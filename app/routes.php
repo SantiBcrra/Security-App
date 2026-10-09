@@ -329,6 +329,9 @@ return static function (Router $r): void {
             $r->get('/push/vapid-key', [DevicesController::class, 'vapidKey']);
             $r->post('/push/subscribe', [DevicesController::class, 'subscribe']);
             $r->post('/push/unsubscribe', [DevicesController::class, 'unsubscribe']);
+            $r->get('/push/fcm-config', [DevicesController::class, 'fcmConfig']);
+            $r->post('/push/fcm-token', [DevicesController::class, 'fcmToken']);
+            $r->post('/panics/{uuid}/ack', [ApiAppController::class, 'ackPanic']);
         });
     });
 

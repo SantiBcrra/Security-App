@@ -130,6 +130,66 @@ return [
         assert_true(Consent::accepted((int) $st['user']['id']));
     },
 
+    'Firebase: configuración, JWT de la cuenta de servicio, envío, token vencido y registro del token del celular' => function () use ($setup, &$st) {
+        $setup();
+        $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        openssl_pkey_export($key, $pem);
+        $sa = ['type' => 'service_account', 'project_id' => 'secapp-test', 'client_email' => 'fcm@secapp-test.iam.gserviceaccount.com', 'private_key' => $pem];
+        $gs = ['project_info' => ['project_id' => 'secapp-test', 'project_number' => '123456'], 'client' => [
+            ['client_info' => ['mobilesdk_app_id' => '1:123456:android:aaa', 'android_client_info' => ['package_name' => 'ar.com.securityapp.campo']], 'api_key' => [['current_key' => 'AIzaPublica']]],
+            ['client_info' => ['mobilesdk_app_id' => '1:123456:android:bbb', 'android_client_info' => ['package_name' => 'ar.com.securityapp.campo.debug']], 'api_key' => [['current_key' => 'AIzaPublica']]],
+        ]];
+        assert_true(str_contains((string) App\Services\Notify\Fcm::validateConfig('{"x":1}', ''), 'google-services'));
+        assert_true(str_contains((string) App\Services\Notify\Fcm::validateConfig('', '{"type":"service_account","private_key":"no"}'), 'cuenta de servicio'));
+        assert_same(null, App\Services\Notify\Fcm::validateConfig(json_encode($gs), json_encode($sa)));
+        assert_same(null, App\Services\Notify\Fcm::clientConfig('ar.com.securityapp.campo'), 'sin configurar no hay datos');
+        App\Models\PlatformSettings::set('push.fcm_google_services', json_encode($gs));
+        App\Models\PlatformSettings::setSecret('push.fcm_service_account', json_encode($sa));
+        assert_same(['123456', '1:123456:android:bbb'], array_values(array_intersect_key(App\Services\Notify\Fcm::clientConfig('ar.com.securityapp.campo.debug'), ['application_id' => 1, 'sender_id' => 1])));
+        // JWT RS256 verificable con la clave pública
+        $jwt = App\Services\Notify\Fcm::jwt($sa, 1_800_000_000);
+        [$h, $c, $sig] = explode('.', $jwt);
+        $pub = openssl_pkey_get_details($key)['key'];
+        assert_same(1, openssl_verify("$h.$c", base64_decode(strtr($sig, '-_', '+/')), $pub, OPENSSL_ALGO_SHA256));
+        assert_same('https://www.googleapis.com/auth/firebase.messaging', json_decode(base64_decode(strtr($c, '-_', '+/')), true)['scope']);
+        // Envío: un token OAuth (cacheado) + el mensaje con data y prioridad alta si es crítico
+        $calls = [];
+        App\Services\Notify\Fcm::$transport = function (string $url, string $body, array $headers) use (&$calls) {
+            $calls[] = [$url, $body];
+            if (str_contains($url, 'oauth2')) return ['status' => 200, 'body' => '{"access_token":"ya29.x","expires_in":3600}', 'error' => null];
+            if (str_contains($body, 'token-viejo')) return ['status' => 404, 'body' => '{"error":{"status":"NOT_FOUND","details":[{"errorCode":"UNREGISTERED"}]}}', 'error' => null];
+            return ['status' => 200, 'body' => '{"name":"projects/x/messages/1"}', 'error' => null];
+        };
+        App\Services\Notify\Fcm::send('token-ok', ['title' => '⚠ PÁNICO', 'body' => 'x', 'critical' => '1'], true);
+        App\Services\Notify\Fcm::send('token-ok', ['title' => 'Aviso', 'body' => 'y'], false);
+        assert_same(3, count($calls), 'el token OAuth se pide una sola vez');
+        $msg = json_decode($calls[1][1], true)['message'];
+        assert_same(['token-ok', 'HIGH', '1'], [$msg['token'], $msg['android']['priority'], $msg['data']['critical']]);
+        assert_true(str_contains($calls[1][0], '/projects/secapp-test/messages:send'));
+        // Token vencido: el canal lo borra del dispositivo
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['user']);
+        $deviceUuid = App\Models\UserDevices::upsert((int) $st['user']['id'], App\Core\Uuid::v4(), 'Moto G', hash('sha256', 'x'), gmdate('Y-m-d H:i:s', time() + 86400), null);
+        $device = App\Models\UserDevices::findByUuid($deviceUuid);
+        $ref = new ReflectionProperty(App\Services\ApiAuth::class, 'device');
+        $ref->setAccessible(true);
+        $ref->setValue(null, $device);
+        $api = new App\Controllers\Api\DevicesController();
+        assert_same(422, $api->fcmToken(new App\Core\Request('POST', '/', [], ['token' => 'mal token con espacios']))->status);
+        assert_same(200, $api->fcmToken(new App\Core\Request('POST', '/', [], ['token' => 'token-viejo']))->status);
+        assert_same('fcm:token-viejo', App\Models\UserDevices::findByUuid($deviceUuid)['push_token']);
+        $cfg = json_decode($api->fcmConfig(new App\Core\Request('GET', '/', ['package' => 'ar.com.securityapp.campo']))->body, true)['data']['fcm'];
+        assert_same(['secapp-test', 'AIzaPublica'], [$cfg['project_id'], $cfg['api_key']]);
+        App\Services\Notify\Channels::$fakeExternal = null;
+        App\Services\Notify\Channels::send(['channel' => 'push', 'to_address' => 'fcm:token-viejo', 'subject' => 'x', 'body_text' => 'y', 'is_critical' => 0,
+            'payload' => '{}', 'entity_uuid' => null]);
+        assert_same(null, App\Models\UserDevices::findByUuid($deviceUuid)['push_token'], 'token desinstalado: se borra');
+        App\Services\Notify\Fcm::$transport = null;
+        $ref->setValue(null, null);
+        App\Models\PlatformSettings::setSecret('push.fcm_service_account', null);
+        App\Models\PlatformSettings::set('push.fcm_google_services', null);
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

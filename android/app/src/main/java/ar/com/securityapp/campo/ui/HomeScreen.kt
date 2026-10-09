@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -70,7 +71,7 @@ import kotlinx.coroutines.launch
 private data class Module(val key: String, val label: String, val hint: String, val icon: ImageVector)
 
 /** Módulos que ya tienen pantalla en la app (el resto se habilita en las próximas entregas). */
-private val READY = setOf("rondas")
+private val READY = setOf("rondas", "observaciones")
 
 private val MODULES = listOf(
     Module("rondas", "Rondas", "Recorridas con QR y NFC", Icons.Filled.LocationOn),
@@ -94,8 +95,24 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
         SettingsScreen(vm, me, onBack = { showSettings = false })
         return
     }
+    val unread by vm.unread.collectAsStateWithLifecycle()
+    val openAvisos by vm.openAvisos.collectAsStateWithLifecycle()
+    val notifPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= 33) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    }
+    if (openAvisos) {
+        AvisosScreen(onBack = { vm.openAvisos.value = false; vm.refreshUnread() })
+        return
+    }
     when (openModule) {
         "rondas" -> { ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; vm.refreshCounts() }); return }
+        "observaciones" -> {
+            ar.com.securityapp.campo.ui.observations.ObservacionesScreen(onBack = { openModule = null; vm.refreshCounts() },
+                canCreate = me.can("observaciones", "crear"))
+            return
+        }
     }
     val modules = MODULES.filter { me.can(it.key) }
     val panic by vm.panic.collectAsStateWithLifecycle()
@@ -113,6 +130,11 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
                 Text(me.companyName, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("${me.name} · ${me.role}", color = Color(0xFFB4BACB), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButton({ vm.openAvisos.value = true }) {
+                androidx.compose.material3.BadgedBox(badge = {
+                    if (unread > 0) androidx.compose.material3.Badge(containerColor = Accent, contentColor = BrandDark) { Text(if (unread > 99) "99+" else "$unread") }
+                }) { Icon(Icons.Filled.Notifications, "Avisos", tint = Color.White) }
             }
             IconButton({ vm.syncNow() }) {
                 if (sync.running) CircularProgressIndicator(Modifier.size(20.dp), color = Accent, strokeWidth = 2.dp)

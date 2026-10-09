@@ -25,9 +25,18 @@ final class NotificationsController
             'inspection_uuid' => $n['url'] && preg_match('#/inspecciones/([0-9a-f\-]{36})#', $n['url'], $m) ? $m[1] : null,
             'incident_uuid' => $n['url'] && preg_match('#/incidentes/([0-9a-f\-]{36})#', $n['url'], $m) ? $m[1] : null,
             'permit_uuid' => $n['url'] && preg_match('#/permisos/([0-9a-f\-]{36})#', $n['url'], $m) ? $m[1] : null,
+            'panic_uuid' => $n['url'] && preg_match('#/rondas/panico/([0-9a-f\-]{36})#', $n['url'], $m) ? $m[1] : null,
             'schedule_uuid' => $n['url'] && preg_match('#programada=([0-9a-f\-]{36})#', $n['url'], $m) ? $m[1] : null,
             'alert_uuid' => $n['alert_uuid'], 'alert_acked' => $n['alert_acked_at'] !== null, 'alert_acked_by' => $n['alert_acked_name'],
         ], Notifications::forUser((int) $user['id'], 50));
+        $panics = \App\Services\GuardSafety::ackState(array_column($items, 'panic_uuid'));
+        foreach ($items as &$item) {
+            if ($item['panic_uuid'] !== null && isset($panics[$item['panic_uuid']])) {
+                $item['alert_acked'] = true;
+                $item['alert_acked_by'] = $panics[$item['panic_uuid']];
+            }
+        }
+        unset($item);
         return Response::json(['unread' => Notifications::unreadCount((int) $user['id']), 'items' => $items]);
     }
 

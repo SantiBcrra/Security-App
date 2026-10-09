@@ -264,8 +264,10 @@ return [
         assert_true(in_array('⚠ PÁNICO SIN ATENDER (nivel 1) · Guardia1', $inbox($st['hys']), true));
         UserAuth::setCurrent($st['hys']);
         $p = \App\Services\GuardSafety::findPanic($panicUuid);
+        assert_same([$panicUuid => null], \App\Services\GuardSafety::ackState([$panicUuid, null, $panicUuid]));
         assert_true(str_contains((string) \App\Services\GuardSafety::ack($p, ''), 'Contá'));
         assert_same(null, \App\Services\GuardSafety::ack($p, 'Se lo llamó: está bien, se tropezó'));
+        assert_same([$panicUuid => $st['hys']['name']], \App\Services\GuardSafety::ackState([$panicUuid]), 'la app ve quién la atendió');
         UserAuth::setCurrent(null);
         assert_same(0, \App\Services\GuardSafety::run(time() + 60 * 60)['escalated'], 'atendida: no se re-avisa');
         // Ajustes que bajan al celular y pantallas

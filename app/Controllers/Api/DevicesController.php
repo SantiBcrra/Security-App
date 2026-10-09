@@ -31,6 +31,27 @@ final class DevicesController
         return Response::json(['subscribed' => true]);
     }
 
+    /** App Android: con qué proyecto de Firebase conectarse (datos públicos), o null si la plataforma no lo configuró. */
+    public function fcmConfig(Request $request): Response
+    {
+        return Response::json(['fcm' => \App\Services\Notify\Fcm::clientConfig((string) $request->input('package', ''))]);
+    }
+
+    /** App Android: el token de Firebase de este dispositivo (vacío = dejar de mandarle). */
+    public function fcmToken(Request $request): Response
+    {
+        $device = ApiAuth::device();
+        $token = trim((string) $request->input('token', ''));
+        if ($device === null) {
+            return Response::jsonError('Dispositivo desconocido.', 422);
+        }
+        if ($token !== '' && (strlen($token) > 400 || !preg_match('/^[\w:\-.]+$/', $token))) {
+            return Response::jsonError('Token inválido.', 422);
+        }
+        \App\Models\UserDevices::setPushToken((int) $device['id'], $token !== '' ? 'fcm:' . $token : null);
+        return Response::json(['registered' => $token !== '']);
+    }
+
     public function unsubscribe(Request $request): Response
     {
         PushSubscriptions::deleteByEndpoint((int) UserAuth::user()['id'], (string) $request->input('endpoint', ''));

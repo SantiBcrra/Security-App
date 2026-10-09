@@ -314,7 +314,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   expone `ppe_items`, `ppe_matrix` y `ppe_deliveries` solo a usuarios con `epp.crear` dentro de su alcance.
 
 ## App Android (todos los empleados) — plan en `docs/design/app-android-guardias.md`
-- Código en `android/` (Kotlin + Jetpack Compose, AGP 9.4, Gradle 9.6, minSdk 26, compile/target 37). Paquete
+- Código en `android/` (Kotlin + Jetpack Compose, AGP 9.4, Gradle 9.6, minSdk 26, compileSdk 37, targetSdk 35). Paquete
   `ar.com.securityapp.campo` (debug `.debug`, servidor `http://10.0.2.2/securityapp`, editable en el ingreso solo en debug).
   Compilar: `cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew assembleDebug`.
 - App: `ApiClient` (OkHttp, `{ok,data,error}`, renueva el JWT con un mutex), `TokenStore` (Keystore AES-GCM), `LocalDb`
@@ -339,6 +339,20 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   + `guard.silent` (ronda en curso sin posición en `rondas.minutos_sin_senal`, una vez por hueco). Ajustes en Configuración →
   Guardias (teléfonos, `rondas.track_segundos`, minutos sin señal); bajan en `meta.guardias` del pull. "Antes de empezar":
   ubicación (obligatoria), notificaciones, sin ahorro de batería, SMS + consejos por marca. Solo se avisa a usuarios activados.
+- Observaciones y avisos (entrega 4): `ObservationsRepository` guarda la observación en la base local (`local: true`) y encola
+  `observation.create` (misma validación que la web); las fotos (`Uploads`, tabla `uploads` SQLite: achicadas a 1600 px JPEG,
+  EXIF rotado, SHA-256) se suben por partes de 512 KB DESPUÉS de que la observación llegó (`onServer`). Pantallas en
+  `ui/observations/` (lista, formulario con categoría/severidad, sector, equipo por QR `/q/{uuid}` o lista, GPS, fotos de
+  cámara o galería, inminente, anónimo si la empresa lo permite; detalle con `GET /observations/{uuid}`). Avisos
+  (`AvisosScreen`, campanita con contador): "Recibido" (`/alerts/{uuid}/ack`) y "Atendido" de pánicos con comentario
+  (`/panics/{uuid}/ack`; el listado informa si ya lo atendieron).
+- Notificaciones con la app cerrada = **Firebase Cloud Messaging** (`Notify\Fcm`, API HTTP v1 con JWT RS256 propio, token
+  OAuth cacheado cifrado). El super-admin pega en /admin/configuracion → "Notificaciones de la app Android (Firebase)" el
+  `google-services.json` (público) y la cuenta de servicio (cifrada). El APK NO lleva google-services.json: la app pide
+  `GET /push/fcm-config?package=` e inicializa `FirebaseApp` a mano (`PushRegistrar`), manda el token a `POST /push/fcm-token`
+  (`user_devices.push_token = fcm:{token}`; si FCM dice que no existe más, se borra). Se mandan mensajes "data" (crítico =
+  prioridad HIGH) y la app arma la notificación: canal "alertas" (alarma, vibración) o "avisos" (`push/Notifs`), al tocarla
+  abre Avisos. Sin Firebase configurado, `NotificationsRepository.notifyNew()` muestra los avisos nuevos al sincronizar.
 - **`targetSdk` 35 a propósito**: apuntando a Android 17 (37) el sistema bloquea las conexiones a la red local y la app no
   llega al XAMPP de la Mac (10.0.2.2 o la IP por Wi-Fi). Sin Google Play no hay exigencia de subirlo.
 - Consentimiento (celular personal, Ley 25.326): `Consent::VERSION` + texto en el servidor, `user_consents` (tenant 0061),

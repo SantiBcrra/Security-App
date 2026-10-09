@@ -26,6 +26,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         if (!c.auth.isLoggedIn) return Result.success()
         return try {
             c.sync.syncAll()
+            c.notifications.notifyNew()
             Result.success()
         } catch (e: OfflineException) {
             Result.retry()

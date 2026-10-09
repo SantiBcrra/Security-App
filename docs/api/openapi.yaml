@@ -149,11 +149,17 @@ paths:
   /actions/{uuid}/files/{file}:
     get: { summary: Miniatura (o archivo) de una evidencia, parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }, { name: file, in: path, required: true, schema: { type: string } }], responses: { "200": { description: archivo } } }
   /notifications:
-    get: { summary: "Avisos del usuario (unread + items; cada item trae observation_uuid o action_uuid para abrirlo)", responses: { "200": { description: ok } } }
+    get: { summary: "Avisos del usuario (unread + items; cada item trae observation_uuid, action_uuid o panic_uuid para abrirlo; alert_acked/alert_acked_by también para pánicos)", responses: { "200": { description: ok } } }
   /notifications/read:
     post: { summary: Marcar todos como leídos, responses: { "200": { description: ok } } }
   /alerts/{uuid}/ack:
     post: { summary: '"Recibido" de una alerta crítica (corta el escalamiento)', parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+  /panics/{uuid}/ack:
+    post: { summary: '"Atendido" de un pánico con comentario (rondas ver, alcance distinto de propios); corta el re-aviso', parameters: [{ name: uuid, in: path, required: true, schema: { type: string } }], requestBody: { content: { application/json: { schema: { type: object, required: [comment], properties: { comment: { type: string, minLength: 3 } } } } } }, responses: { "200": { description: acked }, "404": { description: sin permiso }, "422": { description: falta el comentario } } }
+  /push/fcm-config:
+    get: { summary: "Datos públicos de Firebase para inicializar la app Android (sin google-services.json en el APK); fcm = null si no está configurado", parameters: [{ name: package, in: query, required: true, schema: { type: string } }], responses: { "200": { description: "fcm { project_id, application_id, api_key, sender_id } | null" } } }
+  /push/fcm-token:
+    post: { summary: "Guardar el token FCM del dispositivo (user_devices.push_token = fcm:{token}); null lo borra", requestBody: { content: { application/json: { schema: { type: object, properties: { token: { type: string, nullable: true } } } } } }, responses: { "200": { description: ok } } }
   /push/vapid-key:
     get: { summary: Clave pública VAPID para suscribirse a Web Push, responses: { "200": { description: public_key (base64url) } } }
   /push/subscribe:
