@@ -173,14 +173,6 @@ private fun ObservationForm(vm: ObservationsViewModel, onBack: () -> Unit) {
     var pickRisk by remember { mutableStateOf(false) }
     var confirmImminent by remember { mutableStateOf(false) }
     var qrError by remember { mutableStateOf<String?>(null) }
-    var cameraUri by remember { mutableStateOf<Uri?>(null) }
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        val uri = cameraUri
-        if (ok && uri != null) vm.update { it.copy(photos = it.photos + uri) }
-    }
-    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(6)) { uris ->
-        if (uris.isNotEmpty()) vm.update { it.copy(photos = (it.photos + uris).take(6)) }
-    }
     if (scanning) {
         QrScanner("Apuntá al QR del equipo", onResult = { raw ->
             scanning = false
@@ -224,21 +216,7 @@ private fun ObservationForm(vm: ObservationsViewModel, onBack: () -> Unit) {
                 OutlinedTextField(f.description, { v -> vm.update { it.copy(description = v.take(2000)) } }, Modifier.fillMaxWidth().heightIn(min = 120.dp),
                     placeholder = { Text("Describí la situación") })
             }
-            Section("Fotos (${f.photos.size}/6)") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton({
-                        val dir = File(context.cacheDir, "camera").apply { mkdirs() }
-                        val uri = FileProvider.getUriForFile(context, context.packageName + ".files", File(dir, "obs-${System.currentTimeMillis()}.jpg"))
-                        cameraUri = uri
-                        camera.launch(uri)
-                    }, enabled = f.photos.size < 6, modifier = Modifier.weight(1f)) { Text("Sacar foto") }
-                    OutlinedButton({ gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                        enabled = f.photos.size < 6, modifier = Modifier.weight(1f)) { Text("Galería") }
-                }
-                if (f.photos.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    f.photos.forEach { uri -> PhotoThumb(uri, onRemove = { vm.update { it.copy(photos = it.photos - uri) } }) }
-                }
-            }
+            Section("Fotos (${f.photos.size}/6)") { PhotosField(f.photos, 6) { list -> vm.update { it.copy(photos = list) } } }
             Card(colors = CardDefaults.cardColors(containerColor = if (f.imminent) Color(0xFFFDE3E5) else Color.White)) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -282,7 +260,7 @@ private fun ObservationForm(vm: ObservationsViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
+internal fun Section(title: String, content: @Composable () -> Unit) {
     Column {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 6.dp))
         content()
@@ -291,7 +269,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Chips(items: List<CatalogItem>, selected: String?, colored: Boolean = false, onPick: (String) -> Unit) {
+internal fun Chips(items: List<CatalogItem>, selected: String?, colored: Boolean = false, onPick: (String) -> Unit) {
     if (items.isEmpty()) { Text("Sin opciones sincronizadas: sincronizá con señal.", color = Muted); return }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items.forEach { item ->
@@ -302,6 +280,36 @@ private fun Chips(items: List<CatalogItem>, selected: String?, colored: Boolean 
                 .padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
                 Text(item.name, color = if (on) Color.White else MaterialTheme.colorScheme.onSurface, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
             }
+        }
+    }
+}
+
+/** Sacar foto / galería + miniaturas con "quitar". Las fotos se achican recién al guardar (`Uploads.add`). */
+@Composable
+internal fun PhotosField(photos: List<Uri>, max: Int, onChange: (List<Uri>) -> Unit) {
+    val context = LocalContext.current
+    var cameraUri by remember { mutableStateOf<Uri?>(null) }
+    val current by androidx.compose.runtime.rememberUpdatedState(photos)
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val uri = cameraUri
+        if (ok && uri != null) onChange(current + uri)
+    }
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(6)) { uris ->
+        if (uris.isNotEmpty()) onChange((current + uris).take(max))
+    }
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton({
+                val dir = File(context.cacheDir, "camera").apply { mkdirs() }
+                val uri = FileProvider.getUriForFile(context, context.packageName + ".files", File(dir, "foto-${System.currentTimeMillis()}.jpg"))
+                cameraUri = uri
+                camera.launch(uri)
+            }, enabled = photos.size < max, modifier = Modifier.weight(1f)) { Text("Sacar foto") }
+            OutlinedButton({ gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                enabled = photos.size < max, modifier = Modifier.weight(1f)) { Text("Galería") }
+        }
+        if (photos.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            photos.forEach { uri -> PhotoThumb(uri, onRemove = { onChange(current - uri) }) }
         }
     }
 }

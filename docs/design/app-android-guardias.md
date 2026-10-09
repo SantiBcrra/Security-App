@@ -127,7 +127,7 @@ además de lo de guardias se suman, por módulo, las pantallas que tenía la PWA
 2. **Rondas offline con QR** ✅: outbox + WorkManager, iniciar/escanear/finalizar, rechazos visibles en Ajustes.
 3. **Seguridad del guardia** ✅: GPS durante la ronda, pánico (datos + SMS), "guardia sin señal".
 4. **Observaciones y avisos** ✅: observaciones con fotos (subida por partes), FCM y canal crítico, "Recibido" / "Atendido".
-5. **Acciones e inspecciones**: mis acciones (tomar, cerrar con evidencia) y checklists con fotos.
+5. **Acciones e inspecciones** ✅: mis acciones (tomar, cerrar con evidencia) y checklists con fotos.
 6. **Incidentes y permisos de trabajo**: reporte de incidentes; permisos (firmas, gases, LOTO, suspender, cerrar).
    ⏸ Permisos de trabajo y EPP quedan **desactivados en la app** por decisión del usuario (09/10/2026): se activan más
    adelante (en `HomeScreen.kt` están comentados en `MODULES`).

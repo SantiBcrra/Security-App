@@ -22,16 +22,18 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "campo.db", null, VE
     /** Fotos esperando subir (el archivo vive en el celular hasta que el servidor confirma el hash). */
     private fun createUploads(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS uploads (upload_uuid TEXT PRIMARY KEY, target TEXT NOT NULL, target_uuid TEXT NOT NULL, path TEXT NOT NULL, " +
-            "name TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, received INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, error TEXT, created_at INTEGER NOT NULL)")
+            "name TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, received INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, error TEXT, created_at INTEGER NOT NULL, " +
+            "item_key TEXT)")
     }
 
     data class Upload(val uploadUuid: String, val target: String, val targetUuid: String, val path: String, val name: String, val size: Long, val sha256: String,
-                      val received: Long, val status: String, val error: String?)
+                      val received: Long, val status: String, val error: String?, val itemKey: String? = null)
 
     fun addUpload(u: Upload) {
         writableDatabase.insertWithOnConflict("uploads", null, ContentValues().apply {
             put("upload_uuid", u.uploadUuid); put("target", u.target); put("target_uuid", u.targetUuid); put("path", u.path); put("name", u.name)
             put("size", u.size); put("sha256", u.sha256); put("received", u.received); put("status", u.status); put("created_at", System.currentTimeMillis())
+            put("item_key", u.itemKey)
         }, SQLiteDatabase.CONFLICT_IGNORE)
     }
 
@@ -40,11 +42,11 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "campo.db", null, VE
         val args = mutableListOf<String>()
         status?.let { where += "status = ?"; args += it }
         targetUuid?.let { where += "target_uuid = ?"; args += it }
-        val sql = "SELECT upload_uuid, target, target_uuid, path, name, size, sha256, received, status, error FROM uploads" +
+        val sql = "SELECT upload_uuid, target, target_uuid, path, name, size, sha256, received, status, error, item_key FROM uploads" +
             (if (where.isEmpty()) "" else " WHERE " + where.joinToString(" AND ")) + " ORDER BY created_at"
         return readableDatabase.rawQuery(sql, args.toTypedArray()).use { c ->
             buildList { while (c.moveToNext()) add(Upload(c.getString(0), c.getString(1), c.getString(2), c.getString(3), c.getString(4), c.getLong(5), c.getString(6),
-                c.getLong(7), c.getString(8), c.getString(9))) }
+                c.getLong(7), c.getString(8), c.getString(9), c.getString(10))) }
         }
     }
 
@@ -62,6 +64,7 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "campo.db", null, VE
         // Nunca se borra la cola de envío: solo se agregan tablas.
         if (oldVersion < 2) createTracks(db)
         if (oldVersion < 3) createUploads(db)
+        if (oldVersion == 3) db.execSQL("ALTER TABLE uploads ADD COLUMN item_key TEXT") // foto de un ítem de checklist
     }
 
     data class TrackPoint(val uuid: String, val roundUuid: String, val at: String, val lat: Double, val lng: Double, val accuracy: Float?, val battery: Int?)
@@ -182,6 +185,6 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "campo.db", null, VE
     }
 
     private companion object {
-        const val VERSION = 3
+        const val VERSION = 4
     }
 }

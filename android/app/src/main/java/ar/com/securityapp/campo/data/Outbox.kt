@@ -35,11 +35,14 @@ class Outbox(private val api: ApiClient, private val db: LocalDb) {
 
     fun discard(op: LocalDb.Op) = db.deleteOp(op.opId)
 
-    /** @throws OfflineException si se corta la conexión (lo que no salió sigue en la cola) */
-    suspend fun push(onResult: (LocalDb.Op, JsonObject) -> Unit = { _, _ -> }): PushResult {
+    /**
+     * @param hold operaciones que todavía no se mandan (p. ej. el cierre de una acción mientras suben sus fotos)
+     * @throws OfflineException si se corta la conexión (lo que no salió sigue en la cola)
+     */
+    suspend fun push(hold: (LocalDb.Op) -> Boolean = { false }, onResult: (LocalDb.Op, JsonObject) -> Unit = { _, _ -> }): PushResult {
         var sent = 0
         var failed = 0
-        for (batch in db.ops("pending").chunked(BATCH)) {
+        for (batch in db.ops("pending").filterNot(hold).chunked(BATCH)) {
             batch.forEach { db.touchOp(it.opId) }
             val body = buildJsonObject {
                 put("operations", buildJsonArray {

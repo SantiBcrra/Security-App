@@ -71,7 +71,7 @@ import kotlinx.coroutines.launch
 private data class Module(val key: String, val label: String, val hint: String, val icon: ImageVector)
 
 /** Módulos que ya tienen pantalla en la app (el resto se habilita en las próximas entregas). */
-private val READY = setOf("rondas", "observaciones")
+private val READY = setOf("rondas", "observaciones", "acciones", "inspecciones")
 
 private val MODULES = listOf(
     Module("rondas", "Rondas", "Recorridas con QR y NFC", Icons.Filled.LocationOn),
@@ -113,13 +113,20 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     }
     when (openModule) {
         "rondas" -> { ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; vm.refreshCounts() }); return }
+        "acciones" -> { ar.com.securityapp.campo.ui.actions.AccionesScreen(onBack = { openModule = null; vm.refreshCounts() }); return }
+        "inspecciones" -> {
+            ar.com.securityapp.campo.ui.inspections.InspeccionesScreen(onBack = { openModule = null; vm.refreshCounts() },
+                canCreate = me.can("inspecciones", "crear"))
+            return
+        }
         "observaciones" -> {
             ar.com.securityapp.campo.ui.observations.ObservacionesScreen(onBack = { openModule = null; vm.refreshCounts() },
                 canCreate = me.can("observaciones", "crear"))
             return
         }
     }
-    val modules = MODULES.filter { me.can(it.key) }
+    // El responsable de una acción la ve aunque su rol no tenga el módulo (como en la web).
+    val modules = MODULES.filter { me.can(it.key) || (it.key == "acciones" && (sync.counts["actions"] ?: 0) > 0) }
     val panic by vm.panic.collectAsStateWithLifecycle()
     panic?.let { state ->
         ar.com.securityapp.campo.panic.PanicScreen((state as? SessionViewModel.PanicState.Done)?.result, onClose = { vm.closePanic() })

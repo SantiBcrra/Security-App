@@ -13,16 +13,27 @@ import kotlinx.serialization.json.put
  * último cursor (datos maestros, rutas, lo visible para el usuario) a la base local.
  */
 class SyncRepository(private val api: ApiClient, private val prefs: Prefs, private val db: LocalDb, private val outbox: Outbox,
-                     private val uploads: Uploads, private val observations: ObservationsRepository) {
+                     private val uploads: Uploads, private val inspections: InspectionsRepository) {
 
     data class Full(val sent: Int, val failed: Int, val pulled: Result)
 
     suspend fun syncAll(): Full {
         queueTracks()
-        val pushed = outbox.push()
+        // El cierre de una acción espera a que suban sus fotos (el servidor exige evidencia para cerrar).
+        val waiting = { op: LocalDb.Op -> op.type == "action.close" && db.uploads("pending").any { it.target == "action" && op.data.contains(it.targetUuid) } }
+        val first = outbox.push(hold = waiting, onResult = ::onResult)
         // Fotos: solo las de registros que ya llegaron al servidor (si no, el servidor las rechaza).
-        uploads.push { up -> up.target != "observation" || observations.onServer(up.targetUuid) }
-        return Full(pushed.sent, pushed.failed, pull())
+        uploads.push { up -> up.target == "action" || onServer(up.targetUuid) }
+        val second = outbox.push(hold = waiting, onResult = ::onResult)
+        return Full(first.sent + second.sent, first.failed + second.failed, pull())
+    }
+
+    /** El alta (observación, inspección, incidente) ya llegó al servidor: sus fotos se pueden subir. */
+    private fun onServer(uuid: String): Boolean =
+        (db.ops("pending") + db.ops("failed")).none { it.type.endsWith(".create") && it.data.contains(uuid) }
+
+    private fun onResult(op: LocalDb.Op, res: JsonObject) {
+        if (op.type == "inspection.create") inspections.onPushed(op, res)
     }
 
     data class Result(val pages: Int, val changes: Int, val deleted: Int)

@@ -31,12 +31,12 @@ import kotlin.math.max
 class Uploads(private val context: Context, private val api: ApiClient, private val db: LocalDb, private val tokens: TokenStore) {
 
     /** Achica y guarda la foto en la cola. @return el uuid de la subida */
-    suspend fun add(source: Uri, target: String, targetUuid: String): LocalDb.Upload = withContext(Dispatchers.IO) {
+    suspend fun add(source: Uri, target: String, targetUuid: String, itemKey: String? = null): LocalDb.Upload = withContext(Dispatchers.IO) {
         val dir = File(context.filesDir, "uploads").apply { mkdirs() }
         val uuid = UUID.randomUUID().toString()
         val file = File(dir, "$uuid.jpg")
         shrink(source, file)
-        val up = LocalDb.Upload(uuid, target, targetUuid, file.absolutePath, "foto.jpg", file.length(), sha256(file), 0, "pending", null)
+        val up = LocalDb.Upload(uuid, target, targetUuid, file.absolutePath, "foto.jpg", file.length(), sha256(file), 0, "pending", null, itemKey)
         db.addUpload(up)
         up
     }
@@ -54,6 +54,7 @@ class Uploads(private val context: Context, private val api: ApiClient, private 
             val state = try {
                 api.post("/uploads", buildJsonObject {
                     put("upload_uuid", up.uploadUuid); put("${up.target}_uuid", up.targetUuid); put("name", up.name); put("size", up.size); put("sha256", up.sha256)
+                    up.itemKey?.let { put("item_key", it) }
                 }).jsonObject
             } catch (e: ApiException) {
                 if (e.status in 400..499) { db.updateUpload(up.uploadUuid, "rejected", up.received, e.message); continue } else throw e

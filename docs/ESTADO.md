@@ -56,9 +56,9 @@ Se conservaron las APIs v1 y la sincronización del servidor para que Android si
 - [x] Entrega 2 — Rondas offline con QR (cola de envío + WorkManager, CameraX + ML Kit)
 - [x] Entrega 3 — GPS durante la ronda, pánico (datos + SMS), "guardia sin señal"
 - [x] Entrega 4 — Observaciones con fotos, notificaciones FCM, canal crítico, avisos con "Recibido" / "Atendido"
-- [ ] Entrega 5 — Acciones e inspecciones
-- [ ] Entrega 6 — Incidentes y permisos de trabajo
-- [ ] Entrega 7 — EPP, NFC, firma de release, versión 1.0
+- [x] Entrega 5 — Acciones (tomar, cerrar con fotos sin señal) e inspecciones (checklists por QR o lista, fotos por ítem)
+- [ ] Entrega 6 — Incidentes (permisos de trabajo desactivados en la app por ahora)
+- [ ] Entrega 7 — NFC, firma de release, versión 1.0 (EPP desactivado en la app por ahora)
 
 ## Pendiente — operación (usuario)
 - [ ] Aplicar migraciones en Indumor (`/admin/migraciones` → "Actualizar base de datos")

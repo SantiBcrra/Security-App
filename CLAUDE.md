@@ -353,6 +353,15 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   (`user_devices.push_token = fcm:{token}`; si FCM dice que no existe más, se borra). Se mandan mensajes "data" (crítico =
   prioridad HIGH) y la app arma la notificación: canal "alertas" (alarma, vibración) o "avisos" (`push/Notifs`), al tocarla
   abre Avisos. Sin Firebase configurado, `NotificationsRepository.notifyNew()` muestra los avisos nuevos al sincronizar.
+- Acciones e inspecciones (entrega 5): `ActionsRepository` (tomar = `action.start`; cerrar = texto + fotos `target action` +
+  `action.close`; cambio local optimista hasta el próximo pull, "pendiente" se deduce de la cola). `SyncRepository.syncAll`:
+  push (reteniendo los `action.close` con fotos pendientes) → fotos → push otra vez → pull; una foto sube solo si su alta
+  (`*.create`) ya no está en la cola. `InspectionsRepository`: checklists del pull (`inspection_templates`), programadas
+  (`inspection_schedule`), `evaluate()` = misma regla que el servidor para avisar antes de enviar (el resultado oficial lo
+  calcula el servidor), `inspection.create` con `photo_counts` y fotos por ítem (`uploads.item_key`, LocalDb v4). Las
+  inspecciones hechas en el celular se guardan en la entidad local `my_inspections` (el pull no las baja) y se actualizan
+  con la respuesta del push (número, resultado, acciones creadas). Pantallas en `ui/actions/` y `ui/inspections/` (nueva por
+  QR del equipo o lista; equipo por tipo, sector o general). Acciones aparece también para quien tiene acciones a cargo.
 - **Permisos de trabajo y EPP desactivados en la app** (decisión del usuario, 09/10/2026): comentados en `MODULES` de
   `HomeScreen.kt`; el servidor los sigue soportando. No activarlos hasta que el usuario lo pida.
 - **`targetSdk` 35 a propósito**: apuntando a Android 17 (37) el sistema bloquea las conexiones a la red local y la app no
