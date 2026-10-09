@@ -330,7 +330,7 @@ return [
         };
         $list = $call($st['hys'], 'GET', '/panel/acciones');
         assert_same(200, $list->status);
-        assert_true(str_contains($list->body, '>Acciones</a>') || str_contains($list->body, 'Acciones</a>'), 'aparece en el menú');
+        assert_true(str_contains($list->body, '<span>Acciones</span></a>'), 'aparece en el menú');
         Tenant::activate($st['a']);
         $a = Actions::findByUuid($st['other']['uuid']);
         $show = $call($st['hys'], 'GET', '/panel/acciones/' . $a['uuid']);

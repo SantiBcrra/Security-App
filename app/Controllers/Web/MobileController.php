@@ -50,7 +50,7 @@ final class MobileController
             'name' => config('app.name') . ' · Campo', 'short_name' => 'Seguridad', 'lang' => 'es',
             'description' => 'Reportes de seguridad e higiene en planta, con o sin señal.',
             'start_url' => $base . '/movil/', 'scope' => $base . '/movil/', 'id' => $base . '/movil/',
-            'display' => 'standalone', 'orientation' => 'portrait', 'background_color' => '#212529', 'theme_color' => '#212529',
+            'display' => 'standalone', 'orientation' => 'portrait', 'background_color' => '#353c4f', 'theme_color' => '#353c4f',
             'icons' => [
                 ['src' => $base . '/assets/movil/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png'],
                 ['src' => $base . '/assets/movil/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png'],
