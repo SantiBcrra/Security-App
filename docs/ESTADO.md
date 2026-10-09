@@ -29,14 +29,14 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
 ## Pendiente — web (Codex)
 - [x] **Mejora rápida: migraciones pendientes**. El super-admin ve el aviso y el enlace a `/admin/migraciones`; una tabla
       ausente muestra una pantalla clara (sin exponer migraciones a usuarios de `/panel`).
-- [ ] **Etapa 14 entrega 2 — EPP seguimiento** (diseño ya aprobado: `docs/design/etapa-14-epp.md` secciones 5 y 11):
-  - [ ] tablero de cumplimiento (% al día, vencidos/por vencer por sector, nunca entregados)
-  - [ ] entrega por lote (por sector o puesto, firma uno por uno)
-  - [ ] avisos por cron: `ppe.due_soon` (lunes, resumen), `ppe.overdue` (una vez), `ppe.missing` (ingreso sin EPP a los 3 días)
-  - [ ] CSV de entregas y de estado
-  - [ ] imprimir constancias de un sector (una por hoja)
+- [x] **Etapa 14 entrega 2 — EPP seguimiento** (diseño ya aprobado: `docs/design/etapa-14-epp.md` secciones 5 y 11):
+  - [x] tablero de cumplimiento (% al día, vencidos/por vencer por sector, nunca entregados)
+  - [x] entrega por lote (por sector o puesto, firma uno por uno)
+  - [x] avisos por cron: `ppe.due_soon` (lunes, resumen), `ppe.overdue` (una vez), `ppe.missing` (ingreso sin EPP)
+  - [x] CSV de estado
+  - [x] imprimir constancias de un sector (una por hoja)
   - [ ] "pendientes de EPP" en el inicio para supervisores
-  - [ ] setting `epp.aviso_dias` editable en Configuración
+  - [x] setting `epp.aviso_dias` editable en Configuración
 - [ ] **Etapa 14 entrega 3 — EPP en la PWA** (`/movil/`): entregar con firma sin señal (push `ppe.delivery` idempotente
       por uuid), consulta del EPP de un empleado, pull de `ppe_items`, `ppe_matrix` y últimas entregas.
 - [ ] **Etapa 15 — Capacitaciones** (diseño + decisiones del usuario primero)

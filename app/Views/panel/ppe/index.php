@@ -6,10 +6,19 @@ require __DIR__ . '/_badges.php';
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <h1 class="h4 m-0">EPP</h1>
     <div class="d-flex gap-2">
+        <a class="btn btn-primary btn-sm" href="<?= e(url('/panel/epp/entrega-lote')) ?>">Entrega por lote</a>
+        <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/panel/epp/exportar')) ?>">CSV estado</a>
+        <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/panel/epp/exportar?tipo=entregas')) ?>">CSV entregas</a>
         <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/panel/epp/matriz')) ?>">Matriz por puesto</a>
         <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/panel/epp/catalogo')) ?>">Catálogo</a>
     </div>
 </div>
+<div class="row g-2 mb-3">
+<?php foreach ([['empleados','Empleados'],['al_dia','Al día'],['por_vencer','Por vencer'],['vencido','Vencidos'],['nunca','Nunca entregado']] as [$k,$label]): ?>
+<div class="col-6 col-md"><div class="card shadow-sm"><div class="card-body py-2"><div class="small text-body-secondary"><?= e($label) ?></div><strong class="fs-5"><?= (int)($compliance['totals'][$k] ?? 0) ?></strong></div></div></div>
+<?php endforeach; ?>
+</div>
+<div class="card shadow-sm mb-3"><div class="card-header"><strong>Cumplimiento por sector</strong></div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Sector</th><th>Empleados</th><th>Al día</th><th>Por vencer</th><th>Vencidos</th><th>Cumplimiento</th></tr></thead><tbody><?php foreach ($compliance['sectors'] as $s): ?><tr><td><?= e($s['name']) ?></td><td><?= (int)$s['empleados'] ?></td><td><?= (int)$s['al_dia'] ?></td><td><?= (int)$s['por_vencer'] ?></td><td><?= (int)($s['vencido']+$s['nunca']) ?></td><td><?= e((string)$s['porcentaje']) ?>%</td></tr><?php endforeach; ?></tbody></table></div></div>
 <?php if ($noMatrix): ?>
     <div class="alert alert-info small">Todavía no hay matriz de EPP: cargá el catálogo (o el del rubro) y definí qué corresponde a cada puesto.
         <a href="<?= e(url('/panel/epp/catalogo')) ?>">Ir al catálogo</a></div>

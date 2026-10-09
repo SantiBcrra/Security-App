@@ -165,6 +165,9 @@ return static function (Router $r): void {
 
         // EPP (Etapa 14). Catálogo y matriz: PpeService::canManage() (editar + alcance toda la empresa).
         $r->get('/epp', [PpeController::class, 'index'], [$can('epp', 'ver')]);
+        $r->get('/epp/exportar', [PpeController::class, 'export'], [$can('epp', 'exportar')]);
+        $r->get('/epp/entrega-lote', [PpeController::class, 'batch'], [$can('epp', 'crear')]);
+        $r->get('/epp/constancias-sector', [PpeController::class, 'sectorCertificates'], [$can('epp', 'ver')]);
         $r->get('/epp/catalogo', [PpeController::class, 'catalog'], [$can('epp', 'ver')]);
         $r->post('/epp/catalogo', [PpeController::class, 'saveItem'], [$can('epp', 'editar')]);
         $r->post('/epp/catalogo/plantilla', [PpeController::class, 'applyTemplate'], [$can('epp', 'editar')]);
@@ -250,6 +253,7 @@ return static function (Router $r): void {
         $r->post('/configuracion', [SettingsController::class, 'update'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/empresa', [SettingsController::class, 'updateCompany'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/permisos', [SettingsController::class, 'updatePermits'], [$can('configuracion', 'editar')]);
+        $r->post('/configuracion/epp', [SettingsController::class, 'updateEpp'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/logo', [SettingsController::class, 'uploadLogo'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/logo/quitar', [SettingsController::class, 'removeLogo'], [$can('configuracion', 'editar')]);
 

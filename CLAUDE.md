@@ -309,6 +309,9 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   "?clave" = según tarea, "clave:2" = cantidad), `IndustryTemplates::applyPpe()`.
 - Pantallas `/panel/epp` (empleados y estado), `/panel/epp/empleado/{uuid}` (ficha, talles, extras, entregas, anular),
   `/entregar`, `/constancia` (Res. SRT 299/11, imprimible con firma por fila), `/panel/epp/catalogo`, `/panel/epp/matriz`.
+- Entrega 2: `/panel/epp` incluye tablero por sector; `/panel/epp/entrega-lote` lista pendientes para firmar uno a uno;
+  `/panel/epp/exportar` descarga CSV y `/panel/epp/constancias-sector?sector=UUID` imprime constancias. `PpeReminders`
+  integra `ppe.due_soon`, `ppe.overdue` y `ppe.missing` al cron; el aviso se ajusta en `epp.aviso_dias`.
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

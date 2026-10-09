@@ -32,6 +32,7 @@ final class PpeController
         $state = (string) $request->input('estado', '');
         $employees = PpeService::employees($q !== '' ? $q : null, $sector ? Sectors::withDescendants([(int) $sector['id']]) : null);
         $summaries = PpeService::summaries($employees);
+        $compliance = PpeService::compliance($employees);
         if (isset(PpeService::STATES[$state])) {
             $employees = array_values(array_filter($employees, fn ($e) => $summaries[(int) $e['id']]['overall'] === $state));
         }
@@ -42,7 +43,38 @@ final class PpeController
             'sectors'   => Sectors::options(),
             'form'      => ['q' => $q, 'sector' => $sector['uuid'] ?? '', 'estado' => $state],
             'noMatrix'  => !Ppe::matrix(),
+            'compliance'=> $compliance,
         ], 'layouts/app'));
+    }
+
+    public function export(Request $request): Response
+    {
+        $employees = PpeService::employees();
+        $c = PpeService::compliance($employees);
+        $deliveriesMode = (string)$request->input('tipo','') === 'entregas';
+        $lines = [$deliveriesMode ? "Entrega;Fecha;Empleado;DNI;Sector;Motivo;Elementos" : "Empleado;DNI;Sector;Puesto;Estado;Vencidos;Por vencer;Nunca entregados"];
+        foreach ($employees as $e) {
+            if ($deliveriesMode) { foreach (Ppe::deliveries((int)$e['id'], false) as $d) $lines[] = implode(';', array_map(fn($v) => '"'.str_replace('"','""',(string)$v).'"', [Ppe::format((int)$d['number']), fecha($d['delivered_at'],'d/m/Y H:i'), $e['name'], $e['dni'], $e['sector_name']??'', PpeService::REASONS[$d['reason']]??$d['reason'], implode(', ', array_map(fn($i)=>$i['item_name'].' x'.$i['quantity'], $d['items']??[]))])); continue; }
+            $s = $c['summaries'][(int) $e['id']];
+            $lines[] = implode(';', array_map(fn($v) => '"' . str_replace('"', '""', (string)$v) . '"', [$e['name'], $e['dni'], $e['sector_name'] ?? '', $e['position_name'] ?? '', $s['overall'], $s['counts']['vencido'], $s['counts']['por_vencer'], $s['counts']['nunca']]));
+        }
+        return new Response("\xEF\xBB\xBF" . implode("\r\n", $lines), 200, ['Content-Type' => 'text/csv; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="epp-estado.csv"']);
+    }
+
+    public function batch(Request $request): Response
+    {
+        $employees = PpeService::employees();
+        $c = PpeService::compliance($employees);
+        $employees = array_values(array_filter($employees, fn($e) => in_array($c['summaries'][(int)$e['id']]['overall'], ['nunca','vencido','por_vencer'], true)));
+        return Response::html(View::render('panel/ppe/batch', ['title' => 'Entrega de EPP por lote', 'employees' => $employees, 'summaries' => $c['summaries']], 'layouts/app'));
+    }
+
+    public function sectorCertificates(Request $request): Response
+    {
+        $sector = Sectors::findByUuid((string)$request->input('sector', ''));
+        if (!$sector) return self::notFound();
+        $employees = PpeService::employees(null, Sectors::withDescendants([(int)$sector['id']]));
+        return Response::html(View::render('panel/ppe/certificates-sector', ['title'=>'Constancias · '.$sector['name'], 'sector'=>$sector, 'employees'=>$employees], null));
     }
 
     // ── empleado ─────────────────────────────────────────────────────

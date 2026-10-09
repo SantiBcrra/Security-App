@@ -77,12 +77,17 @@ final class HomeController
                 $myPermits = ['active' => [], 'toApprove' => []];
             }
         }
+        $myPpe = [];
+        if (UserAuth::user() && UserAuth::can('epp', 'ver') && UserAuth::scope('epp') !== 'propios') {
+            try { $es=\App\Services\PpeService::employees(); $ss=\App\Services\PpeService::summaries($es); foreach($es as $e) if(in_array($ss[(int)$e['id']]['overall'],['nunca','vencido','por_vencer'],true)){ $myPpe[]=['employee'=>$e,'state'=>$ss[(int)$e['id']]['overall']]; if(count($myPpe)>=8)break; } } catch (\PDOException) { $myPpe=[]; }
+        }
         return Response::html(View::render('app/home', [
             'myPermits' => $myPermits,
             'title'   => 'Inicio',
             'obs'     => $obs,
             'myActions' => $myActions,
             'myInspections' => $myInspections,
+            'myPpe' => $myPpe,
             'safety'  => $safety,
             'today'   => \App\Services\ActionService::today(),
             'tenant'  => $tenant,

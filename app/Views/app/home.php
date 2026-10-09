@@ -7,7 +7,7 @@ $months = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 $localNow = fecha(gmdate('Y-m-d H:i:s'), 'w|j|n|H:i');
 [$dow, $dom, $mon, $hour] = explode('|', $localNow);
 $dateLabel = ucfirst($days[(int) $dow]) . ' ' . $dom . ' de ' . $months[(int) $mon];
-$hasPending = $myPermits['active'] || $myPermits['toApprove'] || $myInspections || $myActions;
+$hasPending = $myPermits['active'] || $myPermits['toApprove'] || $myInspections || $myActions || $myPpe;
 // Indicadores: [valor, texto, ícono, tono, link]
 $stats = [];
 if ($safety !== null) {
@@ -86,6 +86,8 @@ $moduleOf = ['observation' => 'Observaciones', 'action' => 'Acciones', 'inspecti
                 </div>
             </div>
         <?php endif; ?>
+
+        <?php if ($myPpe): ?><div class="card shadow-sm mb-4"><div class="card-header d-flex justify-content-between"><strong>Pendientes de EPP</strong><a class="small" href="<?= e(url('/panel/epp')) ?>">Ver tablero</a></div><div class="list-group list-group-flush"><?php foreach ($myPpe as $p): ?><a class="list-group-item d-flex justify-content-between" href="<?= e(url('/panel/epp/empleado/'.$p['employee']['uuid'])) ?>"><span><?= e($p['employee']['name']) ?></span><span><?= e(App\Services\PpeService::STATES[$p['state']]['label']) ?></span></a><?php endforeach; ?></div></div><?php endif; ?>
 
         <?php if ($myInspections): ?>
             <div class="card shadow-sm mb-4">

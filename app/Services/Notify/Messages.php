@@ -43,6 +43,7 @@ final class Messages
         'permit.expired'           => 'Permiso de trabajo vencido',
         'permit.gas_alarm'         => 'Gases fuera de rango en un permiso',
         'permit.suspended'         => 'Permiso de trabajo suspendido',
+        'ppe.due_soon' => 'EPP por vencer', 'ppe.overdue' => 'EPP vencido', 'ppe.missing' => 'EPP pendiente',
     ];
 
     /** Eventos que no se eligen en las reglas (los dispara el sistema con destinatarios fijos). */
@@ -66,6 +67,7 @@ final class Messages
         if (str_starts_with($event, 'permit.')) {
             return self::forPermit($event, $obs, $extra);
         }
+        if (str_starts_with($event, 'ppe.')) return self::forPpe($event, $obs, $extra);
         $num = Observations::format((int) $obs['number']);
         $where = trim(($obs['sector_name'] ?? '') . ($obs['equipment_code'] ? ' · ' . $obs['equipment_code'] : ''), ' ·');
         $desc = mb_strimwidth((string) $obs['description'], 0, 220, '…');
@@ -83,6 +85,13 @@ final class Messages
             'url'      => '/panel/observaciones/' . $obs['uuid'],
             'critical' => in_array($event, self::CRITICAL, true),
         ];
+    }
+
+    private static function forPpe(string $event, array $e, array $extra): array
+    {
+        $name=$e['employee_name']??'un empleado'; $sector=$e['sector_name']??'';
+        $body=$event==='ppe.due_soon'?'Hay '.(int)($extra['count']??0).' empleado(s) con EPP por vencer · '.$sector.'.':($event==='ppe.overdue'?$name.' tiene EPP vencido.':$name.' tiene EPP pendiente de entrega.');
+        return ['title'=>self::EVENTS[$event]??'Seguimiento de EPP','body'=>$body,'url'=>'/panel/epp','critical'=>false];
     }
 
     private static function forAction(string $event, array $a, array $extra): array

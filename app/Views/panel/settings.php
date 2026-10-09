@@ -40,6 +40,10 @@
     </fieldset>
 </form>
 
+<form class="card shadow-sm mt-3" style="max-width: 640px" method="post" action="<?= e(url('/panel/configuracion/epp')) ?>">
+ <?= csrf_field() ?><div class="card-header"><strong>EPP</strong></div><fieldset class="card-body" <?= $canEdit ? '' : 'disabled' ?>><label class="form-label">Avisar antes del vencimiento (días)</label><input class="form-control" type="number" min="1" max="90" name="aviso_dias" value="<?= e($epp['aviso_dias'] ?? '15') ?>"><div class="form-text">Se usa para el tablero y los avisos de EPP por vencer.</div><?php if ($canEdit): ?><button class="btn btn-primary btn-sm mt-2">Guardar</button><?php endif; ?></fieldset>
+</form>
+
 <form class="card shadow-sm mt-3" style="max-width: 640px" method="post" action="<?= e(url('/panel/configuracion/empresa')) ?>">
     <?= csrf_field() ?>
     <div class="card-header"><strong>Datos del empleador</strong> <span class="small text-body-secondary">· para la denuncia de accidentes ante la ART</span></div>

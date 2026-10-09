@@ -21,6 +21,7 @@ final class SettingsController
             'company'   => array_map(fn ($k) => Settings::get($k) ?? '', self::COMPANY),
             'tenant'    => \App\Core\Tenant::current(),
             'permits'   => self::permitSettings(),
+            'epp'       => self::eppSettings(),
             'logoUrl'   => ($t = \App\Core\Tenant::current()) ? \App\Controllers\Web\App\HomeController::logoUrl($t) : null,
         ], 'layouts/app'));
     }
@@ -107,6 +108,20 @@ final class SettingsController
         }
         Audit::tenant('settings.permits', 'settings', null, $before, self::permitSettings());
         Flash::add('success', 'Configuración de permisos de trabajo guardada.');
+        return Response::redirect('/panel/configuracion');
+    }
+
+    public const EPP = ['aviso_dias' => ['epp.aviso_dias', 15, 1, 90]];
+    public static function eppSettings(): array { return array_map(fn($d) => (string)(Settings::get($d[0]) ?? $d[1]), self::EPP); }
+    public function updateEpp(Request $request): Response
+    {
+        foreach (self::EPP as $field => [$key, $default, $min, $max]) {
+            $v = (int)$request->input($field, $default);
+            if ($v < $min || $v > $max) { Flash::add('danger', 'El aviso de EPP debe estar entre '.$min.' y '.$max.' días.'); return Response::redirect('/panel/configuracion'); }
+            Settings::set($key, (string)$v);
+        }
+        Audit::tenant('settings.epp', 'settings', null, null, self::eppSettings());
+        Flash::add('success', 'Configuración de EPP guardada.');
         return Response::redirect('/panel/configuracion');
     }
 

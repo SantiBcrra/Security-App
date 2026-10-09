@@ -77,6 +77,12 @@ final class PpeService
         return array_values(array_filter($rows, fn ($e) => self::canSeeEmployee($e) && ($sectorIds === null || in_array((int) $e['sector_id'], $sectorIds, true))));
     }
 
+    /** Empleados propios para tareas del sistema (cron), sin depender de la sesión web. */
+    public static function employeesForSystem(): array
+    {
+        return array_values(array_filter(Employees::list(null, false, ['contractor_id' => null], 5000), fn($e) => (int)$e['is_active'] === 1));
+    }
+
     /**
      * Lo que le corresponde: matriz de su puesto + extras (el extra pisa al puesto para el mismo elemento).
      * @return array<int, array> item_id => {item, quantity, life_days (efectiva), mandatory, source puesto|extra, notes}
@@ -160,6 +166,25 @@ final class PpeService
             $out[(int) $e['id']] = ['counts' => $counts, 'overall' => self::overall($counts)];
         }
         return $out;
+    }
+
+    /** Tablero de cumplimiento agrupado por sector. */
+    public static function compliance(array $employees): array
+    {
+        $summaries = self::summaries($employees);
+        $totals = ['empleados' => count($employees), 'al_dia' => 0, 'por_vencer' => 0, 'vencido' => 0, 'nunca' => 0];
+        $sectors = [];
+        foreach ($employees as $e) {
+            $s = $summaries[(int) $e['id']] ?? ['overall' => 'nunca', 'counts' => []];
+            $state = $s['overall'];
+            if (isset($totals[$state])) $totals[$state]++;
+            $key = (string) ($e['sector_id'] ?? 0);
+            if (!isset($sectors[$key])) $sectors[$key] = ['name' => $e['sector_name'] ?? 'Sin sector', 'empleados' => 0, 'al_dia' => 0, 'por_vencer' => 0, 'vencido' => 0, 'nunca' => 0];
+            $sectors[$key]['empleados']++;
+            if (isset($sectors[$key][$state])) $sectors[$key][$state]++;
+        }
+        foreach ($sectors as &$s) $s['porcentaje'] = $s['empleados'] ? round($s['al_dia'] * 100 / $s['empleados'], 1) : 0;
+        return ['totals' => $totals, 'sectors' => $sectors, 'summaries' => $summaries];
     }
 
     private static function overall(array $counts): string
