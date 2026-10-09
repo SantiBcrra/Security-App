@@ -250,6 +250,8 @@ return static function (Router $r): void {
         $r->post('/configuracion', [SettingsController::class, 'update'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/empresa', [SettingsController::class, 'updateCompany'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/permisos', [SettingsController::class, 'updatePermits'], [$can('configuracion', 'editar')]);
+        $r->post('/configuracion/logo', [SettingsController::class, 'uploadLogo'], [$can('configuracion', 'editar')]);
+        $r->post('/configuracion/logo/quitar', [SettingsController::class, 'removeLogo'], [$can('configuracion', 'editar')]);
 
         // Datos maestros (plantas, sectores, puestos, empleados, contratistas, equipos, catálogos).
         // Rutas fijas antes que las genéricas /datos/{resource}/...

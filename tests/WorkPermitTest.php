@@ -445,6 +445,29 @@ return [
         assert_true(str_contains($home->body, 'Mis permisos de trabajo'));
         $settings = $call($st['admin'], '/panel/configuracion');
         assert_true(str_contains($settings->body, 'Límites de gases'));
+        // Logo de la empresa: el menú muestra solo el logo (sin nombre ni "Seguridad e Higiene")
+        assert_true(str_contains($settings->body, 'Logo de la empresa') && str_contains($settings->body, 'Agregar el logo') && !str_contains($settings->body, 'brand-sub'));
+        assert_true(!str_contains($home->body, 'Agregar el logo'), 'solo quien edita la configuración ve la invitación');
+        $png = tempnam(sys_get_temp_dir(), 'logo');
+        $img = imagecreatetruecolor(40, 20);
+        imagepng($img, $png);
+        $path = \App\Core\TenantFiles::storeFile($st['a']['uuid'], $png, 'logo', \App\Core\TenantFiles::IMAGE_TYPES, 1024 * 1024);
+        @unlink($png);
+        \App\Models\Tenants::update($st['a']['uuid'], ['logo_path' => $path]);
+        $st['a'] = \App\Models\Tenants::findByUuid($st['a']['uuid']);
+        $withLogo = $call($st['sup'], '/panel');
+        assert_true(str_contains($withLogo->body, 'class="sidebar-logo"') && str_contains($withLogo->body, '/archivos/logo/'), 'el menú muestra el logo');
+        UserAuth::setCurrent(null);
+        Tenant::deactivate();
+        $_SESSION = [];
+        \App\Core\Session::put(\App\Services\Impersonation::TENANT_KEY, $st['a']['uuid']);
+        \App\Core\Session::put(UserAuth::USER_KEY, $st['admin']['uuid']);
+        $router = new \App\Core\Router();
+        (require BASE_PATH . '/app/routes.php')($router);
+        $res = $router->dispatch(new \App\Core\Request('POST', '/panel/configuracion/logo/quitar', [], ['csrf_token' => csrf_token()]));
+        assert_same(302, $res->status);
+        assert_same(null, \App\Models\Tenants::findByUuid($st['a']['uuid'])['logo_path']);
+        $st['a'] = \App\Models\Tenants::findByUuid($st['a']['uuid']);
         $_SESSION = [];
     },
 

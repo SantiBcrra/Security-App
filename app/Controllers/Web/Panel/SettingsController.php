@@ -21,6 +21,7 @@ final class SettingsController
             'company'   => array_map(fn ($k) => Settings::get($k) ?? '', self::COMPANY),
             'tenant'    => \App\Core\Tenant::current(),
             'permits'   => self::permitSettings(),
+            'logoUrl'   => ($t = \App\Core\Tenant::current()) ? \App\Controllers\Web\App\HomeController::logoUrl($t) : null,
         ], 'layouts/app'));
     }
 
@@ -40,6 +41,33 @@ final class SettingsController
         Audit::tenant('settings.company', 'settings', null, $before, $after);
         Flash::add('success', 'Datos de la empresa guardados.');
         return Response::redirect('/panel/configuracion');
+    }
+
+    private const LOGO_MAX_BYTES = 1024 * 1024;
+
+    /** Logo de la empresa (se ve en el menú lateral). PNG, JPG o WEBP de hasta 1 MB. */
+    public function uploadLogo(Request $request): Response
+    {
+        $tenant = \App\Core\Tenant::current();
+        try {
+            $path = \App\Core\TenantFiles::storeUpload($tenant['uuid'], $request->files['logo'] ?? [], 'logo', \App\Core\TenantFiles::IMAGE_TYPES, self::LOGO_MAX_BYTES);
+        } catch (\DomainException $e) {
+            Flash::add('danger', 'Logo: ' . $e->getMessage());
+            return Response::redirect('/panel/configuracion#logo');
+        }
+        \App\Models\Tenants::update($tenant['uuid'], ['logo_path' => $path]);
+        Audit::tenant('settings.logo', 'settings', null, ['logo' => $tenant['logo_path']], ['logo' => $path]);
+        Flash::add('success', 'Logo actualizado.');
+        return Response::redirect('/panel/configuracion#logo');
+    }
+
+    public function removeLogo(Request $request): Response
+    {
+        $tenant = \App\Core\Tenant::current();
+        \App\Models\Tenants::update($tenant['uuid'], ['logo_path' => null]);
+        Audit::tenant('settings.logo', 'settings', null, ['logo' => $tenant['logo_path']], ['logo' => null]);
+        Flash::add('success', 'Logo quitado.');
+        return Response::redirect('/panel/configuracion#logo');
     }
 
     /** Permisos de trabajo (Etapa 13): campo => [setting, defecto, mínimo, máximo]. */

@@ -3,6 +3,30 @@
     <h1 class="h4 m-0">Configuración</h1>
     <a class="btn btn-outline-primary btn-sm" href="<?= e(url('/panel/configuracion/notificaciones')) ?>">Notificaciones y alertas →</a>
 </div>
+<div class="card shadow-sm mb-3" style="max-width: 640px" id="logo">
+    <div class="card-header"><strong>Logo de la empresa</strong> <span class="small text-body-secondary">· se muestra arriba del menú lateral</span></div>
+    <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <div class="logo-preview"><?php if ($logoUrl): ?><img src="<?= e($logoUrl) ?>" alt="Logo actual"><?php else: ?><span class="small text-body-secondary">Sin logo</span><?php endif; ?></div>
+            <?php if ($canEdit): ?>
+                <div class="flex-fill">
+                    <form method="post" action="<?= e(url('/panel/configuracion/logo')) ?>" enctype="multipart/form-data" class="d-flex flex-wrap gap-2">
+                        <?= csrf_field() ?>
+                        <input class="form-control form-control-sm" style="max-width: 300px" type="file" name="logo" accept="image/png,image/jpeg,image/webp" required>
+                        <button class="btn btn-primary btn-sm"><?= $logoUrl ? 'Reemplazar' : 'Subir logo' ?></button>
+                    </form>
+                    <?php if ($logoUrl): ?>
+                        <form method="post" action="<?= e(url('/panel/configuracion/logo/quitar')) ?>" class="mt-2" onsubmit="return confirm('¿Quitar el logo?')">
+                            <?= csrf_field() ?><button class="btn btn-link btn-sm text-danger p-0">Quitar logo</button>
+                        </form>
+                    <?php endif; ?>
+                    <div class="form-text">PNG, JPG o WEBP de hasta 1 MB. Ideal: horizontal (unos 400 × 120 px) y con fondo transparente.</div>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+
 <form class="card shadow-sm" style="max-width: 640px" method="post" action="<?= e(url('/panel/configuracion')) ?>">
     <?= csrf_field() ?>
     <div class="card-header"><strong>Observaciones</strong></div>

@@ -65,11 +65,13 @@ $initials = $me ? mb_strtoupper(implode('', array_map(fn ($w) => mb_substr($w, 0
 <body class="app-body" x-data="{ menu: false }" :class="{ 'sidebar-open': menu }" @keydown.escape.window="menu = false">
 
 <aside class="sidebar" aria-label="Menú principal">
-    <a class="sidebar-brand" href="<?= e(url('/panel')) ?>">
-        <span class="brand-mark"><?php if ($logoUrl): ?><img src="<?= e($logoUrl) ?>" alt=""><?php else: ?><?= icon('shield', 22) ?><?php endif; ?></span>
-        <span class="min-w-0"><span class="brand-name d-block text-truncate"><?= e($tenant['name'] ?? config('app.name')) ?></span>
-            <span class="brand-sub">Seguridad e Higiene</span></span>
-    </a>
+    <div class="sidebar-logo">
+        <?php if ($logoUrl): ?>
+            <a href="<?= e(url('/panel')) ?>"><img src="<?= e($logoUrl) ?>" alt="<?= e($tenant['name'] ?? '') ?>"></a>
+        <?php elseif (UserAuth::can('configuracion', 'editar')): ?>
+            <a class="sidebar-logo-empty" href="<?= e(url('/panel/configuracion#logo')) ?>">+ Agregar el logo de la empresa</a>
+        <?php endif; ?>
+    </div>
     <nav class="sidebar-nav">
         <?php foreach ($sections as $group => $items): $items = array_filter($items, fn ($i) => $i[3]); if (!$items) { continue; } ?>
             <?php if ($group !== ''): ?><div class="nav-section"><?= e($group) ?></div><?php endif; ?>
