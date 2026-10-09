@@ -1,7 +1,9 @@
 # App nativa Android para guardias (Kotlin) · Plan
 
-Estado: **borrador**. Decisión del usuario: app nativa en **Kotlin**, solo Android, para guardias.
-Faltan las decisiones de la sección 9.
+Estado: **aprobado**. Decisiones del usuario: app nativa en **Kotlin**, solo Android, para guardias, en sus
+**celulares personales**; **QR y NFC**; pánico por **datos + SMS de respaldo**; todo lo que no sale por falta de señal
+**se guarda y se reenvía solo** al reconectar; **sin Google Play**: la app se descarga e instala desde el sistema y
+se actualiza sola desde el sistema.
 
 ## 1. Por qué y qué cambia
 - **Qué se busca**: la PWA (`/movil/`) sigue para el resto del trabajo de campo. Los guardias pasan a una app nativa
@@ -30,7 +32,11 @@ Faltan las decisiones de la sección 9.
   - las posiciones se acumulan sin señal y se envían en lote.
 - **Botón de pánico**:
   - mantener presionado 2 s → vibración y aviso **CRÍTICO** con la última ubicación a supervisores y SyH;
-  - funciona por SMS de respaldo si no hay datos (si se decide).
+  - **por datos y por SMS** (decidido). Sin conexión, o si el servidor no confirma en 15 s, la app manda un SMS
+    (`SmsManager`, sin abrir la app de mensajes) a los números de pánico de la empresa. El SMS lleva: guardia,
+    empresa, hora y link a Google Maps con la última posición. Además, el pedido por datos queda en la cola y se envía
+    al volver la señal.
+  - Los números de pánico se configuran en el panel de la empresa y bajan a la app con la sync.
 - **Novedades**: reportar una observación con fotos y riesgo inminente, con la misma validación que la web
   (`ObservationInput`).
 - **Avisos**:
@@ -56,16 +62,30 @@ Faltan las decisiones de la sección 9.
 | GPS | Fused Location Provider (Google Play Services) en un foreground service tipo `location` |
 | Notificaciones | Firebase Cloud Messaging (FCM) |
 | Seguridad | Android Keystore / EncryptedSharedPreferences para los tokens; HTTPS obligatorio en producción |
+| Actualizaciones | Propias (sin Play): descarga del APK desde el servidor, verificación SHA-256 + `PackageInstaller` |
+| SMS de pánico | `SmsManager` con permiso `SEND_SMS` (se puede porque la app no pasa por Google Play) |
 | Versiones | `minSdk 26` (Android 8), `targetSdk 35`; Gradle con Kotlin DSL |
 
-## 4. Cómo se evitan los problemas de GPS
-1. **Seguimiento solo durante la ronda** (foreground service con notificación): es lo que Android respeta.
-2. **El guardia excluye la app del ahorro de batería** (pantalla guiada al primer ingreso, con el atajo del sistema).
-3. **Celulares de la empresa con Android Enterprise / MDM** (recomendado): app fija (kiosco), sin
-   optimización de batería, que no se puede desinstalar. Mejor Samsung, Motorola o Pixel que Xiaomi o Huawei.
+## 4. Cómo se evitan los problemas de GPS (celulares personales)
+Son los celulares de los guardias (decidido): no hay MDM ni kiosco, así que el peso está en la app y el servidor.
+1. **Seguimiento solo durante la ronda** (foreground service con notificación): es lo que Android respeta, y en un
+   celular personal es lo correcto. Fuera de la ronda la app **no** sigue al guardia.
+2. **Asistente de permisos al primer ingreso, que se vuelve a revisar al iniciar cada ronda**:
+   - ubicación "Permitir siempre";
+   - notificaciones;
+   - cámara;
+   - exclusión del ahorro de batería;
+   - instrucciones por marca para el "inicio automático" de Xiaomi/Redmi, Huawei, Oppo/Realme, Samsung y Motorola.
+   La ronda no arranca sin los permisos imprescindibles.
+3. **Consentimiento** (celular personal, Ley 25.326): una pantalla explica qué se registra (ubicación solo durante la
+   ronda, escaneos, fotos) y el guardia acepta. La aceptación queda guardada con fecha y versión del texto.
 4. **La prueba de la ronda es el escaneo** (QR/NFC + GPS en ese momento), no el recorrido continuo.
-5. **El servidor detecta los huecos**: un guardia en ronda sin enviar posición en M minutos → aviso
-   "guardia sin señal" al supervisor.
+5. **El servidor detecta los huecos**: un guardia en ronda sin enviar posición en M minutos (10 por defecto,
+   configurable) → aviso "guardia sin señal" al supervisor. Si el celular estaba sin señal, al reconectar llegan las
+   posiciones guardadas y el recorrido se completa.
+6. **Sin señal no se pierde nada** (decidido): escaneos, posiciones, novedades, fotos y pánico van primero a la base
+   local (Room) y a la cola. WorkManager los reintenta con espera creciente y se dispara solo al volver la conexión,
+   aunque la app esté cerrada. Cada envío es idempotente (`op_id` / uuid): reintentar nunca duplica.
 
 ## 5. Cambios en el servidor (PHP, sin librerías, como siempre)
 - **FCM HTTP v1**:
@@ -85,32 +105,51 @@ Faltan las decisiones de la sección 9.
 - **NFC**: campo `nfc_uid` en `patrol_points` (se carga acercando el tag desde la app, con permiso de editar).
   El escaneo guarda `method` = qr | nfc.
 - **Versión mínima**: `meta.app_android_min` en el pull. Una app demasiado vieja pide actualizarse.
+- **Distribución propia de la app** (sin Google Play):
+  - el super-admin sube el APK firmado en `/admin/app-android`: versión, notas y versión mínima obligatoria;
+  - se guarda en `storage` con su SHA-256;
+  - **descarga** en `/descargas/guardias` (página con QR para escanear desde el celular del guardia). No puede ser
+    `/app`, que es una ruta reservada;
+  - **actualización**: `GET /api/v1/app/android` devuelve la última versión, el SHA-256 y el link. La app baja el APK,
+    verifica el hash y abre el instalador de Android, que solo acepta la actualización si la firma coincide con la
+    instalada.
+- **Números de pánico**: setting de la empresa `guardias.panico_telefonos` (hasta 3) en Configuración, en `meta` del pull.
+- **Consentimiento**: `POST /api/v1/consent` (usuario, dispositivo, versión del texto, fecha); se audita.
 
 ## 6. Entregas (cada una con tests del servidor y build de la app)
 1. **Base**:
-   - proyecto `android/`, login con 2FA, sesión segura;
+   - proyecto `android/`, login con 2FA, sesión segura y consentimiento;
    - pull de datos maestros y rutas a Room;
    - pantalla de rutas;
+   - distribución propia: subida del APK en el admin, página de descarga con QR y actualización automática desde la
+     app (así los guardias prueban sin cables);
    - build debug en el emulador y en un celular real.
 2. **Rondas offline**: iniciar, escanear QR (ML Kit), finalizar, outbox con WorkManager y estado de la sincronización.
 3. **GPS y seguridad del guardia**:
+   - asistente de permisos y batería por marca;
    - foreground service con posiciones;
    - servidor: `patrol_tracks`, mapa del recorrido y `guard.silent`;
-   - botón de pánico de punta a punta.
+   - botón de pánico de punta a punta (datos + SMS, números de pánico en Configuración).
 4. **Novedades y avisos**: observaciones con fotos (subida por partes), FCM en el servidor y en la app, canal crítico y
    "Recibido".
 5. **NFC y salida**:
-   - NFC (alta de tags y escaneo);
-   - guía de permisos y batería;
-   - firma de release y publicación (Play Console interna o MDM);
+   - NFC (alta de tags desde la app y escaneo);
+   - firma de release con keystore propio (respaldo);
+   - versión 1.0 en la página de descarga;
    - manual corto para guardias.
 
-## 7. Distribución
-- **Firma**: la app se firma con una clave propia (keystore). **Hay que respaldarla**: sin ella no se pueden publicar
-  actualizaciones.
-- **Opción A**: Google Play Console (USD 25, un solo pago), pista de prueba interna o app privada para la empresa
-  (Managed Google Play). Las actualizaciones son automáticas.
-- **Opción B**: APK distribuido por el MDM de la empresa (sin tienda).
+## 7. Distribución (decidido: sin Google Play)
+- **Instalación**: el guardia abre la página de descarga del sistema (o escanea su QR), baja el APK y Android le pide
+  permitir "Instalar apps desconocidas" para el navegador una sola vez. La página trae la guía con capturas.
+- **Actualizaciones**: automáticas desde el sistema (ver sección 5). La app avisa y no deja seguir si la versión es
+  menor a la mínima obligatoria.
+- **Firma**: la app se firma con una clave propia (keystore). **Hay que respaldarla, igual que `config.local.php`**: sin
+  ella ningún celular acepta las actualizaciones y habría que desinstalar y reinstalar en todos.
+- **Play Protect** puede mostrar el aviso "app no verificada" al instalar fuera de la tienda. Es normal: se explica
+  en la guía.
+- **Notificaciones**: FCM funciona sin publicar en Google Play, porque solo necesita Google Play Services en el
+  celular. Los celulares **Huawei recientes no tienen Google Play Services**: ahí no llegan las notificaciones con la
+  app cerrada. Con la app abierta se consultan los avisos cada minuto, y el pánico por SMS funciona igual.
 
 ## 8. Pruebas
 - **Servidor**: tests PHP como siempre (posiciones, pánico, sin señal, FCM con transporte falso, NFC, idempotencia).
@@ -119,9 +158,10 @@ Faltan las decisiones de la sección 9.
   - el emulador de Android Studio para pantallas;
   - **un celular Android real** para cámara, NFC, GPS con la pantalla apagada y batería.
 
-## 9. Decisiones a tomar
-1. **Celulares**: ¿de la empresa (con MDM / kiosco) o propios de los guardias?
-2. **NFC** en los puntos de ronda, además de QR.
-3. **Pánico**: solo por datos, o también SMS de respaldo a un número fijo.
-4. **Frecuencia del GPS** durante la ronda (60 s por defecto) y minutos para "guardia sin señal" (10).
-5. **Publicación**: Google Play (privada / prueba interna) o APK por MDM.
+## 9. Decisiones del usuario
+1. **Celulares**: los personales de los guardias (sin MDM).
+2. **Puntos de ronda**: QR y NFC (los dos).
+3. **Pánico**: por datos y por SMS de respaldo.
+4. **Sin señal**: todo se guarda y se reenvía solo al reconectar. Posición cada 60 s durante la ronda y "guardia sin
+   señal" a los 10 min: valores por defecto, configurables por empresa.
+5. **Publicación**: sin Google Play. Descarga e instalación desde el sistema, con actualización automática propia.
