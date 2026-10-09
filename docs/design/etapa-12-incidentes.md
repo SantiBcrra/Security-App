@@ -162,7 +162,7 @@ Eventos nuevos: `incident.reported`, `incident.investigation_overdue`, `incident
 - **Configuración → Horas trabajadas**: grilla de meses × plantas (horas y dotación).
 - **Inicio**: recuadro "Días sin accidentes con baja" y "Bajas abiertas" (para SyH).
 
-## 8. App de campo (PWA)
+## 8. App móvil Android nativa
 - "Nuevo" suma un tercer botón: **Reportar incidente / accidente**.
 - Formulario corto **offline**: tipo (botones grandes), cuándo, dónde (sector o QR del equipo), qué
   pasó, quién se lastimó (buscador de empleados sincronizados), qué se hizo y fotos.

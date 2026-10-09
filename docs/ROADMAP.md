@@ -16,7 +16,7 @@ lo implementado de verdad está en `CLAUDE.md` y `docs/design/`.
 ## ETAPA 9 — Rondas de guardias (adelantada)
 - Puntos de control con QR único, planta/sector, coordenadas GPS, radio permitido y punto crítico.
 - Rutas configurables y registro de rondas por guardia.
-- La PWA inicia rondas, escanea QR y guarda hora, GPS, precisión, distancia y cumplimiento del radio.
+- La app Android inicia rondas, escanea QR y guarda hora, GPS, precisión, distancia y cumplimiento del radio.
 - Modo offline con sincronización idempotente (`round.start`, `round.scan`, `round.finish`).
 - Panel con alta de puntos, impresión de QR e historial de rondas.
 - Las incidencias de una ronda quedan preparadas para vincularse a CAPA.
@@ -65,8 +65,8 @@ lo implementado de verdad está en `CLAUDE.md` y `docs/design/`.
 - Programación recurrente (diaria, semanal, mensual) generada por el cron, por planta, sector o
   equipo, con un responsable.
 - Escanear el QR de un equipo abre su checklist; por ejemplo, el pre-uso del autoelevador.
-  - **Nota:** el QR ya existe en `/q/{uuid}`, y la PWA tiene escáner.
-  - El checklist tiene que poder completarse **offline** en `/movil/`.
+  - **Nota:** el QR ya existe en `/q/{uuid}`, y la app Android tiene escáner.
+  - El checklist tiene que poder completarse **offline** en la app Android.
 - Un ítem que no cumple genera automáticamente una acción correctiva de la Etapa 10 (CAPA), con
   `origen_tipo='inspeccion'`. Un ítem crítico que no cumple puede disparar un aviso crítico.
 - Cumplimiento: inspecciones hechas vs. programadas.
@@ -96,7 +96,7 @@ lo implementado de verdad está en `CLAUDE.md` y `docs/design/`.
 - Estados: solicitado → aprobado → en ejecución → cerrado. También puede quedar rechazado o
   vencido; el vencimiento lo marca el cron automáticamente.
 - Vista "permisos activos ahora" por planta.
-- **Nota:** las firmas se capturan en el navegador o en la PWA, en un `<canvas>` sin librerías, y
+- **Nota:** las firmas se capturan en la app Android o el navegador, en un `<canvas>` sin librerías, y
   se guardan con `TenantFiles`.
 
 ## ETAPA 14 — EPP

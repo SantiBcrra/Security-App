@@ -166,7 +166,7 @@ Reglas:
 - Exportación a CSV (permiso `exportar`) y página imprimible.
 - Inicio de `/panel`: un recuadro "Mis acciones pendientes".
 
-## 8. App de campo (PWA)
+## 8. App móvil Android nativa
 - ✅ **Incluida en esta etapa** (decidido): "Mis acciones" dentro de la pestaña Reportes. El
   responsable la ve, la toma y **la cierra con texto + fotos sin señal**.
   - Para eso: entidad `actions` en `Sync\Pull` (las mías como responsable y lo que diga mi

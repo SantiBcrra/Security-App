@@ -155,7 +155,7 @@ Alcance por sector, con `SectorScope`, usando el sector del empleado. Roles base
 - **supervisor**: ver y entregar en sus sectores;
 - **reportante**: nada. Más adelante podría ver su propio EPP si el empleado tiene usuario.
 
-## 10. App de campo (PWA)
+## 10. App móvil Android nativa
 - **"Entregar EPP"** en la pestaña Nuevo:
   - se busca el empleado (ya sincronizado) o se escanea su credencial (si hay QR de empleado);
   - aparece lo que le corresponde según la matriz, con su estado;

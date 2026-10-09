@@ -26,6 +26,12 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
 - [x] Etapa 14 entrega 1 — EPP: catálogo, matriz por puesto, entregas firmadas, constancia SRT 299/11
 - [x] Rediseño visual: menú lateral, paleta #353c4f / #f2c014, inicio como tablero, logo configurable
 
+### Decisión sobre el cliente móvil
+
+La PWA `/movil/` fue eliminada del código y del roadmap el 09/10/2026. Se descartó porque los guardias usarán
+exclusivamente la app Android nativa, que cubre mejor GPS, QR, NFC, funcionamiento offline, pánico y notificaciones.
+Se conservaron las APIs v1 y la sincronización del servidor para que Android siga usando el backend.
+
 ## Pendiente — web (Codex)
 - [x] **Mejora rápida: migraciones pendientes**. El super-admin ve el aviso y el enlace a `/admin/migraciones`; una tabla
       ausente muestra una pantalla clara (sin exponer migraciones a usuarios de `/panel`).

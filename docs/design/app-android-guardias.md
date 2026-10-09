@@ -6,7 +6,7 @@ Estado: **aprobado**. Decisiones del usuario: app nativa en **Kotlin**, solo And
 se actualiza sola desde el sistema.
 
 ## 1. Por qué y qué cambia
-- **Qué se busca**: los guardias pasan a una app Android nativa; no se mantiene la PWA (`/movil/`)
+- **Qué se busca**: los guardias usan exclusivamente una app Android nativa.
   para tener:
   - GPS confiable durante la ronda;
   - lectura de QR y NFC;

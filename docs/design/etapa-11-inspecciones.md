@@ -138,7 +138,7 @@ Al recibir la inspección, el servidor:
     falló en un ítem crítico);
   - el QR (`/q/{uuid}`) muestra esto mismo.
 
-## 8. App de campo (PWA)
+## 8. App móvil Android nativa
 - Se sincronizan:
   - las **plantillas vigentes**, con su estructura;
   - **mis inspecciones programadas** pendientes de hoy y vencidas.

@@ -136,7 +136,7 @@ borrador → solicitado → aprobado → en_ejecucion → cerrado
   - con un **QR** que, al escanearlo, muestra si el permiso **sigue vigente**;
   - el QR lleva a una página que pide login, nunca pública.
 
-## 10. App de campo (PWA)
+## 10. App móvil Android nativa
 - **Mis permisos**: los que solicité, debo autorizar o en los que trabajo.
 - **Firmar en el celular**, también ejecutores de contratistas sin usuario, en persona.
 - **Iniciar, suspender y cerrar.**

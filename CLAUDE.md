@@ -132,7 +132,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   (`Uploads`, tabla `uploads`); rate limit por dispositivo (`RateLimiter`, tabla `rate_limits`).
 - La validación del alta de observaciones es una sola: `ObservationInput::validate()` (web y API).
 - La app de guardias será nativa para Android. El backend conserva las APIs v1 de autenticación,
-  sincronización y operaciones offline para esa aplicación; no se mantiene cliente PWA en `/movil/`.
+  sincronización y operaciones offline para esa aplicación; el cliente web móvil fue retirado.
 - La app Android usa HTTPS en producción y puede probarse contra XAMPP por Wi-Fi con la configuración
   de red correspondiente del dispositivo.
 - Web Push propio: `Core\Ece` (aes128gcm, RFC 8291 — test con el vector oficial) y `Core\Vapid`
@@ -283,7 +283,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   automática cuenta desde `measured_at`), `permit.isolate` / `permit.release` (uuid del bloqueo), `permit.suspend` /
   `resume` / `close`: idempotentes (si ya está hecho → ok `duplicate`), responden el permiso actualizado. Autorizar /
   rechazar solo con conexión (`POST /api/v1/permits/{uuid}/approve|reject`); QR → `GET /permits/{uuid}/verify` (cualquier
-  usuario). PWA: "Permisos de trabajo" en Reportes, detalle `#/permiso/{uuid}` (firmas con `signature-pad.js`, evaluación
+  usuario). App Android: permisos de trabajo en Reportes, detalle por UUID (firmas, evaluación
   de gases local con alerta "salir del espacio", `pending` hasta que el servidor confirma; si rechaza, se vuelve a pedir el
   permiso con `GET /permits/{uuid}`). El escáner reconoce el QR del permiso. Extender y recibir el área: solo web.
 
