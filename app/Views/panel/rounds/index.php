@@ -1,5 +1,5 @@
 <div class="d-flex justify-content-between align-items-center mb-3"><h1 class="h4 m-0">Rondas de guardias</h1><div class="d-flex gap-2"><a class="btn btn-outline-primary" href="<?= e(url('/panel/rondas/rutas/nueva')) ?>">+ Nueva ruta</a><a class="btn btn-primary" href="<?= e(url('/panel/rondas/puntos/nuevo')) ?>">+ Nuevo punto</a></div></div>
-<div class="alert alert-info">Cada punto tiene un QR único. Imprimilo y colocálo en el lugar de control. La PWA registra hora, GPS y distancia.</div>
+<div class="alert alert-info">Cada punto tiene un QR único. Imprimilo y colocálo en el lugar de control. La app Android registra hora, GPS y distancia.</div>
 <h2 class="h5">Puntos de ronda</h2>
 <?php if ($points): ?><link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>"><div id="round-map" style="height:280px" class="rounded border mb-3"></div><script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script>
 const roundPoints=<?= json_encode(array_map(fn($p)=>['name'=>$p['name'],'code'=>$p['code'],'lat'=>(float)$p['lat'],'lng'=>(float)$p['lng']],$points),JSON_UNESCAPED_UNICODE) ?>;

@@ -23,7 +23,7 @@ use App\Services\UserAuth;
  */
 final class Pull
 {
-    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'actions', 'inspection_templates', 'inspection_schedule', 'incidents', 'work_permits'];
+    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'actions', 'inspection_templates', 'inspection_schedule', 'incidents', 'work_permits', 'ppe_items', 'ppe_matrix', 'ppe_deliveries'];
     private const OVERLAP_SECONDS = 5;
     private const OBS_HISTORY_DAYS = 180;
 
@@ -57,7 +57,8 @@ final class Pull
                     // Incidentes: al celular solo llegan los que reportó el usuario (sin datos de salud).
                     || ($entity === 'incidents' && (int) $row['reported_by'] !== (int) (UserAuth::user()['id'] ?? 0))
                     // Permisos de trabajo: los que el usuario puede ver según su alcance (solicitante, autorizante o sector).
-                    || ($entity === 'work_permits' && !\App\Services\WorkPermitService::canView($row));
+                    || ($entity === 'work_permits' && !\App\Services\WorkPermitService::canView($row))
+                    || (in_array($entity, ['ppe_items', 'ppe_matrix', 'ppe_deliveries'], true) && !self::canPullPpe($row, $entity));
                 if ($gone) {
                     $deleted[$entity][] = $row['uuid'];
                 } else {
@@ -169,7 +170,13 @@ final class Pull
             case 'work_permits':
                 // Vigentes o para autorizar, y los terminados de los últimos 3 días (el historial está en la web).
                 return ["SELECT t.id, t.uuid, t.status, t.requested_by, t.approved_by, t.sector_id, t.updated_at, t.deleted_at FROM work_permits t
-                    WHERE {$after} AND (t.status IN ('solicitado', 'aprobado', 'en_ejecucion', 'suspendido') OR t.updated_at > UTC_TIMESTAMP() - INTERVAL 3 DAY){$order}", $params];
+                        WHERE {$after} AND (t.status IN ('solicitado', 'aprobado', 'en_ejecucion', 'suspendido') OR t.updated_at > UTC_TIMESTAMP() - INTERVAL 3 DAY){$order}", $params];
+            case 'ppe_items':
+                return ["SELECT t.* FROM ppe_items t WHERE {$after} AND t.is_active=1 AND t.deleted_at IS NULL{$order}", $params];
+            case 'ppe_matrix':
+                return ["SELECT t.*, p.uuid AS position_uuid, i.uuid AS item_uuid FROM ppe_matrix t JOIN positions p ON p.id=t.position_id JOIN ppe_items i ON i.id=t.item_id WHERE {$after} AND t.is_active=1{$order}", $params];
+            case 'ppe_deliveries':
+                return ["SELECT t.*, e.uuid AS employee_uuid, e.contractor_id, e.sector_id FROM ppe_deliveries t JOIN employees e ON e.id=t.employee_id WHERE {$after} AND t.voided_at IS NULL AND e.is_active=1{$order}", $params];
             case 'inspection_templates':
                 return ["SELECT t.*, v.uuid AS version_uuid, v.structure, ty.uuid AS type_uuid FROM inspection_templates t
                     LEFT JOIN inspection_template_versions v ON v.id = t.current_version_id LEFT JOIN catalog_items ty ON ty.id = t.equipment_type_id
@@ -214,6 +221,9 @@ final class Pull
             'equipment' => ['uuid' => $r['uuid'], 'code' => $r['code'], 'name' => $r['name'], 'type_uuid' => $r['type_uuid'],
                 'site_uuid' => $r['site_uuid'], 'sector_uuid' => $r['sector_uuid'], 'status' => $r['status']],
             'employees' => ['uuid' => $r['uuid'], 'name' => $r['last_name'] . ', ' . $r['first_name'], 'sector_uuid' => $r['sector_uuid']],
+            'ppe_items' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'category' => $r['category'], 'model' => $r['model'], 'brand' => $r['brand'], 'life_days' => $r['life_days'], 'size_type' => $r['size_type']],
+            'ppe_matrix' => ['uuid' => $r['uuid'], 'position_uuid' => $r['position_uuid'], 'item_uuid' => $r['item_uuid'], 'quantity' => (int) $r['quantity'], 'life_days' => $r['life_days'], 'mandatory' => (bool) $r['mandatory'], 'notes' => $r['notes']],
+            'ppe_deliveries' => ['uuid' => $r['uuid'], 'employee_uuid' => $r['employee_uuid'], 'delivered_at' => $r['delivered_at'], 'reason' => $r['reason'], 'notes' => $r['notes'], 'items' => array_map(fn($i) => ['item_name'=>$i['item_name'], 'quantity'=>(int)$i['quantity'], 'size'=>$i['size'], 'next_due_on'=>$i['next_due_on']], \App\Models\Ppe::itemsFor([(int)$r['id']])[(int)$r['id']] ?? [])],
             'observations' => [
                 'uuid' => $r['uuid'], 'number' => (int) $r['number'], 'status' => $r['status'], 'status_label' => ObservationWorkflow::label($r['status']),
                 'category_uuid' => $r['category_uuid'], 'severity_uuid' => $r['severity_uuid'], 'risk_uuid' => $r['risk_uuid'],
@@ -256,6 +266,14 @@ final class Pull
             'patrol_rounds' => ['uuid' => $r['uuid'], 'route_uuid' => $r['route_uuid'], 'mine' => (int) $r['user_id'] === (int) (UserAuth::user()['id'] ?? 0), 'status' => $r['status'], 'started_at' => str_replace(' ', 'T', $r['started_at']) . 'Z', 'finished_at' => $r['finished_at'] ? str_replace(' ', 'T', $r['finished_at']) . 'Z' : null],
             'patrol_scans' => ['uuid' => $r['uuid'], 'round_uuid' => $r['round_uuid'], 'point_uuid' => $r['point_uuid'], 'scanned_at_device' => str_replace(' ', 'T', $r['scanned_at_device']) . 'Z', 'lat' => $r['lat'] !== null ? (float) $r['lat'] : null, 'lng' => $r['lng'] !== null ? (float) $r['lng'] : null, 'accuracy_m' => $r['accuracy_m'] !== null ? (float) $r['accuracy_m'] : null, 'distance_m' => $r['distance_m'] !== null ? (float) $r['distance_m'] : null, 'within_radius' => (bool) $r['within_radius'], 'note' => $r['note']],
         };
+    }
+
+    private static function canPullPpe(array $row, string $entity): bool
+    {
+        if (!UserAuth::can('epp', 'crear')) return false;
+        if ($entity !== 'ppe_deliveries') return true;
+        if ($row['contractor_id'] !== null) return false;
+        return UserAuth::scope('epp') === 'todo' || ($row['sector_id'] !== null && in_array((int) $row['sector_id'], \App\Services\SectorScope::sectorIds('epp') ?? [], true));
     }
 
     public static function encode(array $positions): string

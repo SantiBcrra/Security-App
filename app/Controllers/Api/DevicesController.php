@@ -10,7 +10,7 @@ use App\Services\ApiAuth;
 use App\Services\Notify\WebPush;
 use App\Services\UserAuth;
 
-/** Registro de notificaciones push del dispositivo (Web Push de la PWA). */
+/** Registro de notificaciones push de dispositivos web autorizados. */
 final class DevicesController
 {
     public function vapidKey(Request $request): Response

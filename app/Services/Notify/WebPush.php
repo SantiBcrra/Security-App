@@ -9,7 +9,7 @@ use App\Core\Vapid;
 use App\Models\PlatformSettings;
 use App\Models\PushSubscriptions;
 
-/** Envío Web Push (PWA instalada): VAPID + cifrado aes128gcm, sin librerías. */
+/** Envío Web Push para navegadores autorizados: VAPID + cifrado aes128gcm, sin librerías. */
 final class WebPush
 {
     /** Clave pública VAPID (base64url) que el navegador necesita para suscribirse. Se genera una vez. */

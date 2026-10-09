@@ -25,7 +25,7 @@ components:
       required: [op_id, type, data]
       properties:
         op_id: { type: string, format: uuid, description: "Generado en el celular. Reenviar el mismo op_id devuelve el mismo resultado (idempotente)." }
-        type: { type: string, enum: [observation.create, observation.comment, observation.transition, round.start, round.scan, round.finish, action.start, action.close, inspection.create, incident.create, permit.start, permit.measure, permit.isolate, permit.release, permit.suspend, permit.resume, permit.close] }
+        type: { type: string, enum: [observation.create, observation.comment, observation.transition, round.start, round.scan, round.finish, action.start, action.close, inspection.create, incident.create, ppe.delivery, permit.start, permit.measure, permit.isolate, permit.release, permit.suspend, permit.resume, permit.close] }
         data:
           type: object
           description: |
@@ -44,6 +44,10 @@ components:
             incident.create: uuid, type, occurred_at, sector (opcional en in itinere), equipment, location_text, lat, lng, description,
               immediate_actions, people [{ employee (uuid) | external_name, role (lesionado|testigo|involucrado), injury_description, statement }].
               Fotos después con POST /uploads + incident_uuid. Respuesta: code, status, status_label, duplicate.
+            ppe.delivery: uuid (de la entrega), employee_uuid, delivered_at (ISO 8601 opcional), reason (inicial|vencimiento|rotura|perdida|talle|otro),
+              items [{ item (UUID del catálogo), quantity, size?, returned_previous? }], signature_mode=pantalla, signature (data URL PNG),
+              notes?, lat?, lng?. La entrega se valida con el alcance del usuario y la matriz vigente, queda inmutable y responde
+              { uuid, number, duplicate }. Reenviar el mismo uuid u op_id nunca crea otra entrega.
             permit.* (permisos de trabajo; todas llevan uuid del permiso y responden { permit (como en el pull), duplicate }):
               permit.start: worker_signatures { uuid del ejecutor: data URL PNG } (todos los que no firmaron).
               permit.measure: measurement_uuid, measured_at (ISO del celular, hasta 12 h atrás), o2, lel (obligatorios), co, h2s,
@@ -86,6 +90,7 @@ paths:
         work_permits (los que el usuario puede ver: vigentes, para autorizar y terminados en los últimos 3 días): code, types,
         status, sector, equipment, task, valid_from, ends_at, workers [{ uuid, name, role, signed }], measurements (últimas 10),
         isolations, can { approve, start, close, work, stop }. `meta.gases` trae los límites para evaluar mediciones sin señal.
+        ppe_items, ppe_matrix y ppe_deliveries (solo con `epp.crear` y dentro del alcance): catálogo, matriz por puesto y entregas vigentes con sus elementos.
         `deleted` trae los uuid dados de baja. Paginado: repetir con el cursor devuelto mientras `has_more` sea true.
         El cliente hace upsert por uuid (puede recibir algo dos veces sin duplicar).
       parameters:

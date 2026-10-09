@@ -20,7 +20,7 @@ use App\Services\UserAuth;
 final class Push
 {
     public const MAX_OPS = 50;
-    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'action.start', 'action.close', 'inspection.create', 'incident.create',
+    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
         'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
@@ -68,6 +68,7 @@ final class Push
                 'action.close'           => self::actionStep($data, 'cerrar'),
                 'inspection.create'      => self::inspectionCreate($data),
                 'incident.create'        => self::incidentCreate($data),
+                'ppe.delivery'           => self::ppeDelivery($data),
                 'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close'
                                          => ['status' => 'ok', 'data' => \App\Services\WorkPermitApi::apply($type, $data,
                                                 ['ip' => $_SERVER['REMOTE_ADDR'] ?? null, 'user_agent' => 'App de campo'])],
@@ -208,6 +209,17 @@ final class Push
         $i = $r['incident'];
         return ['status' => 'ok', 'data' => ['uuid' => $i['uuid'], 'code' => \App\Models\Incidents::format((int) $i['number']), 'status' => $i['status'],
             'status_label' => \App\Services\IncidentService::STATES[$i['status']]['label'], 'duplicate' => !empty($r['duplicate'])]];
+    }
+
+    /** Entrega de EPP firmada sin conexión (uuid de la entrega: reenvío seguro). */
+    private static function ppeDelivery(array $data): array
+    {
+        if (!Uuid::isValid((string) ($data['uuid'] ?? ''))) return self::error('Falta el identificador de la entrega.');
+        $employee = \App\Models\Employees::findByUuid((string) ($data['employee_uuid'] ?? ''));
+        if (!$employee) return self::error('El empleado no existe o no está disponible.');
+        $result = \App\Services\PpeService::deliver($employee, $data, null, ['ip' => $_SERVER['REMOTE_ADDR'] ?? null, 'user_agent' => 'Android']);
+        if ($result['delivery'] === null) return self::error(implode(' ', $result['errors']) ?: 'Entrega inválida.');
+        return ['status' => 'ok', 'data' => ['uuid' => $result['delivery']['uuid'], 'number' => (int) $result['delivery']['number'], 'duplicate' => !empty($result['duplicate'])]];
     }
 
     private static function error(string $message): array

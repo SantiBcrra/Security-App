@@ -309,6 +309,9 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Entrega 2: `/panel/epp` incluye tablero por sector; `/panel/epp/entrega-lote` lista pendientes para firmar uno a uno;
   `/panel/epp/exportar` descarga CSV y `/panel/epp/constancias-sector?sector=UUID` imprime constancias. `PpeReminders`
   integra `ppe.due_soon`, `ppe.overdue` y `ppe.missing` al cron; el aviso se ajusta en `epp.aviso_dias`.
+- Soporte Android: `Sync\\Push` acepta `ppe.delivery` con `employee_uuid`, `items` y firma PNG; reutiliza `PpeService::deliver`,
+  valida permiso y alcance, conserva la entrega inmutable y responde de forma idempotente por `uuid` y `op_id`. `Sync\\Pull`
+  expone `ppe_items`, `ppe_matrix` y `ppe_deliveries` solo a usuarios con `epp.crear` dentro de su alcance.
 
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.

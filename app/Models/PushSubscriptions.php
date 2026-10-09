@@ -5,7 +5,7 @@ namespace App\Models;
 
 use App\Core\DB;
 
-/** Suscripciones Web Push de los navegadores/PWA instaladas. */
+/** Suscripciones Web Push de navegadores autorizados. */
 final class PushSubscriptions
 {
     public static function save(int $userId, ?string $deviceUuid, string $endpoint, string $p256dh, string $auth, ?string $ua): void

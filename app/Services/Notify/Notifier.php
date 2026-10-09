@@ -152,7 +152,7 @@ final class Notifier
         };
     }
 
-    /** Destinos push: suscripciones web (PWA, "web:{id}") y tokens Expo de una futura app nativa. */
+    /** Destinos push: suscripciones web ("web:{id}") y tokens de dispositivos nativos. */
     private static function pushTokens(int $userId): array
     {
         $web = array_map(fn ($s) => 'web:' . $s['id'], \App\Models\PushSubscriptions::forUser($userId));

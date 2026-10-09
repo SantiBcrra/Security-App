@@ -6,6 +6,7 @@ use App\Core\DB;
 use App\Core\Migrator;
 use App\Core\Storage;
 use App\Core\Tenant;
+use App\Core\Uuid;
 use App\Models\Contractors;
 use App\Models\Employees;
 use App\Models\PlatformSettings;
@@ -22,6 +23,7 @@ use App\Services\IndustryTemplates;
 use App\Services\Notify\Channels;
 use App\Services\Notify\MailTransport;
 use App\Services\PpeService;
+use App\Services\Sync\Push;
 use App\Services\TenantProvisioner;
 use App\Services\UserAuth;
 
@@ -270,6 +272,26 @@ return [
         assert_true(PpeItems::findBy('name', 'Guante anticorte') !== null);
         assert_same(403, $call($st['rep'], '/panel/epp')->status);
         $_SESSION = [];
+    },
+
+    'API móvil: ppe.delivery valida alcance, firma e idempotencia por uuid' => function () use ($setup, &$st, $sign, $item) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $delivery = Uuid::v4();
+        $data = ['uuid' => $delivery, 'employee_uuid' => $st['welder']['uuid'], 'reason' => 'inicial', 'signature_mode' => 'pantalla',
+            'signature' => $sign(), 'items' => [['item' => $item('careta')['uuid'], 'quantity' => 1, 'size' => null]]];
+        $op = fn () => ['op_id' => Uuid::v4(), 'type' => 'ppe.delivery', 'data' => $data];
+        $first = Push::run([$op()])[0];
+        assert_same('ok', $first['status'], json_encode($first));
+        assert_same($delivery, $first['data']['uuid']);
+        $second = Push::run([$op()])[0];
+        assert_same('ok', $second['status']);
+        assert_same(true, $second['data']['duplicate']);
+        assert_same(1, (int) DB::tenant()->query("SELECT COUNT(*) FROM ppe_deliveries WHERE uuid = '{$delivery}'")->fetchColumn());
+        UserAuth::setCurrent($st['sup']);
+        $denied = Push::run([['op_id' => Uuid::v4(), 'type' => 'ppe.delivery', 'data' => array_merge($data, ['uuid' => Uuid::v4(), 'employee_uuid' => $st['turner']['uuid']])]])[0];
+        assert_same('error', $denied['status']);
     },
 
     'aislamiento: la empresa B no ve el EPP de A' => function () use ($setup, &$st) {
