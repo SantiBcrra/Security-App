@@ -10,6 +10,7 @@ use App\Core\Uuid;
 use App\Models\Patrols;
 use App\Models\PlatformSettings;
 use App\Models\Roles;
+use App\Models\Settings;
 use App\Models\Tenants;
 use App\Models\Users;
 use App\Policies\Permissions;
@@ -374,6 +375,18 @@ return [
         assert_same(1, count($rows));
         assert_same('lejos', $rows[0]['location_status']);
         assert_same([], Patrols::outsideScans($st['g2']['uuid'], $point));
+    },
+
+    'automatizaciones: configuración por empresa llega en el pull' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        Settings::set('rondas.automatizaciones', '0');
+        Settings::set('rondas.sin_progreso_minutos', '22');
+        $meta = Pull::run(null, 1000)['meta'];
+        assert_same(false, $meta['automatizaciones_rondas']['activas']);
+        assert_same(22, $meta['automatizaciones_rondas']['sin_progreso_minutos']);
+        assert_same(10, $meta['automatizaciones_rondas']['inicio_gracia_minutos'], 'valor por defecto');
     },
 
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {

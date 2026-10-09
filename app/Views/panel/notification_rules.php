@@ -136,3 +136,20 @@ $has = fn (string $type, ?string $value = null) => $form && (bool) array_filter(
         </div>
     </div>
 </div>
+<form class="card shadow-sm mt-3" method="post" action="<?= e(url('/panel/configuracion/notificaciones/ajustes')) ?>">
+    <?= csrf_field() ?>
+    <div class="card-header"><strong>Automatizaciones de rondas</strong></div>
+    <fieldset class="card-body" <?= $canEdit ? '' : 'disabled' ?>>
+        <p class="text-body-secondary small">Estas opciones preparan la guía de la app Android y las alertas automáticas. Los destinatarios y canales se definen arriba en las reglas de notificación.</p>
+        <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" name="round_automation" value="1" id="round_automation" <?= $settings['round_automation'] ? 'checked' : '' ?>><label class="form-check-label" for="round_automation">Activar automatizaciones de rondas</label></div>
+        <div class="row g-2 small">
+            <div class="col-md-6"><label class="form-label">Avisar si no hay una marca durante</label><div class="input-group"><input class="form-control" type="number" name="round_no_progress" min="1" max="240" value="<?= e($settings['round_no_progress']) ?>"><span class="input-group-text">minutos</span></div></div>
+            <div class="col-md-6"><label class="form-label">Gracia para iniciar la ronda</label><div class="input-group"><input class="form-control" type="number" name="round_start_grace" min="1" max="240" value="<?= e($settings['round_start_grace']) ?>"><span class="input-group-text">minutos</span></div></div>
+            <div class="col-md-6"><label class="form-label">Avisar si la ronda se atrasa</label><div class="input-group"><input class="form-control" type="number" name="round_overdue" min="1" max="240" value="<?= e($settings['round_overdue']) ?>"><span class="input-group-text">minutos</span></div></div>
+            <div class="col-md-6"><label class="form-label">Batería baja del celular</label><div class="input-group"><input class="form-control" type="number" name="round_battery" min="5" max="50" value="<?= e($settings['round_battery']) ?>"><span class="input-group-text">%</span></div></div>
+            <div class="col-md-6"><label class="form-label">Sin sincronizar durante</label><div class="input-group"><input class="form-control" type="number" name="round_sync" min="5" max="1440" value="<?= e($settings['round_sync']) ?>"><span class="input-group-text">minutos</span></div></div>
+        </div>
+        <div class="form-check form-switch mt-3"><input class="form-check-input" type="checkbox" name="round_guidance" value="1" id="round_guidance" <?= $settings['round_guidance'] ? 'checked' : '' ?>><label class="form-check-label" for="round_guidance">Guiar al guardia hacia la próxima ronda desde Android</label></div>
+        <?php if ($canEdit): ?><button class="btn btn-primary btn-sm mt-3">Guardar automatizaciones</button><?php endif; ?>
+    </fieldset>
+</form>

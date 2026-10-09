@@ -154,6 +154,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Supervisores y administradores pueden corregir la ubicación de referencia desde Android con `patrol.point_locate` (GPS actual, cola offline e idempotencia por `op_id`); el cambio queda auditado. El reporte `/panel/rondas/marcas-fuera` filtra marcas `lejos`/`simulada` por guardia, punto y fecha.
 - `round.start` es idempotente también por uuid de la ronda; el escaneo valida punto activo, uuid y hora del
   celular (máx. 30 días atrás). La app Android recupera la ronda en curso (`mine` + `en_curso`) al reabrir y ofrece "Tomar GPS" para ubicar un punto parado en el lugar.
+- Automatizaciones (Fase 1): `/panel/configuracion/notificaciones` permite ajustar por empresa activación, tolerancias de progreso/inicio/atraso, batería baja, sincronización demorada y guía Android. Los valores viajan en `sync/pull.meta.automatizaciones_rondas`; los destinatarios y canales se mantienen en `notification_rules`. Detalle en `docs/design/automatizaciones-rondas.md`.
 
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`

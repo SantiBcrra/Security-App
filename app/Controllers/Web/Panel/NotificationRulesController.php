@@ -41,6 +41,13 @@ final class NotificationRulesController
                 'verify'     => Settings::get('acciones.dias_verificacion', '15'),
                 'inv_days'   => Settings::get('incidentes.dias_investigacion', '3'),
                 'art_hours'  => Settings::get('incidentes.horas_art', '48'),
+                'round_automation' => Settings::get('rondas.automatizaciones', '1') === '1',
+                'round_no_progress' => Settings::get('rondas.sin_progreso_minutos', '10'),
+                'round_start_grace' => Settings::get('rondas.inicio_gracia_minutos', '10'),
+                'round_overdue' => Settings::get('rondas.atraso_minutos', '10'),
+                'round_battery' => Settings::get('rondas.bateria_baja_porcentaje', '20'),
+                'round_sync' => Settings::get('rondas.sin_sync_minutos', '15'),
+                'round_guidance' => Settings::get('rondas.guia_android', '1') === '1',
             ],
             'queue'    => NotificationQueue::recent(30),
             'stats'    => NotificationQueue::stats(),
@@ -113,9 +120,22 @@ final class NotificationRulesController
         Settings::set('acciones.dias_verificacion', $days('verify_days', 15, 180));
         Settings::set('incidentes.dias_investigacion', $days('inv_days', 3, 60));
         Settings::set('incidentes.horas_art', $days('art_hours', 48, 720));
+        $roundInt = function (string $key, int $default, int $min, int $max) use ($request): string {
+            return (string) max($min, min($max, (int) $request->input($key, $default)));
+        };
+        Settings::set('rondas.automatizaciones', $request->input('round_automation') ? '1' : '0');
+        Settings::set('rondas.sin_progreso_minutos', $roundInt('round_no_progress', 10, 1, 240));
+        Settings::set('rondas.inicio_gracia_minutos', $roundInt('round_start_grace', 10, 1, 240));
+        Settings::set('rondas.atraso_minutos', $roundInt('round_overdue', 10, 1, 240));
+        Settings::set('rondas.bateria_baja_porcentaje', $roundInt('round_battery', 20, 5, 50));
+        Settings::set('rondas.sin_sync_minutos', $roundInt('round_sync', 15, 5, 1440));
+        Settings::set('rondas.guia_android', $request->input('round_guidance') ? '1' : '0');
         Audit::tenant('settings.update', 'settings', null, null, ['escalamiento_min' => $minutes, 'resumen_diario' => (bool) $request->input('daily'), 'resumen_semanal' => (bool) $request->input('weekly'),
             'acciones_aviso_dias' => Settings::get('acciones.aviso_dias'), 'acciones_escalar_dias' => Settings::get('acciones.escalar_dias'),
-            'acciones_dias_verificacion' => Settings::get('acciones.dias_verificacion')]);
+            'acciones_dias_verificacion' => Settings::get('acciones.dias_verificacion'), 'rondas_automatizaciones' => Settings::get('rondas.automatizaciones'),
+            'rondas_sin_progreso_minutos' => Settings::get('rondas.sin_progreso_minutos'), 'rondas_inicio_gracia_minutos' => Settings::get('rondas.inicio_gracia_minutos'),
+            'rondas_atraso_minutos' => Settings::get('rondas.atraso_minutos'), 'rondas_bateria_baja_porcentaje' => Settings::get('rondas.bateria_baja_porcentaje'),
+            'rondas_sin_sync_minutos' => Settings::get('rondas.sin_sync_minutos'), 'rondas_guia_android' => Settings::get('rondas.guia_android')]);
         Flash::add('success', 'Configuración guardada.');
         return Response::redirect('/panel/configuracion/notificaciones');
     }

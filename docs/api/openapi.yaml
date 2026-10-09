@@ -90,6 +90,7 @@ paths:
         work_permits (los que el usuario puede ver: vigentes, para autorizar y terminados en los últimos 3 días): code, types,
         status, sector, equipment, task, valid_from, ends_at, workers [{ uuid, name, role, signed }], measurements (últimas 10),
         isolations, can { approve, start, close, work, stop }. `meta.gases` trae los límites para evaluar mediciones sin señal.
+        `meta.automatizaciones_rondas` trae activación, tolerancias y guía local de las automatizaciones de rondas.
         ppe_items, ppe_matrix y ppe_deliveries (solo con `epp.crear` y dentro del alcance): catálogo, matriz por puesto y entregas vigentes con sus elementos.
         `deleted` trae los uuid dados de baja. Paginado: repetir con el cursor devuelto mientras `has_more` sea true.
         El cliente hace upsert por uuid (puede recibir algo dos veces sin duplicar).
