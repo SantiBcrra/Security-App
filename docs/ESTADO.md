@@ -35,7 +35,7 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
   - [x] avisos por cron: `ppe.due_soon` (lunes, resumen), `ppe.overdue` (una vez), `ppe.missing` (ingreso sin EPP)
   - [x] CSV de estado
   - [x] imprimir constancias de un sector (una por hoja)
-  - [ ] "pendientes de EPP" en el inicio para supervisores
+  - [x] "pendientes de EPP" en el inicio para supervisores
   - [x] setting `epp.aviso_dias` editable en Configuración
 - [ ] **Etapa 14 entrega 3 — EPP en la PWA** (`/movil/`): entregar con firma sin señal (push `ppe.delivery` idempotente
       por uuid), consulta del EPP de un empleado, pull de `ppe_items`, `ppe_matrix` y últimas entregas.
