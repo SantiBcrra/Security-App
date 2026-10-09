@@ -36,6 +36,6 @@ final class QrController
 
     public function patrolPoint(Request $request, string $uuid): Response
     {
-        return Response::redirect('/movil/#/ronda/punto/' . rawurlencode($uuid));
+        return Response::redirect('/panel/rondas');
     }
 }

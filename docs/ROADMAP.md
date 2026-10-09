@@ -4,7 +4,7 @@ Texto del plan original, **ajustado a las decisiones ya tomadas** (ver `AGENTS.m
 - No hay librerías: donde el plan decía dompdf o PhpSpreadsheet, se usa una página imprimible o
   un CSV/XLSX propio.
 - Hay una base por empresa.
-- La app de campo es la PWA `/movil/`.
+- La app de guardias es Android nativa; las APIs v1 sirven autenticación y sincronización offline.
 
 Las notas marcadas **"Nota"** son las aclaraciones de implementación.
 

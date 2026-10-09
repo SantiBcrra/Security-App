@@ -22,7 +22,6 @@ use App\Controllers\Web\CronController;
 use App\Controllers\Web\DiagController;
 use App\Controllers\Web\HomeController;
 use App\Controllers\Web\InstallController;
-use App\Controllers\Web\MobileController;
 use App\Controllers\Web\Panel\ActionsController;
 use App\Controllers\Web\Panel\ImportController;
 use App\Controllers\Web\Panel\IncidentsController;
@@ -319,11 +318,6 @@ return static function (Router $r): void {
             $r->post('/push/unsubscribe', [DevicesController::class, 'unsubscribe']);
         });
     });
-
-    // App de campo instalable (PWA): funciona offline y habla con la API v1.
-    $r->get('/movil', [MobileController::class, 'shell']);
-    $r->get('/movil/sw.js', [MobileController::class, 'serviceWorker']);
-    $r->get('/movil/manifest.webmanifest', [MobileController::class, 'manifest']);
 
     // Tareas programadas por URL (cron del hosting o cron-job.org), protegidas con clave.
     $r->get('/cron/run', [CronController::class, 'run']);

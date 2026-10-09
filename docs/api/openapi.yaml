@@ -3,7 +3,7 @@ info:
   title: Security App — API v1
   version: "1.0"
   description: |
-    API de la app de campo (PWA en /movil y futuras apps nativas).
+    API de la app Android nativa de campo y sincronización offline.
     Todas las respuestas tienen la forma `{ ok, data, error }` con `error = { message, code }`.
     Autenticación: `Authorization: Bearer {access_token}` (JWT HS256, 15 min). Renovar con
     `/auth/refresh` (refresh token rotativo por dispositivo; reutilizar uno viejo revoca el dispositivo).

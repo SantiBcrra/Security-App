@@ -6,7 +6,7 @@ Estado: **aprobado**. Decisiones del usuario: app nativa en **Kotlin**, solo And
 se actualiza sola desde el sistema.
 
 ## 1. Por qué y qué cambia
-- **Qué se busca**: la PWA (`/movil/`) sigue para el resto del trabajo de campo. Los guardias pasan a una app nativa
+- **Qué se busca**: los guardias pasan a una app Android nativa; no se mantiene la PWA (`/movil/`)
   para tener:
   - GPS confiable durante la ronda;
   - lectura de QR y NFC;
@@ -47,7 +47,7 @@ se actualiza sola desde el sistema.
   - estado de la sincronización y envíos pendientes;
   - permisos ("Ubicación: permitir siempre", ahorro de batería) con una guía paso a paso;
   - cerrar la sesión.
-- **Queda fuera de la v1** (sigue en la PWA o la web): inspecciones, permisos de trabajo, EPP e incidentes completos.
+- **Queda fuera de la v1** (sigue en la web): inspecciones, permisos de trabajo, EPP e incidentes completos.
 
 ## 3. Tecnología (todo oficial de Google o estándar de la industria)
 | Parte | Elección |

@@ -17,7 +17,7 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
 - [x] Etapa 5 — API de sincronización offline (pull por cursor, push idempotente, fotos por partes)
 - [x] Etapa 6 — Observaciones (evidencia inmutable, flujo, mapa, imprimible)
 - [x] Etapa 7 — Notificaciones (reglas, cola, email, Web Push, escalamiento, cron por URL)
-- [x] Etapa 8 — App de campo PWA en `/movil/`
+- [x] Etapa 8 — App de campo web retirada; la operación de guardias continúa en la app Android nativa
 - [x] Etapa 9 — Rondas de guardias (puntos QR, rutas asignadas, historial)
 - [x] Etapa 10 — Acciones CAPA (3 entregas) — `docs/design/etapa-10-capa.md`
 - [x] Etapa 11 — Inspecciones y checklists (3 entregas) — `docs/design/etapa-11-inspecciones.md`
@@ -37,8 +37,8 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
   - [x] imprimir constancias de un sector (una por hoja)
   - [x] "pendientes de EPP" en el inicio para supervisores
   - [x] setting `epp.aviso_dias` editable en Configuración
-- [ ] **Etapa 14 entrega 3 — EPP en la PWA** (`/movil/`): entregar con firma sin señal (push `ppe.delivery` idempotente
-      por uuid), consulta del EPP de un empleado, pull de `ppe_items`, `ppe_matrix` y últimas entregas.
+- [ ] **Etapa 14 entrega 3 — EPP en la app Android nativa**: entregar con firma sin señal (push `ppe.delivery` idempotente
+      por uuid), consulta del EPP de un empleado y sincronización de catálogo, matriz y últimas entregas.
 - [ ] **Etapa 15 — Capacitaciones** (diseño + decisiones del usuario primero)
 - [ ] **Etapa 16 — Indicadores, reportes y exportaciones** (diseño primero)
 - [ ] **Etapa 17 — Capa comercial SaaS** (diseño primero; depende de que exista producción)

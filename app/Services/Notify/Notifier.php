@@ -80,7 +80,7 @@ final class Notifier
                         'subject' => $message['title'], 'body_text' => self::text($message),
                         'body_html' => $channel === 'email' ? self::html($message, $user) : null,
                         'payload' => json_encode(['url' => $message['url'], 'event' => $event, $obs['_type'] => $obs['uuid'],
-                            'app_url' => absolute_url('/movil') . '#/' . (['action' => 'accion', 'inspection' => 'inspeccion', 'schedule' => 'programada', 'incident' => 'incidente', 'permit' => 'permiso'][$obs['_type']] ?? 'observacion') . '/' . $obs['uuid']]),
+                            'app_url' => absolute_url('/panel')]),
                         'event' => $event, 'entity_uuid' => $obs['uuid'], 'is_critical' => $message['critical'] ? 1 : 0,
                     ]);
                 }

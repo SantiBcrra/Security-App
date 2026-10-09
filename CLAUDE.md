@@ -131,13 +131,10 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   (`idempotency_keys`) y por uuid del celular (`Sync\Push`); fotos por partes con SHA-256
   (`Uploads`, tabla `uploads`); rate limit por dispositivo (`RateLimiter`, tabla `rate_limits`).
 - La validación del alta de observaciones es una sola: `ObservationInput::validate()` (web y API).
-- **La app de campo es una PWA** en `/movil/` (decisión del usuario: no Expo por ahora). Shell,
-  service worker y manifest los sirve `MobileController`; JS en módulos nativos sin compilar en
-  `public/assets/movil/` (`db.js` IndexedDB, `api.js` JWT, `sync.js` outbox, `app.js` Alpine).
-  Al cambiar cualquier archivo de la app cambia la versión del SW y se actualiza sola.
-- PWA = contexto seguro: HTTPS o `localhost`. Probar en el celular contra XAMPP por Wi-Fi requiere
-  `chrome://flags` → "Insecure origins treated as secure" con `http://IP-de-la-Mac`. El navegador
-  integrado de la app de escritorio NO soporta service workers (probar instalación/push en Chrome).
+- La app de guardias será nativa para Android. El backend conserva las APIs v1 de autenticación,
+  sincronización y operaciones offline para esa aplicación; no se mantiene cliente PWA en `/movil/`.
+- La app Android usa HTTPS en producción y puede probarse contra XAMPP por Wi-Fi con la configuración
+  de red correspondiente del dispositivo.
 - Web Push propio: `Core\Ece` (aes128gcm, RFC 8291 — test con el vector oficial) y `Core\Vapid`
   (ES256). Claves VAPID en `platform_settings` (privada cifrada). El canal "push" de la Etapa 7
   envía a suscripciones web (`push_subscriptions`, destino `web:{id}`) y a tokens Expo futuros.
@@ -146,16 +143,16 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 ## Rondas de guardias (Etapa 9 adelantada)
 - Puntos de ronda en `patrol_points`, con QR público, coordenadas, radio permitido y marca de punto crítico.
 - Rutas y orden de puntos en `patrol_routes` / `patrol_route_points`; ejecuciones y escaneos en `patrol_rounds` / `patrol_scans`.
-- Panel `/panel/rondas` para alta de puntos, impresión de QR e historial. El QR apunta a `/ronda/punto/{uuid}` y abre la PWA.
+- Panel `/panel/rondas` para alta de puntos, impresión de QR e historial. El QR apunta a `/ronda/punto/{uuid}` y lo procesa la app Android.
 - Cada escaneo guarda hora del dispositivo, hora de recepción, GPS, precisión, distancia calculada y si quedó dentro del radio. No se duplica un punto dentro de la misma ronda.
-- La PWA guarda rondas y escaneos en IndexedDB y los envía con `round.start`, `round.scan` y `round.finish`; las operaciones son idempotentes por `op_id`.
+- La app Android guarda rondas y escaneos sin conexión y los envía con `round.start`, `round.scan` y `round.finish`; las operaciones son idempotentes por `op_id`.
 - El mapa operativo usa Leaflet/OpenStreetMap ya incluido; no se agrega dependencia de Google Maps.
 - Rutas: al celular llegan solo las asignadas (`patrol_route_assignments`; alcance "todo" ve todas), con `points` = UUIDs en
   orden; las no asignadas viajan como baja. **Cambiar asignaciones o puntos de una ruta debe tocar `patrol_routes.updated_at`.**
   Iniciar una ruta no asignada se rechaza. Al finalizar: `completa` o `incompleta` (puntos salteados).
   Detalle en `/panel/rondas/ronda/{uuid}` (recorrido, salteados, fuera de radio). Con alcance "propios" el panel muestra solo las propias.
 - `round.start` es idempotente también por uuid de la ronda; el escaneo valida punto activo, uuid y hora del
-  celular (máx. 30 días atrás). La PWA recupera la ronda en curso (`mine` + `en_curso`) al reabrir.
+  celular (máx. 30 días atrás). La app Android recupera la ronda en curso (`mine` + `en_curso`) al reabrir.
 
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`
