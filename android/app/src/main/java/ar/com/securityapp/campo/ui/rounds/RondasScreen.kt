@@ -63,7 +63,7 @@ private fun hour(iso: String?): String = iso?.let { runCatching { HOUR.format(In
 
 @Suppress("DEPRECATION")
 @Composable
-fun RondasScreen(onBack: () -> Unit, vm: RoundsViewModel = viewModel()) {
+fun RondasScreen(onBack: () -> Unit, canWriteTags: Boolean = false, vm: RoundsViewModel = viewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val scan by vm.scan.collectAsStateWithLifecycle()
     var scanning by remember { mutableStateOf(false) }
@@ -75,6 +75,18 @@ fun RondasScreen(onBack: () -> Unit, vm: RoundsViewModel = viewModel()) {
         if (Readiness.allGood(context, vm.needsSms())) vm.start(route) else startRoute = route ?: "libre"
     }
 
+    var writingTags by remember { mutableStateOf(false) }
+    var nfcMessage by remember { mutableStateOf<String?>(null) }
+    if (writingTags) {
+        NfcWriterScreen(ui.points.values.sortedBy { it.code }, vm::tagUrl, onBack = { writingTags = false })
+        return
+    }
+    // Ronda en curso: acercar el celular a la etiqueta NFC del punto marca igual que el QR.
+    ar.com.securityapp.campo.nfc.NfcListener(enabled = ui.active != null && !scanning && scan == null) { tag ->
+        val raw = ar.com.securityapp.campo.nfc.NfcTags.read(tag)
+        if (raw == null) nfcMessage = "La etiqueta está vacía o no se pudo leer. Mantené el celular quieto sobre ella o escaneá el QR."
+        else vm.onQr(raw, method = "nfc")
+    }
     if (scanning) {
         QrScanner("Apuntá al QR del punto de control", onResult = { scanning = false; vm.onQr(it) }, onClose = { scanning = false })
         return
@@ -125,6 +137,9 @@ fun RondasScreen(onBack: () -> Unit, vm: RoundsViewModel = viewModel()) {
                 item {
                     OutlinedButton({ begin(null) }, Modifier.fillMaxWidth(), enabled = !ui.busy) { Text("Ronda libre (sin ruta)") }
                 }
+                if (canWriteTags) item {
+                    TextButton({ writingTags = true }, Modifier.fillMaxWidth()) { Text("Grabar etiquetas NFC de los puntos", color = Brand) }
+                }
                 if (ui.history.isNotEmpty()) {
                     item { Text("Últimas rondas", style = MaterialTheme.typography.titleSmall, color = Muted, modifier = Modifier.padding(top = 8.dp)) }
                     items(ui.history, key = { it.uuid }) { r -> HistoryRow(r, ui.routes.firstOrNull { it.uuid == r.routeUuid }?.name) }
@@ -164,6 +179,7 @@ fun RondasScreen(onBack: () -> Unit, vm: RoundsViewModel = viewModel()) {
             confirmButton = { TextButton({ simulate = false }) { Text("Cerrar") } },
         )
     }
+    nfcMessage?.let { m -> AlertDialog({ nfcMessage = null }, confirmButton = { TextButton({ nfcMessage = null }) { Text("Entendido") } }, text = { Text(m) }) }
     scan?.let { result -> ScanDialog(result, onConfirmOutside = { vm.confirmOutsideRoute() }, onDismiss = { vm.dismissScan() }, onScanAgain = { vm.dismissScan(); scanning = true }) }
 }
 
@@ -184,6 +200,7 @@ private fun ActiveRoundCard(ui: RoundsUi, round: PatrolRound, onScan: () -> Unit
                 colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
                 Text("Escanear punto", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
+            NfcHint()
             OutlinedButton(onFinish, Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Finalizar ronda") }
         }
     }
@@ -247,4 +264,18 @@ private fun ScanDialog(result: ScanResult, onConfirmOutside: () -> Unit, onDismi
         },
         dismissButton = { TextButton(onDismiss) { Text(if (result is ScanResult.NotInRoute) "Cancelar" else "Cerrar") } },
     )
+}
+
+/** Cómo marcar con NFC (o por qué no se puede) debajo del botón de escanear. */
+@Composable
+private fun NfcHint() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    when (ar.com.securityapp.campo.nfc.NfcTags.state(context)) {
+        ar.com.securityapp.campo.nfc.NfcTags.State.ON -> Text("O acercá el celular a la etiqueta NFC del punto.", style = MaterialTheme.typography.bodySmall,
+            color = Muted, modifier = Modifier.padding(top = 6.dp))
+        ar.com.securityapp.campo.nfc.NfcTags.State.OFF -> TextButton({ context.startActivity(android.content.Intent(android.provider.Settings.ACTION_NFC_SETTINGS)) }) {
+            Text("NFC apagado: tocá para activarlo y marcar acercando el celular", style = MaterialTheme.typography.bodySmall, color = Danger)
+        }
+        ar.com.securityapp.campo.nfc.NfcTags.State.NONE -> {}
+    }
 }

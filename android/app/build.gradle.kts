@@ -1,7 +1,17 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+}
+
+/*
+ * Versión para los celulares (release): la firma y la dirección del servidor salen de android/keystore.properties, que NO
+ * se sube al repo (ver keystore.properties.example). Perder la clave = no se puede actualizar la app instalada: respaldarla.
+ */
+val releaseProps = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
 android {
@@ -18,9 +28,18 @@ android {
         // en 10.0.2.2 o por Wi-Fi) y la app no llega al servidor de desarrollo. Sin Google Play no hay exigencia de subirlo.
         targetSdk = 35
         // Subir los dos en cada versión publicada en /admin/app-android (versionCode siempre crece).
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 10
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            releaseProps.getProperty("storeFile")?.let { storeFile = file(it) }
+            storePassword = releaseProps.getProperty("storePassword")
+            keyAlias = releaseProps.getProperty("keyAlias")
+            keyPassword = releaseProps.getProperty("keyPassword")
+        }
     }
 
     buildTypes {
@@ -31,11 +50,13 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            // URL de producción: definirla cuando exista el hosting.
-            buildConfigField("String", "SERVER_URL", "\"https://CAMBIAR-URL-DE-PRODUCCION\"")
+            // Dirección del sistema en producción (serverUrl en keystore.properties), por ejemplo https://seguridad.miempresa.com.ar
+            buildConfigField("String", "SERVER_URL", "\"${releaseProps.getProperty("serverUrl", "").trimEnd('/')}\"")
+            if (releaseProps.getProperty("storeFile") != null) signingConfig = signingConfigs.getByName("release")
+            // Sin R8 a propósito: con la optimización (AGP 9) la versión final se cerraba al abrir (borraba constructores que
+            // WorkManager y ML Kit usan por reflexión). Es una app de seguridad: corre el mismo código probado en debug.
             optimization {
-                enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+                enable = false
             }
         }
     }
@@ -81,4 +102,14 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+}
+
+// Sin firma o sin servidor no se arma la versión para los celulares (evita publicar un APK que no se puede actualizar o
+// que apunta a ninguna parte).
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.path.startsWith(":app:") && it.name.contains("Release") && (it.name.startsWith("assemble") || it.name.startsWith("package")) }) {
+        val missing = listOf("storeFile", "storePassword", "keyAlias", "keyPassword", "serverUrl").filter { releaseProps.getProperty(it).isNullOrBlank() }
+        if (missing.isNotEmpty()) throw GradleException("Falta en android/keystore.properties: ${missing.joinToString()} (ver keystore.properties.example).")
+        if (!releaseProps.getProperty("serverUrl").startsWith("https://")) throw GradleException("serverUrl tiene que empezar con https://")
+    }
 }

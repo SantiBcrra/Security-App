@@ -131,7 +131,7 @@ además de lo de guardias se suman, por módulo, las pantallas que tenía la PWA
 6. **Incidentes y permisos de trabajo** ✅ (incidentes): reporte de incidentes; permisos (firmas, gases, LOTO, suspender, cerrar).
    ⏸ Permisos de trabajo y EPP quedan **desactivados en la app** por decisión del usuario (09/10/2026): se activan más
    adelante (en `HomeScreen.kt` están comentados en `MODULES`).
-7. **EPP, NFC y versión 1.0**: entregas de EPP con firma, NFC en rondas, firma de release y publicación.
+7. **EPP, NFC y versión 1.0** ✅ (sin EPP, desactivado): entregas de EPP con firma, NFC en rondas, firma de release y publicación.
 
 ## 7. Distribución (decidido: sin Google Play)
 - **Instalación**: el guardia abre la página de descarga del sistema (o escanea su QR), baja el APK y Android le pide
@@ -145,6 +145,27 @@ además de lo de guardias se suman, por módulo, las pantallas que tenía la PWA
 - **Notificaciones**: FCM funciona sin publicar en Google Play, porque solo necesita Google Play Services en el
   celular. Los celulares **Huawei recientes no tienen Google Play Services**: ahí no llegan las notificaciones con la
   app cerrada. Con la app abierta se consultan los avisos cada minuto, y el pánico por SMS funciona igual.
+
+### Firma de la versión final y publicación (una vez por versión)
+La clave de firma se crea **una sola vez** y se guarda para siempre: Android solo acepta una actualización firmada con la
+misma clave. Si se pierde, hay que desinstalar la app en todos los celulares e instalarla de nuevo.
+1. Crear la clave (Terminal de la Mac; pide una contraseña que elige el usuario y datos de la empresa):
+   `mkdir -p ~/SecurityApp-claves && "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/keytool" -genkeypair -v -keystore ~/SecurityApp-claves/securityapp-release.jks -alias securityapp -keyalg RSA -keysize 4096 -validity 10000`
+2. Copiar `android/keystore.properties.example` como `android/keystore.properties` (no va a GitHub) y completar la ruta,
+   contraseñas, alias y `serverUrl` (la dirección https del sistema en producción).
+3. Respaldar el `.jks` + las contraseñas junto con `config/config.local.php` (fuera de la Mac).
+4. Compilar: `cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew assembleRelease`
+   → `android/app/build/outputs/apk/release/app-release.apk`. Sin `keystore.properties` completo la compilación se corta.
+5. Publicar en `/admin/app-android` con el mismo `versionCode` / `versionName` del `build.gradle.kts` (1.0: 10 / 1.0.0).
+   En cada versión nueva subir los dos (el versionCode siempre crece).
+La versión final se compila sin R8 a propósito (con la optimización de AGP 9 se cerraba al abrir).
+
+### NFC
+La etiqueta de cada punto guarda la misma dirección que su QR (`{servidor}/ronda/punto/{uuid}`, NDEF URI). Durante la ronda
+la app la lee al acercar el celular (reader mode, solo con la pantalla de la ronda abierta); el escaneo viaja con
+`method: nfc` (columna `patrol_scans.method`, migración 0065; se ve como QR/NFC en el detalle de la ronda). Quien tiene
+`rondas.editar` graba las etiquetas desde Rondas → "Grabar etiquetas NFC de los puntos" (NTAG213/215/216; opción de
+bloquearlas para que nadie las regrabe). Sin NFC, o con NFC apagado, se sigue usando el QR.
 
 ## 8. Pruebas
 - **Servidor**: tests PHP como siempre (posiciones, pánico, sin señal, FCM con transporte falso, NFC, idempotencia).

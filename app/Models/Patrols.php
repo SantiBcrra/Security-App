@@ -87,7 +87,7 @@ final class Patrols
         $round['route_points'] = [];
         if ($round['route_id'] !== null) {
             $s = DB::tenant()->prepare('SELECT p.uuid, p.code, p.name, p.is_critical, p.radius_m, rp.sort_order,
-                    sc.scanned_at_device, sc.distance_m, sc.within_radius, sc.accuracy_m, sc.lat, sc.lng
+                    sc.scanned_at_device, sc.method, sc.distance_m, sc.within_radius, sc.accuracy_m, sc.lat, sc.lng
                 FROM patrol_route_points rp JOIN patrol_points p ON p.id=rp.point_id
                 LEFT JOIN patrol_scans sc ON sc.round_id=? AND sc.point_id=rp.point_id
                 WHERE rp.route_id=? ORDER BY rp.sort_order, rp.id');
@@ -218,8 +218,9 @@ final class Patrols
         $uuid = (string) ($data['uuid'] ?? Uuid::v4());
         if (!Uuid::isValid($uuid)) throw new UserError('Identificador de escaneo inválido.');
         $accuracy = isset($data['accuracy_m']) && is_numeric($data['accuracy_m']) ? min(max((float) $data['accuracy_m'], 0.0), 999999999.0) : null;
-        DB::tenant()->prepare('INSERT INTO patrol_scans (uuid,round_id,point_id,user_id,scanned_at_device,received_at,lat,lng,accuracy_m,distance_m,within_radius,note,created_at,updated_at) VALUES (?,?,?,?,?,UTC_TIMESTAMP(),?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
-            ->execute([$uuid, (int) $round['id'], (int) $point['id'], (int) UserAuth::user()['id'], $at, $lat, $lng, $accuracy, $distance, $inside ? 1 : 0, $data['note'] ?? null]);
+        $method = in_array($data['method'] ?? null, ['qr', 'nfc'], true) ? $data['method'] : null; // cómo se marcó el punto
+        DB::tenant()->prepare('INSERT INTO patrol_scans (uuid,round_id,point_id,method,user_id,scanned_at_device,received_at,lat,lng,accuracy_m,distance_m,within_radius,note,created_at,updated_at) VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(),?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
+            ->execute([$uuid, (int) $round['id'], (int) $point['id'], $method, (int) UserAuth::user()['id'], $at, $lat, $lng, $accuracy, $distance, $inside ? 1 : 0, $data['note'] ?? null]);
         if ($late && $round['route_id'] !== null) {
             $status = self::missingPoints((int) $round['id'], (int) $round['route_id']) > 0 ? 'incompleta' : 'completa';
             DB::tenant()->prepare('UPDATE patrol_rounds SET status = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([$status, (int) $round['id']]);

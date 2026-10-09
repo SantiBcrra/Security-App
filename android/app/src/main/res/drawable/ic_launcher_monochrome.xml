@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ícono temático (Android 13+): el sistema lo tiñe; escudo en contorno + tilde. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineJoin="round" android:fillColor="#00000000"
+        android:pathData="M54,29L75,37V52.5C75,65.5 66,75.5 54,79C42,75.5 33,65.5 33,52.5V37Z" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:fillColor="#00000000" android:pathData="M44.5,53.5L51,60L63.5,47" />
+</vector>

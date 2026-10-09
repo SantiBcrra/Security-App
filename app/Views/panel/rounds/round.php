@@ -57,7 +57,7 @@ $mapScans = array_values(array_filter(array_merge($round['route_points'] ?? [], 
                 <?php if ($p['scanned_at_device'] === null): ?>
                     <td colspan="3"><?= $round['status'] === 'en_curso' ? 'Pendiente' : '<strong>Salteado</strong>' ?></td>
                 <?php else: ?>
-                    <td><?= e(fecha($p['scanned_at_device'])) ?></td>
+                    <td><?= e(fecha($p['scanned_at_device'])) ?><?= $p['method'] ? ' <span class="badge text-bg-light">' . e(strtoupper($p['method'])) . '</span>' : '' ?></td>
                     <td><?= e($dist($p['distance_m'])) ?><?= $p['accuracy_m'] !== null ? ' <span class="small text-body-secondary">(±' . e((int) $p['accuracy_m']) . ' m)</span>' : '' ?></td>
                     <td><?= (int) $p['within_radius'] === 1 ? '<span class="text-success">En el lugar</span>' : '<span class="text-danger">Fuera de radio (' . e($p['radius_m']) . ' m)</span>' ?></td>
                 <?php endif; ?>
@@ -75,7 +75,7 @@ $mapScans = array_values(array_filter(array_merge($round['route_points'] ?? [], 
         <?php foreach ($round['extra_scans'] as $sc): ?>
             <tr>
                 <td><code><?= e($sc['point_code']) ?></code> <?= e($sc['point_name']) ?></td>
-                <td><?= e(fecha($sc['scanned_at_device'])) ?></td>
+                <td><?= e(fecha($sc['scanned_at_device'])) ?><?= ($sc['method'] ?? null) ? ' <span class="badge text-bg-light">' . e(strtoupper($sc['method'])) . '</span>' : '' ?></td>
                 <td><?= e(fecha($sc['received_at'])) ?></td>
                 <td><?= e($dist($sc['distance_m'])) ?></td>
                 <td><?= (int) $sc['within_radius'] === 1 ? '<span class="text-success">En el lugar</span>' : '<span class="text-danger">Fuera de radio</span>' ?></td>

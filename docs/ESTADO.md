@@ -58,11 +58,12 @@ Se conservaron las APIs v1 y la sincronización del servidor para que Android si
 - [x] Entrega 4 — Observaciones con fotos, notificaciones FCM, canal crítico, avisos con "Recibido" / "Atendido"
 - [x] Entrega 5 — Acciones (tomar, cerrar con fotos sin señal) e inspecciones (checklists por QR o lista, fotos por ítem)
 - [x] Entrega 6 — Incidentes y accidentes sin señal (permisos de trabajo desactivados en la app por ahora)
-- [ ] Entrega 7 — NFC, firma de release, versión 1.0 (EPP desactivado en la app por ahora)
+- [x] Entrega 7 — NFC en rondas, ícono, firma de la versión final, versión 1.0.0 lista para publicar (EPP desactivado en la app por ahora)
 
 ## Pendiente — operación (usuario)
 - [ ] Aplicar migraciones en Indumor (`/admin/migraciones` → "Actualizar base de datos")
 - [ ] `gh auth login` y `git push` (hay commits locales sin subir)
 - [ ] Primer deploy al hosting: URL de producción, docroot a `public/`, `/install/check.php` en verde, cron por URL
 - [ ] Respaldar `config/config.local.php` (y más adelante el keystore de la app Android)
-- [ ] Crear el proyecto de Firebase y pegar `google-services.json` + cuenta de servicio en /admin/configuracion (notificaciones con la app cerrada)
+- [x] Crear el proyecto de Firebase y pegar `google-services.json` + cuenta de servicio en /admin/configuracion (notificaciones con la app cerrada)
+- [ ] App Android 1.0: crear la clave de firma, `android/keystore.properties` con la URL de producción, compilar y publicar en /admin/app-android (pasos en `docs/design/app-android-guardias.md`)

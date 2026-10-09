@@ -68,7 +68,7 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
     }
 
     /** @param raw contenido del QR: la URL `/ronda/punto/{uuid}` (o el uuid solo) */
-    fun scan(raw: String, fix: Fix?, allowOutsideRoute: Boolean = false): ScanResult {
+    fun scan(raw: String, fix: Fix?, allowOutsideRoute: Boolean = false, method: String = "qr"): ScanResult {
         val round = active() ?: return ScanResult.NoRound
         val pointUuid = pointUuidFrom(raw) ?: return ScanResult.UnknownQr
         val point = points()[pointUuid] ?: return ScanResult.UnknownQr
@@ -79,7 +79,7 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
         val uuid = UUID.randomUUID().toString()
         val now = Instant.now().toString()
         val data = buildJsonObject {
-            put("uuid", uuid); put("round_uuid", round.uuid); put("point_uuid", pointUuid); put("scanned_at_device", now)
+            put("uuid", uuid); put("round_uuid", round.uuid); put("point_uuid", pointUuid); put("scanned_at_device", now); put("method", method)
             fix?.let { put("lat", it.lat); put("lng", it.lng); put("accuracy_m", it.accuracyM) }
         }
         db.upsert("patrol_scans", listOf(uuid to buildJsonObject {

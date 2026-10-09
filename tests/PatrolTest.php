@@ -112,13 +112,15 @@ return [
         $scan = fn (int $point, array $extra = []) => Push::run([$op('round.scan', $extra + ['uuid' => Uuid::v4(), 'round_uuid' => $st['round'],
             'point_uuid' => ($st['uuid'])($point), 'lat' => -34.6037, 'lng' => -58.3816, 'accuracy_m' => 8,
             'scanned_at_device' => gmdate('Y-m-d\TH:i:s\Z', time() - 120)])])[0];
-        $r = $scan($st['p1']);
+        $r = $scan($st['p1'], ['method' => 'nfc']);
         assert_same('ok', $r['status'], json_encode($r));
         assert_same(true, $r['data']['within_radius']);
+        assert_same('nfc', DB::tenant()->query("SELECT method FROM patrol_scans ORDER BY id DESC LIMIT 1")->fetchColumn(), 'se guarda cómo se marcó');
         assert_same(true, $scan($st['p1'])['data']['duplicate'], 'mismo punto en la misma ronda: no duplica');
         assert_true(str_contains($scan($st['p2'], ['scanned_at_device' => 'ayer'])['error'], 'Hora'), 'hora inválida');
         assert_same('error', $scan($st['p2'], ['uuid' => 'x'])['status'], 'uuid inválido');
-        $far = $scan($st['p2']);
+        $far = $scan($st['p2'], ['method' => 'cualquiera']);
+        assert_same(null, DB::tenant()->query("SELECT method FROM patrol_scans ORDER BY id DESC LIMIT 1")->fetchColumn(), 'método desconocido = sin dato');
         assert_same(false, $far['data']['within_radius'], 'a ~150 m del depósito queda fuera del radio');
         $p3 = Patrols::createPoint(['name' => 'Garita', 'code' => 'P3', 'description' => '', 'site_id' => null, 'sector_id' => null,
             'lat' => -34.6037, 'lng' => -58.3816, 'radius_m' => 50, 'is_critical' => 0]);

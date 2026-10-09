@@ -48,7 +48,7 @@ object Notifs {
             Intent(context, MainActivity::class.java).putExtra(EXTRA_OPEN, "avisos").addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(context, if (critical) CRITICAL else NORMAL)
-            .setSmallIcon(R.drawable.ic_round_notification)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

@@ -39,6 +39,10 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
     private val _scan = MutableStateFlow<ScanResult?>(null)
     val scan: StateFlow<ScanResult?> = _scan
     private var pendingRaw: String? = null
+    private var pendingMethod = "qr"
+
+    /** Lo que se graba en la etiqueta NFC de un punto: la misma dirección que su QR. */
+    fun tagUrl(point: ar.com.securityapp.campo.data.PatrolPoint): String = c.prefs.serverUrl.trimEnd('/') + "/ronda/punto/" + point.uuid
 
     init {
         reload()
@@ -80,11 +84,13 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
         reload()
     }
 
-    fun onQr(raw: String, allowOutsideRoute: Boolean = false) = viewModelScope.launch {
+    /** @param method "qr" o "nfc" (queda registrado en el servidor) */
+    fun onQr(raw: String, allowOutsideRoute: Boolean = false, method: String = "qr") = viewModelScope.launch {
         _ui.value = _ui.value.copy(busy = true)
         val fix = locator.current()
-        val result = c.rounds.scan(raw, fix, allowOutsideRoute)
+        val result = c.rounds.scan(raw, fix, allowOutsideRoute, method)
         pendingRaw = if (result is ScanResult.NotInRoute) raw else null
+        pendingMethod = method
         _scan.value = result
         if (result is ScanResult.Ok) SyncWorker.now(getApplication())
         reload()
@@ -94,7 +100,7 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
     fun confirmOutsideRoute() {
         val raw = pendingRaw ?: return
         _scan.value = null
-        onQr(raw, allowOutsideRoute = true)
+        onQr(raw, allowOutsideRoute = true, method = pendingMethod)
     }
 
     fun dismissScan() {
