@@ -1,8 +1,8 @@
 # AGENTS.md — Guía para agentes de código (Codex y otros)
 
-Leé este archivo completo antes de tocar código. Después leé **`CLAUDE.md`** (convenciones
-detalladas por etapa: es la fuente de verdad técnica) y **`docs/ROADMAP.md`** (lo que falta
-construir). `PLAN.md` es el plan original y está **desactualizado** en varias decisiones: si
+Leé este archivo completo antes de tocar código. Después leé **`docs/ESTADO.md`** (checklist: qué está
+hecho, qué falta y quién lo hace), **`CLAUDE.md`** (convenciones detalladas por etapa: es la fuente de
+verdad técnica) y **`docs/ROADMAP.md`** (lo que falta construir, en detalle). `PLAN.md` es el plan original y está **desactualizado** en varias decisiones: si
 contradice a `CLAUDE.md` o a este archivo, mandan estos.
 
 ## Qué es
@@ -10,12 +10,10 @@ Security App: SaaS multi-empresa de **Seguridad e Higiene laboral** (Argentina) 
 industriales (la primera es una metalúrgica, "Indumor"). Interfaz y textos en **español**
 (rioplatense: "vos", "cargá", "confirmá").
 
-Ya está hecho (Etapas 0–8): instalador web, migraciones desde el panel, super-admin, empresas con
-base propia, usuarios/roles/permisos, 2FA, datos maestros (plantas, sectores, puestos, empleados,
-contratistas, equipos con QR, catálogos, importación CSV/XLSX), **Observaciones** (con evidencia
-inmutable, flujo de estados y línea de tiempo), **motor de notificaciones** (reglas, cola,
-escalamiento, cron por URL, email propio, Web Push), **API de sincronización offline** y **app de
-campo PWA** en `/movil/` y **rondas de guardias** (Etapa 9). Lo que sigue está en el roadmap.
+Ya está hecho (Etapas 0–13 y la entrega 1 de la 14): instalador web, empresas con base propia, usuarios/roles/2FA,
+datos maestros, Observaciones, notificaciones, API de sincronización offline, app de campo PWA (`/movil/`), rondas,
+Acciones CAPA, Inspecciones, Incidentes, Permisos de trabajo y EPP (catálogo, matriz, entregas, constancia). También
+el rediseño visual (menú lateral). El checklist completo está en `docs/ESTADO.md`.
 
 ## Reglas que no se negocian
 1. **Despliegue sin consola**: se instala copiando archivos + base vacía + `/install` en el
@@ -89,11 +87,11 @@ Patrones existentes que los módulos nuevos deben copiar:
 - **Archivos**: `TenantFiles` (MIME real con finfo, nombre UUID, fuera del docroot) +
   `ImageProcessor` (sha256, EXIF, miniatura). Servir solo por controlador con permiso o
   `SignedUrl::make()`.
-- **Notificaciones**: `Notify\Notifier::dispatch($evento, $registro, ...)` — hoy recibe una
-  observación; para los módulos nuevos hay que generalizarlo (p. ej. un "sujeto" con tipo, número,
-  título, sector y URL) **sin romper** lo existente. Eventos en `Notify\Messages::EVENTS`, reglas
-  por empresa en `notification_rules` (seed en una migración .php), `Recipients` resuelve
-  destinatarios. Nunca debe romper la operación que lo llama.
+- **Notificaciones**: `Notify\Notifier::dispatch($evento, $sujeto, $extra)`. `Notifier::subject()` normaliza el sujeto
+  según el prefijo del evento (`action.`, `inspection.`, `incident.`, `permit.`; agregar el del módulo nuevo ahí).
+  Eventos y textos en `Notify\Messages` (`EVENTS`, `CRITICAL`, un `for{Modulo}()`), reglas por empresa en
+  `notification_rules` (seed con una migración .php), `Recipients` resuelve destinatarios. Nunca debe romper la
+  operación que lo llama.
 - **Tareas periódicas**: agregarlas en `Notify\CronRunner::run()` (corre por empresa, con lock);
   para "una vez por día" usar `NotificationMarks`.
 - **Datos maestros nuevos** (p. ej. catálogo de EPP, cursos): un `App\Resources\*Resource` +
@@ -117,8 +115,8 @@ Patrones existentes que los módulos nuevos deben copiar:
 - **Rutas reservadas**: ninguna URL puede empezar con `/app`, `/config`, `/database`, `/storage`,
   `/tests`, `/tools` o `/vendor` (el `.htaccess` raíz las bloquea). Área de empresa = `/panel/...`.
   No crear carpetas en `public/` con el mismo nombre que una ruta.
-- **Migraciones**: archivo nuevo con el siguiente número. Próximos: **tenant `0038_…`**,
-  **master `0007_…`**. Nunca editar una ya aplicada. Idempotentes (`CREATE TABLE IF NOT EXISTS`,
+- **Migraciones**: archivo nuevo con el siguiente número. Próximos: **tenant `0060_…`**,
+  **master `0007_…`** (ver "Trabajo en paralelo" antes de crear una). Nunca editar una ya aplicada. Idempotentes (`CREATE TABLE IF NOT EXISTS`,
   verificar columnas antes de `ALTER`). Sin `DELIMITER`, triggers ni procedures. Tablas con
   `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`; índices `idx_tabla_campos` /
   `uq_tabla_campos`. Se aplican desde `/admin/migraciones`.
@@ -128,7 +126,7 @@ Patrones existentes que los módulos nuevos deben copiar:
 ```bash
 /Applications/XAMPP/xamppfiles/bin/php tests/run.php
 ```
-- Hoy pasan **94 tests**: deben seguir en verde. Cada etapa agrega su `tests/{Modulo}Test.php`
+- Hoy pasan **180 tests**: deben seguir en verde. Cada etapa agrega su `tests/{Modulo}Test.php`
   copiando el estilo de `tests/ObservationTest.php` / `tests/NotificationTest.php` (crean bases
   descartables `securityapp_test*` con root sin contraseña en 127.0.0.1 y storage temporal).
 - En tests nada sale a internet: `MailTransport::$fake = true`, `Channels::$fakeExternal = true`.
@@ -143,6 +141,23 @@ Patrones existentes que los módulos nuevos deben copiar:
   otro sistema; solo lectura si hiciera falta mirar cómo resolvió algo).
 - No inventar ni imprimir contraseñas reales; las cuentas se crean por link de invitación.
 
+## Trabajo en paralelo (Codex + Claude)
+Codex hace las etapas web; Claude hace la app Android de guardias (`android/` y los cambios de servidor que esa app
+necesita: API de dispositivos/FCM, posiciones de ronda, pánico, NFC en puntos de ronda, distribución del APK).
+- **Ramas**: trabajar en una rama propia (`codex/<tema>`, p. ej. `codex/etapa-14-epp`) y mergear a `main` al cerrar
+  cada entrega con los tests en verde. Hacer `git pull` de `main` antes de empezar y antes de mergear. Si Codex corre
+  en la misma Mac, usar un worktree aparte (`git worktree add ../security-app-codex codex/<tema>`) para no pisar los
+  archivos que Claude está editando.
+- **No tocar**: `android/`, `docs/design/app-android-guardias.md`, ni las tablas/rutas de rondas para la app
+  (`patrol_*`, `/api/v1/push/fcm`, `/api/v1/app/android`, `/descargas/guardias`) sin coordinar.
+- **Migraciones**: el migrador aplica por nombre de archivo (no por "mayor que la última"), así que dos migraciones
+  nuevas no se rompen entre sí, pero los números deben ser únicos. Antes de crear una, `git pull` y tomar el
+  siguiente número libre; si al mergear aparece el mismo número en las dos ramas, renombrar la propia (todavía no
+  aplicada en ningún lado) al siguiente libre.
+- **Archivos compartidos** (`app/routes.php`, `CLAUDE.md`, `Sync\Pull`, `Sync\Push`, `Notify\Messages`, `CronRunner`,
+  `layouts/app.php`): cambios chicos y agregados, sin reordenar ni reformatear lo existente, para que el merge sea limpio.
+- Al terminar cada entrega, marcarla en `docs/ESTADO.md`.
+
 ## Forma de trabajo
 1. **Una etapa por vez.** Antes de codificar, presentá un diseño corto (tablas, estados,
    pantallas, rutas, permisos, eventos de notificación, qué va a la app de campo) y esperá el OK.
@@ -151,7 +166,8 @@ Patrones existentes que los módulos nuevos deben copiar:
 2. Implementá con tests. `tests/run.php` en verde antes de cada commit.
 3. Actualizá **`CLAUDE.md`** con una sección corta de la etapa (decisiones, clases clave,
    rutas), como las secciones existentes, y `docs/api/openapi.yaml` si tocaste la API.
-4. Un commit por etapa en `main`, mensaje en español: `Etapa N: resumen`.
+4. Un commit por entrega, mensaje en español: `Etapa N (entrega M): resumen`. Marcar la entrega en
+   `docs/ESTADO.md`. Mergear a `main` (ver "Trabajo en paralelo").
 5. Al final de cada etapa, explicá al usuario: qué hizo, cómo probarlo en
    http://localhost/securityapp/ (menú y rol), y si hay que aplicar migraciones
    (`/admin/migraciones` → "Actualizar base de datos").

@@ -8,8 +8,10 @@ Texto del plan original, **ajustado a las decisiones ya tomadas** (ver `AGENTS.m
 
 Las notas marcadas **"Nota"** son las aclaraciones de implementación.
 
-Orden actual: rondas de guardias (Etapa 9 adelantada) → CAPA (Etapa 10) → 11 → 12 → 13 → 14 → 15 → 16. Las Etapas 17 a 19 dependen de que exista
-producción, y el deploy está pendiente.
+**Estado (2026-10-09):** las Etapas 9 a 13 están hechas y la 14 tiene la entrega 1 hecha. Checklist al día en
+`docs/ESTADO.md`. Lo que sigue: 14 (entregas 2 y 3) → 15 → 16 → 19 → 17 → 18. Las Etapas 17 a 19 dependen de
+que exista producción, y el deploy está pendiente. Las secciones de etapas ya hechas quedan como referencia histórica:
+lo implementado de verdad está en `CLAUDE.md` y `docs/design/`.
 
 ## ETAPA 9 — Rondas de guardias (adelantada)
 - Puntos de control con QR único, planta/sector, coordenadas GPS, radio permitido y punto crítico.
