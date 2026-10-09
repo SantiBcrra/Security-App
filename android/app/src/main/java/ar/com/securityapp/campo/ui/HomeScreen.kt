@@ -79,9 +79,14 @@ private val MODULES = listOf(
     Module("inspecciones", "Inspecciones", "Checklists de equipos y sectores", Icons.Filled.CheckCircle),
     Module("acciones", "Acciones", "Correctivas a mi cargo", Icons.Filled.Build),
     Module("incidentes", "Incidentes", "Accidentes e incidentes", Icons.Filled.Warning),
-    Module("permisos_trabajo", "Permisos", "Permisos de trabajo", Icons.Filled.Create),
-    Module("epp", "EPP", "Entregas con firma", Icons.Filled.Face),
 )
+
+/*
+ * Desactivados por decisión del usuario (09/10/2026): no se usan todavía en la app; se activan más adelante
+ * volviéndolos a agregar a MODULES.
+ * Module("permisos_trabajo", "Permisos", "Permisos de trabajo", Icons.Filled.Create),
+ * Module("epp", "EPP", "Entregas con firma", Icons.Filled.Face),
+ */
 
 @Composable
 fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {

@@ -353,6 +353,8 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   (`user_devices.push_token = fcm:{token}`; si FCM dice que no existe más, se borra). Se mandan mensajes "data" (crítico =
   prioridad HIGH) y la app arma la notificación: canal "alertas" (alarma, vibración) o "avisos" (`push/Notifs`), al tocarla
   abre Avisos. Sin Firebase configurado, `NotificationsRepository.notifyNew()` muestra los avisos nuevos al sincronizar.
+- **Permisos de trabajo y EPP desactivados en la app** (decisión del usuario, 09/10/2026): comentados en `MODULES` de
+  `HomeScreen.kt`; el servidor los sigue soportando. No activarlos hasta que el usuario lo pida.
 - **`targetSdk` 35 a propósito**: apuntando a Android 17 (37) el sistema bloquea las conexiones a la red local y la app no
   llega al XAMPP de la Mac (10.0.2.2 o la IP por Wi-Fi). Sin Google Play no hay exigencia de subirlo.
 - Consentimiento (celular personal, Ley 25.326): `Consent::VERSION` + texto en el servidor, `user_consents` (tenant 0061),
