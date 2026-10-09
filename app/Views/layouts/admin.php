@@ -7,6 +7,7 @@ $items = [
     ['/admin/migraciones', 'Base de datos', 'layers', '/admin/migraciones'],
     ['/admin/configuracion', 'Configuración', 'settings', '/admin/configuracion'],
     ['/admin/tareas', 'Tareas programadas', 'clock', '/admin/tareas'],
+    ['/admin/app-android', 'App Android', 'route', '/admin/app-android'],
 ];
 $basePath = rtrim((string) parse_url(url('/'), PHP_URL_PATH), '/');
 $currentPath = '/' . trim(substr('/' . trim((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/'), strlen($basePath)), '/');

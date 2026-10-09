@@ -12,6 +12,7 @@ use App\Controllers\Api\ObservationsController as ApiObservationsController;
 use App\Controllers\Api\SyncController;
 use App\Controllers\Api\UploadsController;
 use App\Controllers\Web\Admin\AuthController as AdminAuthController;
+use App\Controllers\Web\Admin\AppReleasesController;
 use App\Controllers\Web\Admin\DashboardController;
 use App\Controllers\Web\Admin\MigrationsController;
 use App\Controllers\Web\Admin\TenantsController;
@@ -20,6 +21,8 @@ use App\Controllers\Web\AuthController;
 use App\Controllers\Web\Admin\PlatformSettingsController;
 use App\Controllers\Web\CronController;
 use App\Controllers\Web\DiagController;
+use App\Controllers\Web\DownloadsController;
+use App\Controllers\Api\AppController as ApiAppController;
 use App\Controllers\Web\HomeController;
 use App\Controllers\Web\InstallController;
 use App\Controllers\Web\Panel\ActionsController;
@@ -78,6 +81,9 @@ return static function (Router $r): void {
         $r->get('/', [DashboardController::class, 'index']);
         $r->post('/logout', [AdminAuthController::class, 'logout']);
         $r->get('/migraciones', [MigrationsController::class, 'index']);
+        $r->get('/app-android', [AppReleasesController::class, 'index']);
+        $r->post('/app-android', [AppReleasesController::class, 'store']);
+        $r->post('/app-android/{uuid}/estado', [AppReleasesController::class, 'toggle']);
         $r->post('/migraciones', [MigrationsController::class, 'run']);
 
         $r->get('/empresas', [TenantsController::class, 'index']);
@@ -287,9 +293,12 @@ return static function (Router $r): void {
     $r->group('/api/v1', [], static function (Router $r): void {
         $r->post('/auth/login', [ApiAuthController::class, 'login']);
         $r->post('/auth/refresh', [ApiAuthController::class, 'refresh']);
+        $r->get('/app/android', [ApiAppController::class, 'android']); // sin sesión: la consulta también la pantalla de ingreso
         $r->group('', [new RequireApiUser(), new ApiRateLimit(300)], static function (Router $r): void {
             $r->post('/auth/logout', [ApiAuthController::class, 'logout']);
             $r->get('/me', [ApiAuthController::class, 'me']);
+            $r->get('/consent', [ApiAppController::class, 'consent']);
+            $r->post('/consent', [ApiAppController::class, 'accept']);
 
             // Sincronización offline (Etapa 5)
             $r->get('/sync/pull', [SyncController::class, 'pull']);
@@ -321,6 +330,10 @@ return static function (Router $r): void {
 
     // Tareas programadas por URL (cron del hosting o cron-job.org), protegidas con clave.
     $r->get('/cron/run', [CronController::class, 'run']);
+
+    // Descarga pública de la app Android (distribución propia, sin Google Play)
+    $r->get('/descargas/android', [DownloadsController::class, 'android']);
+    $r->get('/descargas/android/{code}.apk', [DownloadsController::class, 'apk']);
 
     // QR de equipos: lo que lee la cámara del celular (con sesión abre la ficha; si no, login y vuelve)
     $r->get('/q/{uuid}', [QrController::class, 'resolve']);

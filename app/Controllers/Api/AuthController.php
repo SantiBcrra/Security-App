@@ -58,6 +58,7 @@ final class AuthController
             'permisos' => UserAuth::permissions(),
             'empresa'  => ['uuid' => $tenant['uuid'], 'nombre' => $tenant['name'], 'slug' => $tenant['slug'], 'zona_horaria' => $tenant['timezone']],
             'dispositivo' => ApiAuth::device()['uuid'] ?? null,
+            'consentimiento' => ['version' => \App\Services\Consent::VERSION, 'aceptado' => \App\Services\Consent::accepted((int) $user['id'])],
         ]);
     }
 
