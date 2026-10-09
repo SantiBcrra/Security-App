@@ -20,7 +20,7 @@ use App\Services\UserAuth;
 final class Push
 {
     public const MAX_OPS = 50;
-    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'round.track', 'guard.panic', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
+    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'round.track', 'patrol.point_locate', 'guard.panic', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
         'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
@@ -65,6 +65,7 @@ final class Push
                 'round.scan'             => self::roundScan($data),
                 'round.finish'           => self::roundFinish($data),
                 'round.track'            => ['status' => 'ok', 'data' => \App\Services\GuardSafety::track($data)],
+                'patrol.point_locate'    => self::pointLocate($data),
                 'guard.panic'            => self::panic($data),
                 'action.start'           => self::actionStep($data, 'tomar'),
                 'action.close'           => self::actionStep($data, 'cerrar'),
@@ -161,6 +162,24 @@ final class Push
         if (!UserAuth::can('rondas', 'cerrar')) return self::error('Tu rol no puede cerrar rondas.');
         $r = Patrols::finish((string) ($data['round_uuid'] ?? ''), isset($data['finished_at_device']) ? (string) $data['finished_at_device'] : null);
         return ['status' => 'ok', 'data' => ['uuid' => $r['uuid'], 'status' => $r['status']]];
+    }
+
+    /** Actualiza las coordenadas de un punto desde el celular; la operación queda protegida por op_id. */
+    private static function pointLocate(array $data): array
+    {
+        if (!UserAuth::can('rondas', 'editar')) return self::error('Tu rol no puede ubicar puntos de ronda.');
+        $uuid = strtolower(trim((string) ($data['point_uuid'] ?? '')));
+        if (!Uuid::isValid($uuid)) return self::error('Falta el identificador del punto.');
+        if (!isset($data['lat'], $data['lng']) || !is_numeric($data['lat']) || !is_numeric($data['lng'])) {
+            return self::error('La ubicación tiene que incluir latitud y longitud.');
+        }
+        $lat = (float) $data['lat']; $lng = (float) $data['lng'];
+        $before = Patrols::point($uuid);
+        $after = Patrols::locatePoint($uuid, $lat, $lng);
+        \App\Services\Audit::tenant('patrol_point.locate', 'patrol_point', $uuid,
+            $before ? ['lat' => (float) $before['lat'], 'lng' => (float) $before['lng']] : null,
+            ['lat' => (float) $after['lat'], 'lng' => (float) $after['lng'], 'accuracy_m' => isset($data['accuracy_m']) ? (float) $data['accuracy_m'] : null]);
+        return ['status' => 'ok', 'data' => ['point_uuid' => $uuid, 'lat' => (float) $after['lat'], 'lng' => (float) $after['lng'], 'duplicate' => false]];
     }
 
     /**

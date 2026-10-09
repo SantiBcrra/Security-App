@@ -28,6 +28,7 @@ data class RoundsUi(
     val pending: Int = 0,
     val failed: Int = 0,
     val busy: Boolean = false,
+    val locationMessage: String? = null,
 )
 
 class RoundsViewModel(app: Application) : AndroidViewModel(app) {
@@ -117,6 +118,22 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun syncNow() = SyncWorker.now(getApplication())
+
+    /** Toma la ubicación actual y encola el cambio de coordenadas del punto. */
+    fun locatePoint(point: PatrolPoint) = viewModelScope.launch {
+        _ui.value = _ui.value.copy(busy = true, locationMessage = null)
+        val fix = locator.current(timeoutMs = 12_000)
+        if (fix == null) {
+            _ui.value = _ui.value.copy(busy = false, locationMessage = "No se pudo obtener el GPS. Activá la ubicación y probá de nuevo.")
+            return@launch
+        }
+        c.rounds.locatePoint(point, fix)
+        SyncWorker.now(getApplication())
+        reload()
+        _ui.value = _ui.value.copy(busy = false, locationMessage = "Ubicación de ${point.code} guardada para sincronizar (±${fix.accuracyM.toInt()} m).")
+    }
+
+    fun clearLocationMessage() { _ui.value = _ui.value.copy(locationMessage = null) }
 
     fun needsSms(): Boolean = ar.com.securityapp.campo.data.GuardSettings.from(c.prefs, c.api).panicPhones.isNotEmpty()
 

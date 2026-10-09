@@ -346,6 +346,36 @@ return [
         assert_true(str_contains($html, 'Salteado') && str_contains($html, 'Se saltearon 1 punto'), 'marca el punto salteado');
     },
 
+    'rondas: ubicar un punto desde Android es idempotente y auditable' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $uuid = ($st['uuid'])($st['p1']);
+        $operation = $op('patrol.point_locate', ['point_uuid' => $uuid, 'lat' => -34.6042, 'lng' => -58.3821, 'accuracy_m' => 6]);
+        $first = Push::run([$operation])[0];
+        assert_same('ok', $first['status'], json_encode($first));
+        assert_same(-34.6042, (float) Patrols::point($uuid)['lat']);
+        assert_same($first, Push::run([$operation])[0], 'repetir el mismo op_id no vuelve a escribir');
+        assert_same(1, (int) DB::tenant()->query("SELECT COUNT(*) FROM audit_log WHERE action = 'patrol_point.locate'")->fetchColumn());
+        UserAuth::setCurrent($st['g1']);
+        $bad = Push::run([$op('patrol.point_locate', ['point_uuid' => $uuid, 'lat' => -34.6, 'lng' => -58.3])])[0];
+        assert_same('error', $bad['status'], 'el guardia no puede modificar coordenadas');
+    },
+
+    'rondas: el reporte devuelve solo marcas fuera y respeta filtros' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['g1']);
+        $round = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $round])]);
+        $point = ($st['uuid'])($st['p1']);
+        Push::run([$op('round.scan', ['uuid' => Uuid::v4(), 'round_uuid' => $round, 'point_uuid' => $point, 'lat' => -34.9, 'lng' => -58.9, 'accuracy_m' => 5])]);
+        $rows = Patrols::outsideScans($st['g1']['uuid'], $point);
+        assert_same(1, count($rows));
+        assert_same('lejos', $rows[0]['location_status']);
+        assert_same([], Patrols::outsideScans($st['g2']['uuid'], $point));
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

@@ -25,6 +25,20 @@ final class RoundsController
         ], 'layouts/app'));
     }
 
+    public function outside(Request $request): Response
+    {
+        $guard = trim((string) $request->input('guardia', ''));
+        $point = trim((string) $request->input('punto', ''));
+        $from = trim((string) $request->input('desde', ''));
+        $to = trim((string) $request->input('hasta', ''));
+        return Response::html(View::render('panel/rounds/outside', [
+            'title' => 'Marcas fuera de lugar',
+            'scans' => Patrols::outsideScans($guard ?: null, $point ?: null, $from ?: null, $to ?: null),
+            'users' => array_filter(Users::all(), fn ($u) => (int) $u['is_active'] === 1),
+            'points' => Patrols::points(), 'filters' => ['guardia' => $guard, 'punto' => $point, 'desde' => $from, 'hasta' => $to],
+        ], 'layouts/app'));
+    }
+
     public function round(Request $request, string $uuid): Response
     {
         $round = Patrols::roundDetail($uuid);

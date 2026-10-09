@@ -96,7 +96,7 @@ fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit) {
     }
 }
 
-private val OP_LABELS = mapOf("round.start" to "Inicio de ronda", "round.scan" to "Escaneo de punto", "round.finish" to "Fin de ronda")
+private val OP_LABELS = mapOf("round.start" to "Inicio de ronda", "round.scan" to "Escaneo de punto", "round.finish" to "Fin de ronda", "patrol.point_locate" to "Ubicación de punto")
 
 @Composable
 private fun Row2(label: String, value: String) {

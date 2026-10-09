@@ -43,6 +43,16 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
 
     fun points(): Map<String, PatrolPoint> = db.all("patrol_points").mapNotNull { parse(it)?.let(::point) }.associateBy { it.uuid }
 
+    /** Guarda una nueva ubicación de referencia del punto; se envía cuando haya conexión. */
+    fun locatePoint(point: PatrolPoint, fix: Fix): String {
+        val op = UUID.randomUUID().toString()
+        outbox.enqueue("patrol.point_locate", buildJsonObject {
+            put("point_uuid", point.uuid); put("lat", fix.lat); put("lng", fix.lng); put("accuracy_m", fix.accuracyM)
+            if (fix.mock) put("mock", 1)
+        })
+        return op
+    }
+
     fun routes(): List<PatrolRoute> = db.all("patrol_routes").mapNotNull { parse(it)?.let(::route) }.sortedBy { it.name.lowercase() }
 
     fun rounds(): List<PatrolRound> = db.all("patrol_rounds").mapNotNull { parse(it)?.let(::round) }.filter { it.mine }.sortedByDescending { it.startedAt }

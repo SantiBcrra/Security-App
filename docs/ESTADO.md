@@ -59,6 +59,7 @@ Se conservaron las APIs v1 y la sincronización del servidor para que Android si
 - [x] Entrega 5 — Acciones (tomar, cerrar con fotos sin señal) e inspecciones (checklists por QR o lista, fotos por ítem)
 - [x] Entrega 6 — Incidentes y accidentes sin señal (permisos de trabajo desactivados en la app por ahora)
 - [x] Entrega 7 — NFC en rondas, ícono, firma de la versión final, versión 1.0.0 lista para publicar (EPP desactivado en la app por ahora)
+- [x] Entrega 8 — Ubicación de puntos desde el celular y reporte web de marcas fuera de lugar por guardia/punto
 
 ## Pendiente — operación (usuario)
 - [ ] Aplicar migraciones en Indumor (`/admin/migraciones` → "Actualizar base de datos")

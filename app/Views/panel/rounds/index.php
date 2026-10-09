@@ -1,4 +1,4 @@
-<div class="d-flex justify-content-between align-items-center mb-3"><h1 class="h4 m-0">Rondas de guardias</h1><div class="d-flex gap-2"><a class="btn btn-outline-primary" href="<?= e(url('/panel/rondas/rutas/nueva')) ?>">+ Nueva ruta</a><a class="btn btn-primary" href="<?= e(url('/panel/rondas/puntos/nuevo')) ?>">+ Nuevo punto</a></div></div>
+<div class="d-flex justify-content-between align-items-center mb-3"><h1 class="h4 m-0">Rondas de guardias</h1><div class="d-flex gap-2"><a class="btn btn-outline-secondary" href="<?= e(url('/panel/rondas/marcas-fuera')) ?>">Marcas fuera de lugar</a><a class="btn btn-outline-primary" href="<?= e(url('/panel/rondas/rutas/nueva')) ?>">+ Nueva ruta</a><a class="btn btn-primary" href="<?= e(url('/panel/rondas/puntos/nuevo')) ?>">+ Nuevo punto</a></div></div>
 <?php $openPanics = array_filter($panics ?? [], fn ($x) => $x['acked_at'] === null); ?>
 <?php foreach ($openPanics as $pa): ?>
     <a class="alert alert-danger d-flex justify-content-between align-items-center text-decoration-none" href="<?= e(url('/panel/rondas/panico/' . $pa['uuid'])) ?>">

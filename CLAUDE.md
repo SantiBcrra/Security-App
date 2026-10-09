@@ -151,8 +151,9 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   orden; las no asignadas viajan como baja. **Cambiar asignaciones o puntos de una ruta debe tocar `patrol_routes.updated_at`.**
   Iniciar una ruta no asignada se rechaza. Al finalizar: `completa` o `incompleta` (puntos salteados).
   Detalle en `/panel/rondas/ronda/{uuid}` (recorrido, salteados, fuera de radio). Con alcance "propios" el panel muestra solo las propias.
+- Supervisores y administradores pueden corregir la ubicación de referencia desde Android con `patrol.point_locate` (GPS actual, cola offline e idempotencia por `op_id`); el cambio queda auditado. El reporte `/panel/rondas/marcas-fuera` filtra marcas `lejos`/`simulada` por guardia, punto y fecha.
 - `round.start` es idempotente también por uuid de la ronda; el escaneo valida punto activo, uuid y hora del
-  celular (máx. 30 días atrás). La app Android recupera la ronda en curso (`mine` + `en_curso`) al reabrir.
+  celular (máx. 30 días atrás). La app Android recupera la ronda en curso (`mine` + `en_curso`) al reabrir y ofrece "Tomar GPS" para ubicar un punto parado en el lugar.
 
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`

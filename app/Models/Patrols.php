@@ -27,6 +27,38 @@ final class Patrols
         return $stmt->fetch() ?: null;
     }
 
+    /** Actualiza las coordenadas de un punto desde Android, con alcance por sector y auditoría del controlador. */
+    public static function locatePoint(string $uuid, float $lat, float $lng): array
+    {
+        $point = self::point($uuid);
+        if (!$point || (int)$point['is_active'] !== 1 || $point['deleted_at'] !== null) throw new UserError('El punto no existe o está desactivado.');
+        if (!UserAuth::can('rondas', 'editar')) throw new UserError('No tenés permiso para ubicar puntos de ronda.');
+        if (UserAuth::scope('rondas') !== 'todo' && ($point['sector_id'] === null || !in_array((int)$point['sector_id'], \App\Services\SectorScope::sectorIds('rondas') ?? [], true))) {
+            throw new UserError('El punto está fuera de tus sectores.');
+        }
+        if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180 || ($lat == 0.0 && $lng == 0.0)) throw new UserError('Coordenadas inválidas.');
+        DB::tenant()->prepare('UPDATE patrol_points SET lat=?, lng=?, updated_at=UTC_TIMESTAMP() WHERE id=?')->execute([$lat, $lng, (int)$point['id']]);
+        return self::point($uuid) ?? $point;
+    }
+
+    /** Marcas fuera del radio o con GPS simulado, para el reporte de supervisión. */
+    public static function outsideScans(?string $userUuid = null, ?string $pointUuid = null, ?string $from = null, ?string $to = null): array
+    {
+        $where = ["s.location_status IN ('lejos','simulada')"]; $params = [];
+        if ($userUuid) { $where[] = 'u.uuid = ?'; $params[] = $userUuid; }
+        if ($pointUuid) { $where[] = 'p.uuid = ?'; $params[] = $pointUuid; }
+        if ($from && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $from)) { $where[] = 's.scanned_at_device >= ?'; $params[] = $from . ' 00:00:00'; }
+        if ($to && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $to)) { $where[] = 's.scanned_at_device < ?'; $params[] = (new \DateTimeImmutable($to))->modify('+1 day')->format('Y-m-d') . ' 00:00:00'; }
+        $scope = UserAuth::scope('rondas');
+        if ($scope === 'propios') { $where[] = 's.user_id = ?'; $params[] = (int)UserAuth::user()['id']; }
+        elseif ($scope === 'sectores') { $ids = \App\Services\SectorScope::sectorIds('rondas') ?? [0]; $where[] = 'p.sector_id IN (' . implode(',', array_map('intval',$ids)) . ')'; }
+        $q = DB::tenant()->prepare('SELECT s.uuid, s.scanned_at_device, s.location_status, s.distance_m, s.accuracy_m, s.lat, s.lng,
+                u.uuid AS user_uuid, u.name AS user_name, p.uuid AS point_uuid, p.code AS point_code, p.name AS point_name,
+                r.uuid AS round_uuid FROM patrol_scans s JOIN users u ON u.id=s.user_id JOIN patrol_points p ON p.id=s.point_id JOIN patrol_rounds r ON r.id=s.round_id
+                WHERE ' . implode(' AND ', $where) . ' ORDER BY s.scanned_at_device DESC LIMIT 500');
+        $q->execute($params); return $q->fetchAll();
+    }
+
     public static function createPoint(array $data): int
     {
         $data += ['uuid' => Uuid::v4(), 'is_active' => 1, 'is_critical' => 0, 'radius_m' => 50];

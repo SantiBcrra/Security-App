@@ -164,7 +164,7 @@ La versión final se compila sin R8 a propósito (con la optimización de AGP 9 
 El QR o la etiqueta dicen QUÉ punto es; el GPS del celular dice DÓNDE estaba el guardia. Cada marca queda: en el lugar,
 GPS impreciso, sin GPS, lejos o ubicación simulada (app de GPS falso). Nunca se rechaza (un GPS malo no frena la ronda) y el
 guardia no ve el resultado; "lejos" y "simulada" avisan a SyH y supervisores (una vez por ronda). Pendientes pedidos por el
-usuario: tomar las coordenadas del punto desde la app parado en el lugar y un reporte de marcas fuera de lugar por guardia y punto.
+Implementado: la app ofrece "Tomar GPS" para cada punto y encola `patrol.point_locate` cuando no hay señal; el servidor valida `rondas.editar`, actualiza y audita el cambio. El panel web incluye `/panel/rondas/marcas-fuera`, filtrable por guardia, punto y fecha. La operación se mantiene idempotente por `op_id`.
 
 ### NFC
 La etiqueta de cada punto guarda la misma dirección que su QR (`{servidor}/ronda/punto/{uuid}`, NDEF URI). Durante la ronda

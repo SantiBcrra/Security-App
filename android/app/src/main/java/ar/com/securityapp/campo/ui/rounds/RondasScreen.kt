@@ -77,6 +77,7 @@ fun RondasScreen(onBack: () -> Unit, canWriteTags: Boolean = false, vm: RoundsVi
 
     var writingTags by remember { mutableStateOf(false) }
     var nfcMessage by remember { mutableStateOf<String?>(null) }
+    var locatingPoint by remember { mutableStateOf<ar.com.securityapp.campo.data.PatrolPoint?>(null) }
     if (writingTags) {
         NfcWriterScreen(ui.points.values.sortedBy { it.code }, vm::tagUrl, onBack = { writingTags = false })
         return
@@ -142,6 +143,18 @@ fun RondasScreen(onBack: () -> Unit, canWriteTags: Boolean = false, vm: RoundsVi
                 item {
                     OutlinedButton({ begin(null) }, Modifier.fillMaxWidth(), enabled = !ui.busy) { Text("Ronda libre (sin ruta)") }
                 }
+                if (ui.points.isNotEmpty()) item {
+                    Text("Ubicar puntos", style = MaterialTheme.typography.titleSmall, color = Muted, modifier = Modifier.padding(top = 8.dp))
+                    Text("Parate junto al punto y guardá su ubicación actual. El cambio queda en cola si no hay señal.", style = MaterialTheme.typography.bodySmall, color = Muted)
+                }
+                if (ui.points.isNotEmpty()) items(ui.points.values.sortedBy { it.code }, key = { "loc-${it.uuid}" }) { point ->
+                    Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) { Text("${point.code} · ${point.name}"); Text("${point.lat ?: "sin coordenadas"}, ${point.lng ?: ""}", style = MaterialTheme.typography.bodySmall, color = Muted) }
+                            OutlinedButton({ locatingPoint = point }, enabled = !ui.busy) { Text("Tomar GPS") }
+                        }
+                    }
+                }
                 if (canWriteTags) item {
                     TextButton({ writingTags = true }, Modifier.fillMaxWidth()) { Text("Grabar etiquetas NFC de los puntos", color = Brand) }
                 }
@@ -185,6 +198,13 @@ fun RondasScreen(onBack: () -> Unit, canWriteTags: Boolean = false, vm: RoundsVi
         )
     }
     nfcMessage?.let { m -> AlertDialog({ nfcMessage = null }, confirmButton = { TextButton({ nfcMessage = null }) { Text("Entendido") } }, text = { Text(m) }) }
+    ui.locationMessage?.let { m -> AlertDialog(onDismissRequest = vm::clearLocationMessage, confirmButton = { TextButton(vm::clearLocationMessage) { Text("Entendido") } }, text = { Text(m) }) }
+    locatingPoint?.let { point ->
+        AlertDialog(onDismissRequest = { locatingPoint = null }, title = { Text("¿Tomar ubicación?") },
+            text = { Text("Parate junto a ${point.code} · ${point.name} y mantené el celular quieto unos segundos. Se reemplazarán las coordenadas actuales.") },
+            confirmButton = { TextButton({ locatingPoint = null; vm.locatePoint(point) }) { Text("Guardar ubicación") } },
+            dismissButton = { TextButton({ locatingPoint = null }) { Text("Cancelar") } })
+    }
     scan?.let { result -> ScanDialog(result, onConfirmOutside = { vm.confirmOutsideRoute() }, onDismiss = { vm.dismissScan() }, onScanAgain = { vm.dismissScan(); scanning = true }) }
 }
 

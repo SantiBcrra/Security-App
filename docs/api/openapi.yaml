@@ -25,7 +25,7 @@ components:
       required: [op_id, type, data]
       properties:
         op_id: { type: string, format: uuid, description: "Generado en el celular. Reenviar el mismo op_id devuelve el mismo resultado (idempotente)." }
-        type: { type: string, enum: [observation.create, observation.comment, observation.transition, round.start, round.scan, round.finish, round.track, guard.panic, action.start, action.close, inspection.create, incident.create, ppe.delivery, permit.start, permit.measure, permit.isolate, permit.release, permit.suspend, permit.resume, permit.close] }
+        type: { type: string, enum: [observation.create, observation.comment, observation.transition, round.start, round.scan, round.finish, round.track, patrol.point_locate, guard.panic, action.start, action.close, inspection.create, incident.create, ppe.delivery, permit.start, permit.measure, permit.isolate, permit.release, permit.suspend, permit.resume, permit.close] }
         data:
           type: object
           description: |
@@ -33,7 +33,7 @@ components:
               opcionales risk_type, equipment, location_text, lat, lng, gps_accuracy, imminent (0/1), anonymous (0/1), people[].
             observation.comment: uuid, comment.
             observation.transition: uuid, action (analizar|asignar|cerrar|descartar|reabrir), input { comment, assigned_user, action_text, action_due_on, priority, action_type }.
-            round.start: uuid, route_uuid?, lat?, lng?, started_at_device? (ISO, hasta 30 días atrás). round.scan: uuid, round_uuid, point_uuid, lat, lng, accuracy_m, scanned_at_device. round.finish: round_uuid, finished_at_device?. round.track: round_uuid, points [{uuid, at, lat, lng, accuracy_m, battery}] (hasta 200; idempotente por uuid; responde saved/duplicate). guard.panic: uuid, at, lat, lng, accuracy_m, round_uuid?, sms_sent? (idempotente por uuid: el mismo pánico puede llegar directo por POST /panic y por la cola).
+            round.start: uuid, route_uuid?, lat?, lng?, started_at_device? (ISO, hasta 30 días atrás). round.scan: uuid, round_uuid, point_uuid, lat, lng, accuracy_m, scanned_at_device. round.finish: round_uuid, finished_at_device?. round.track: round_uuid, points [{uuid, at, lat, lng, accuracy_m, battery}] (hasta 200; idempotente por uuid; responde saved/duplicate). patrol.point_locate: point_uuid, lat, lng, accuracy_m?; requiere permiso rondas.editar, actualiza la referencia del punto y queda auditado. guard.panic: uuid, at, lat, lng, accuracy_m, round_uuid?, sms_sent? (idempotente por uuid: el mismo pánico puede llegar directo por POST /panic y por la cola).
             action.start: uuid (tomar la acción). action.close: uuid, closure_text (≥ 10). El cierre exige evidencia del ciclo actual:
               la app sube las fotos (POST /uploads con action_uuid) ANTES de mandar action.close. Reenviar un paso ya hecho por el
               mismo usuario responde ok con duplicate: true.

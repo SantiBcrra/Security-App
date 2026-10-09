@@ -236,6 +236,7 @@ return static function (Router $r): void {
         $r->get('/equipo/{uuid}', [InspectionsController::class, 'equipment']);
 
         $r->get('/rondas', [RoundsController::class, 'index'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/marcas-fuera', [RoundsController::class, 'outside'], [$can('rondas', 'ver')]);
         $r->get('/rondas/rutas/nueva', [RoundsController::class, 'routeForm'], [$can('rondas', 'crear')]);
         $r->get('/rondas/ronda/{uuid}', [RoundsController::class, 'round'], [$can('rondas', 'ver')]);
         $r->get('/rondas/panico/{uuid}', [RoundsController::class, 'panic'], [$can('rondas', 'ver')]);
