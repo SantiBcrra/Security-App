@@ -155,6 +155,13 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - `round.start` es idempotente también por uuid de la ronda; el escaneo valida punto activo, uuid y hora del
   celular (máx. 30 días atrás). La app Android recupera la ronda en curso (`mine` + `en_curso`) al reabrir y ofrece "Tomar GPS" para ubicar un punto parado en el lugar.
 - Automatizaciones (Fase 1): `/panel/configuracion/notificaciones` permite ajustar por empresa activación, tolerancias de progreso/inicio/atraso, batería baja, sincronización demorada y guía Android. Los valores viajan en `sync/pull.meta.automatizaciones_rondas`; los destinatarios y canales se mantienen en `notification_rules`. La tarjeta tiene su propio formulario (`section=rondas` en `saveSettings`): cada formulario de esa pantalla guarda solo sus campos. Detalle en `docs/design/automatizaciones-rondas.md`.
+- Automatizaciones fases 2 y 4 (`RoundAutomation::run()` en el cron + `tracking/RoundWatch.kt` en la app): primero avisa la
+  app al guardia (local, sin señal también; revisa cada minuto desde `RoundTrackingService`) y si sigue igual después de
+  OTRO plazo igual avisa el servidor a SyH + supervisores. Sin progreso: N min sin marcar (app) / 2×N (servidor
+  `guard.no_progress`, solo si el celular manda posiciones: si no, ya avisa `guard.silent`; una vez por hueco). Atrasada:
+  ruta con `expected_minutes` E → E + T (app) / E + 2×T (servidor `guard.round_late`, una vez). Abandonada: en curso hace
+  más de 12 h → el sistema la cierra (completa/incompleta) con su última actividad. Todo queda en `patrol_round_alerts`
+  (tenant 0067) y se ve en el detalle de la ronda junto con la duración real vs. esperada.
 
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`

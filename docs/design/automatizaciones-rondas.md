@@ -32,3 +32,19 @@ La alerta de fuera de perímetro ya utiliza la regla `guard.off_site`; sus desti
 3. Rondas atrasadas y escalamiento.
 4. Estado del dispositivo.
 5. Resúmenes y métricas.
+
+## Fases 2 y 4 — hechas
+
+Regla común: **primero avisa la app al guardia** (calculado en el celular, funciona sin señal) y, si sigue igual después de
+**otro plazo igual**, **avisa el servidor a SyH y supervisores** (reglas de notificación editables).
+
+| | Guardia (app) | SyH y supervisores (cron) |
+|---|---|---|
+| Sin marcar puntos (N = `rondas.sin_progreso_minutos`) | a los N min sin marcar, una vez por hueco | a los 2×N, solo si el celular sigue mandando su posición (si no, ya avisa "guardia sin señal") — `guard.no_progress` |
+| Atrasada (ruta con duración esperada E; T = `rondas.atraso_minutos`) | a los E + T | a los E + 2×T, con los puntos que faltan — `guard.round_late` |
+| Abandonada | — | en curso hace más de 12 h: el sistema la cierra (completa/incompleta) con su última actividad |
+
+- Servidor: `App\Services\RoundAutomation::run()` en `CronRunner`; cada alerta queda en `patrol_round_alerts` (tenant 0067) y se
+  ve en `/panel/rondas/ronda/{uuid}` junto con la duración real contra la esperada.
+- Android: `tracking/RoundWatch.kt`, revisado cada minuto por `RoundTrackingService` mientras hay ronda en curso.
+- Rondas libres y rutas sin duración esperada no se controlan por atraso.

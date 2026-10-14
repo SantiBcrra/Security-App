@@ -407,6 +407,55 @@ return [
             Settings::get('rondas.automatizaciones'), Settings::get('rondas.sin_progreso_minutos')], 'el general no toca rondas');
     },
 
+    'automatizaciones: sin progreso, atrasada y abandonada (primero la app, después SyH; una vez cada una)' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        foreach (['rondas.automatizaciones' => '1', 'rondas.sin_progreso_minutos' => '10', 'rondas.atraso_minutos' => '10', 'rondas.minutos_sin_senal' => '10'] as $k => $v) {
+            Settings::set($k, $v);
+        }
+        $route = Uuid::v4();
+        Patrols::createRoute(['uuid' => $route, 'name' => 'Perímetro', 'description' => '', 'frequency' => 'diaria', 'expected_minutes' => 30,
+            'point_ids' => [$st['p1'], $st['p2']], 'user_ids' => [(int) $st['g1']['id']]]);
+        UserAuth::setCurrent($st['g1']);
+        $now = time();
+        $round = Uuid::v4();
+        assert_same('ok', Push::run([$op('round.start', ['uuid' => $round, 'route_uuid' => $route, 'started_at_device' => gmdate('Y-m-d\TH:i:s\Z', $now - 25 * 60)])])[0]['status']);
+        Push::run([$op('round.scan', ['uuid' => Uuid::v4(), 'round_uuid' => $round, 'point_uuid' => ($st['uuid'])($st['p1']), 'lat' => -34.6037, 'lng' => -58.3816,
+            'accuracy_m' => 5, 'scanned_at_device' => gmdate('Y-m-d\TH:i:s\Z', $now - 24 * 60)])]);
+        $id = (int) Patrols::round($round)['id'];
+        $alerts = fn () => array_column(\App\Services\RoundAutomation::alerts($id), 'type');
+        $inbox = fn (string $title) => (int) DB::tenant()->query('SELECT COUNT(*) FROM notifications WHERE user_id = ' . (int) $st['hys']['id']
+            . ' AND title = ' . DB::tenant()->quote($title))->fetchColumn();
+        // 24 min sin marcar (≥ 2×10) pero el celular no manda posiciones: eso lo cubre "guardia sin señal", no se duplica.
+        \App\Services\RoundAutomation::run($now);
+        assert_same([], $alerts());
+        DB::tenant()->exec("UPDATE patrol_rounds SET last_track_at = '" . gmdate('Y-m-d H:i:s', $now - 120) . "' WHERE id = {$id}");
+        \App\Services\RoundAutomation::run($now);
+        assert_same(['no_progress'], $alerts(), 'manda posición pero no marca: aviso');
+        assert_same(1, $inbox('Ronda sin marcar puntos · Guardia1'));
+        \App\Services\RoundAutomation::run($now + 60);
+        assert_same(['no_progress'], $alerts(), 'mismo hueco: no se repite');
+        // Atrasada: esperados 30 + 2×10 de tolerancia → a los 55 min avisa (falta un punto)
+        DB::tenant()->exec("UPDATE patrol_rounds SET last_track_at = '" . gmdate('Y-m-d H:i:s', $now + 30 * 60) . "' WHERE id = {$id}");
+        \App\Services\RoundAutomation::run($now + 30 * 60);
+        assert_same(['no_progress', 'late'], $alerts());
+        assert_same(1, \App\Services\RoundAutomation::alerts($id)[1]['data']['faltan']);
+        assert_same(1, $inbox('Ronda atrasada · Guardia1'));
+        \App\Services\RoundAutomation::run($now + 31 * 60);
+        assert_same(2, count($alerts()), 'atrasada: una sola vez');
+        $html = \App\Core\View::render('panel/rounds/round', ['round' => Patrols::roundDetail($round), 'tracks' => [], 'alerts' => \App\Services\RoundAutomation::alerts($id)], null);
+        assert_true(str_contains($html, 'Ronda atrasada') && str_contains($html, 'esperados 30'), 'el detalle muestra alertas y duración esperada');
+        // Abandonada: a las 12 h la cierra el sistema con la última actividad (incompleta: faltó un punto)
+        \App\Services\RoundAutomation::run($now + 13 * 3600);
+        $closed = Patrols::round($round);
+        assert_same(['incompleta', gmdate('Y-m-d H:i:s', $now + 30 * 60)], [$closed['status'], $closed['finished_at']]);
+        assert_same('abandoned', $alerts()[2]);
+        // Desactivadas: no hace nada
+        Settings::set('rondas.automatizaciones', '0');
+        assert_same(['no_progress' => 0, 'late' => 0, 'abandoned' => 0], \App\Services\RoundAutomation::run($now + 99 * 3600));
+        Settings::set('rondas.automatizaciones', '1');
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

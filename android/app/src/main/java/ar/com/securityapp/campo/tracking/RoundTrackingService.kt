@@ -40,6 +40,14 @@ class RoundTrackingService : Service() {
     private var roundUuid: String? = null
     private var lastSyncRequest = 0L
     private val client by lazy { LocationServices.getFusedLocationProviderClient(this) }
+    /** Cada minuto revisa si hay que avisarle al guardia (sin progreso / atrasada), aunque el GPS no dé posiciones. */
+    private val watchHandler = android.os.Handler(Looper.getMainLooper())
+    private val watch = object : Runnable {
+        override fun run() {
+            runCatching { RoundWatch.check(this@RoundTrackingService, (application as CampoApp).container) }
+            watchHandler.postDelayed(this, 60_000)
+        }
+    }
 
     private val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -71,6 +79,8 @@ class RoundTrackingService : Service() {
         if (round != roundUuid) {
             roundUuid = round
             requestUpdates()
+            watchHandler.removeCallbacks(watch)
+            watchHandler.postDelayed(watch, 60_000)
         }
         return START_STICKY // si Android lo corta por memoria, lo vuelve a levantar
     }
@@ -114,6 +124,7 @@ class RoundTrackingService : Service() {
     }.getOrNull()
 
     override fun onDestroy() {
+        watchHandler.removeCallbacks(watch)
         client.removeLocationUpdates(callback)
         SyncWorker.now(this) // lo último que quedó
         super.onDestroy()

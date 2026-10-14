@@ -212,7 +212,7 @@ final class Patrols
 
     public static function round(string $uuid): ?array
     {
-        $stmt = DB::tenant()->prepare('SELECT r.*, u.name AS user_name, pr.name AS route_name FROM patrol_rounds r JOIN users u ON u.id=r.user_id LEFT JOIN patrol_routes pr ON pr.id=r.route_id WHERE r.uuid=? LIMIT 1');
+        $stmt = DB::tenant()->prepare('SELECT r.*, u.name AS user_name, pr.name AS route_name, pr.expected_minutes FROM patrol_rounds r JOIN users u ON u.id=r.user_id LEFT JOIN patrol_routes pr ON pr.id=r.route_id WHERE r.uuid=? LIMIT 1');
         $stmt->execute([$uuid]);
         $row = $stmt->fetch() ?: null;
         if ($row) {

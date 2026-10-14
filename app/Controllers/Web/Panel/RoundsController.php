@@ -45,7 +45,7 @@ final class RoundsController
         $only = $this->onlyUser();
         if (!$round || ($only !== null && (int) $round['user_id'] !== $only)) return new Response('', 404);
         return Response::html(View::render('panel/rounds/round', ['title' => 'Ronda de ' . $round['user_name'], 'round' => $round,
-            'tracks' => \App\Services\GuardSafety::tracks((int) $round['id'])], 'layouts/app'));
+            'tracks' => \App\Services\GuardSafety::tracks((int) $round['id']), 'alerts' => \App\Services\RoundAutomation::alerts((int) $round['id'])], 'layouts/app'));
     }
 
     /** Alerta de pánico: dónde, cuándo, recorrido de la ronda y "Atendido". Solo con alcance más amplio que "propios". */

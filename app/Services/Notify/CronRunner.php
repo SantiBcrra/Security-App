@@ -47,6 +47,7 @@ final class CronRunner
                         'permits'   => \App\Services\WorkPermitService::expire(),
                         'ppe'       => PpeReminders::run(),
                         'guards'    => \App\Services\GuardSafety::run(),
+                        'rounds'    => \App\Services\RoundAutomation::run(),
                         'digests'   => Digests::run(),
                         'queue'     => QueueRunner::run($remaining, 100),
                     ];

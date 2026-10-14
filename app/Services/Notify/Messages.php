@@ -47,6 +47,8 @@ final class Messages
         'guard.panic'              => 'Botón de pánico de un guardia',
         'guard.silent'             => 'Guardia sin señal durante una ronda',
         'guard.off_site'           => 'Punto de ronda marcado lejos del lugar o con GPS falso',
+        'guard.no_progress'        => 'Ronda sin marcar puntos',
+        'guard.round_late'         => 'Ronda atrasada',
         'ppe.due_soon' => 'EPP por vencer', 'ppe.overdue' => 'EPP vencido', 'ppe.missing' => 'EPP pendiente',
     ];
 
@@ -96,6 +98,22 @@ final class Messages
 
     private static function forGuard(string $event, array $r, array $extra): array
     {
+        if ($event === 'guard.no_progress') {
+            $who = $r['user_name'] ?? 'Un guardia';
+            return ['title' => 'Ronda sin marcar puntos · ' . $who,
+                'body' => "{$who} está en ronda (" . ($r['route_name'] ?: 'ronda libre') . ') y hace ' . (int) ($r['idle_minutes'] ?? 0)
+                    . ' min que no marca ningún punto (último a las ' . fecha($r['since'] ?? $r['started_at'], 'H:i') . '). El celular sigue mandando su ubicación: comunicate con él.',
+                'url' => '/panel/rondas/ronda/' . $r['uuid'], 'critical' => false];
+        }
+        if ($event === 'guard.round_late') {
+            $who = $r['user_name'] ?? 'Un guardia';
+            $missing = (int) ($r['missing'] ?? 0);
+            return ['title' => 'Ronda atrasada · ' . $who,
+                'body' => "La ronda \"" . ($r['route_name'] ?? '') . "\" de {$who} empezó a las " . fecha($r['started_at'], 'H:i') . ' y sigue en curso: lleva '
+                    . (int) ($r['elapsed_minutes'] ?? 0) . ' min (esperados ' . (int) ($r['expected_minutes'] ?? 0) . ').'
+                    . ($missing > 0 ? " Faltan {$missing} punto(s)." : ' Ya marcó todos los puntos pero no la finalizó.') . ' Comunicate con él.',
+                'url' => '/panel/rondas/ronda/' . $r['uuid'], 'critical' => false];
+        }
         if ($event === 'guard.off_site') {
             $who = $r['user_name'] ?? 'Un guardia';
             $point = '«' . ($r['point_code'] ?? '') . ' · ' . ($r['point_name'] ?? '') . '»';

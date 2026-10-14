@@ -42,10 +42,11 @@ object Notifs {
         }
     }
 
-    fun show(context: Context, key: String, title: String, body: String, critical: Boolean) {
+    /** @param openAvisos al tocarla abre Avisos (false = abre la app donde estaba, p. ej. la ronda en curso) */
+    fun show(context: Context, key: String, title: String, body: String, critical: Boolean, openAvisos: Boolean = true) {
         ensureChannels(context)
         val open = PendingIntent.getActivity(context, key.hashCode(),
-            Intent(context, MainActivity::class.java).putExtra(EXTRA_OPEN, "avisos").addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            Intent(context, MainActivity::class.java).apply { if (openAvisos) putExtra(EXTRA_OPEN, "avisos") }.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(context, if (critical) CRITICAL else NORMAL)
             .setSmallIcon(R.drawable.ic_notification)

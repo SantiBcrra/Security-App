@@ -62,6 +62,8 @@ Se conservaron las APIs v1 y la sincronización del servidor para que Android si
 - [x] Entrega 7 — NFC en rondas, ícono, firma de la versión final, versión 1.0.0 lista para publicar (EPP desactivado en la app por ahora)
 - [x] Entrega 8 — Ubicación de puntos desde el celular y reporte web de marcas fuera de lugar por guardia/punto
 
+- [x] Automatizaciones de rondas: fase 1 (configuración), fase 2 (sin marcar puntos) y fase 4 (atrasada / abandonada). Pendientes: fases 3, 5 y 6 (`docs/design/automatizaciones-rondas.md`)
+
 ## Pendiente — operación (usuario)
 - [ ] Aplicar migraciones en Indumor (`/admin/migraciones` → "Actualizar base de datos")
 - [ ] `gh auth login` y `git push` (hay commits locales sin subir)

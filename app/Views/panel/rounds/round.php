@@ -20,7 +20,25 @@ $locBadge = function (?string $status, int $within, ?int $radius): string {
 <p class="text-body-secondary">
     <?= e($round['user_name']) ?> · inicio <?= e(fecha($round['started_at'])) ?>
     <?= $round['finished_at'] ? ' · fin ' . e(fecha($round['finished_at'])) : '' ?>
+    <?php
+    // Duración real (o hasta ahora) contra la esperada de la ruta.
+    $end = $round['finished_at'] ? strtotime($round['finished_at'] . ' UTC') : time();
+    $took = intdiv(max(0, $end - strtotime($round['started_at'] . ' UTC')), 60);
+    $expected = (int) ($round['expected_minutes'] ?? 0);
+    ?>
+    · <?= $round['finished_at'] ? 'duró' : 'lleva' ?> <?= e($took) ?> min<?php if ($expected > 0): ?> (esperados <?= e($expected) ?><?= $took > $expected ? ', <span class="text-danger fw-semibold">+' . e($took - $expected) . ' min</span>' : '' ?>)<?php endif; ?>
 </p>
+<?php foreach ($alerts ?? [] as $al): $d = $al['data']; ?>
+    <div class="alert alert-<?= $al['type'] === 'abandoned' ? 'secondary' : 'warning' ?> py-2 small mb-2">
+        <strong><?= e(\App\Services\RoundAutomation::LABELS[$al['type']] ?? $al['type']) ?></strong> · <?= e(fecha($al['created_at'])) ?> —
+        <?= e(match ($al['type']) {
+            'no_progress' => 'llevaba ' . ($d['minutos'] ?? '?') . ' min sin marcar puntos; se avisó a SyH y supervisores.',
+            'late' => 'llevaba ' . ($d['transcurridos'] ?? '?') . ' min (esperados ' . ($d['esperados'] ?? '?') . '), faltaban ' . ($d['faltan'] ?? '?') . ' punto(s); se avisó a SyH y supervisores.',
+            'abandoned' => 'seguía abierta después de ' . ($d['horas'] ?? '?') . ' h: se cerró con la última actividad registrada.',
+            default => '',
+        }) ?>
+    </div>
+<?php endforeach; ?>
 
 <?php
 $mapScans = array_values(array_filter(array_merge($round['route_points'] ?? [], $round['extra_scans'] ?? []), fn ($s) => ($s['lat'] ?? null) !== null && ($s['scanned_at_device'] ?? null) !== null));
