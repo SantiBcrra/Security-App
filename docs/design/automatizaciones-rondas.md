@@ -48,3 +48,17 @@ Regla común: **primero avisa la app al guardia** (calculado en el celular, func
   ve en `/panel/rondas/ronda/{uuid}` junto con la duración real contra la esperada.
 - Android: `tracking/RoundWatch.kt`, revisado cada minuto por `RoundTrackingService` mientras hay ronda en curso.
 - Rondas libres y rutas sin duración esperada no se controlan por atraso.
+
+## Fase 5 — hecha: estado del celular
+
+La app manda su estado (batería, cargando, GPS, permiso de ubicación, desde cuándo está apagado, registros sin enviar,
+versión) en cada sincronización (`device.status`); el servidor guarda el último por celular.
+
+| Problema | Guardia (app, enseguida) | SyH y supervisores (cron, una vez por ronda) |
+|---|---|---|
+| Batería baja sin cargar | ≤ `rondas.bateria_baja_porcentaje` (20 %) | ≤ la mitad (10 %): se va a apagar — `guard.device` |
+| GPS apagado / sin permiso | apenas se apaga | si sigue apagado 5 min — `guard.device` |
+| GPS prendido sin posiciones | sin posiciones nuevas en 5 min | — (se ve en el recorrido) |
+| Registros sin enviar | más viejos que `rondas.sin_sync_minutos` | — (si no hay contacto, ya avisa "guardia sin señal") |
+
+Panel: "Celulares de los guardias" en `/panel/rondas` y estado del celular en el detalle de la ronda en curso.

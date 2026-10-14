@@ -22,6 +22,7 @@ final class RoundsController
         return Response::html(View::render('panel/rounds/index', [
             'title' => 'Rondas de guardias', 'points' => Patrols::points(), 'routes' => Patrols::routes(), 'rounds' => Patrols::rounds(100, $this->onlyUser()),
             'panics' => $this->onlyUser() === null ? \App\Services\GuardSafety::panics(20) : [],
+            'devices' => \App\Services\DeviceStatus::recent(24, $this->onlyUser()),
         ], 'layouts/app'));
     }
 
@@ -45,7 +46,9 @@ final class RoundsController
         $only = $this->onlyUser();
         if (!$round || ($only !== null && (int) $round['user_id'] !== $only)) return new Response('', 404);
         return Response::html(View::render('panel/rounds/round', ['title' => 'Ronda de ' . $round['user_name'], 'round' => $round,
-            'tracks' => \App\Services\GuardSafety::tracks((int) $round['id']), 'alerts' => \App\Services\RoundAutomation::alerts((int) $round['id'])], 'layouts/app'));
+            'tracks' => \App\Services\GuardSafety::tracks((int) $round['id']), 'alerts' => \App\Services\RoundAutomation::alerts((int) $round['id']),
+            'device' => $round['status'] === 'en_curso' && ($st = \App\Services\DeviceStatus::latestForUser((int) $round['user_id'])) !== null
+                ? ['status' => $st, 'problems' => \App\Services\DeviceStatus::problems($st)] : null], 'layouts/app'));
     }
 
     /** Alerta de pánico: dónde, cuándo, recorrido de la ronda y "Atendido". Solo con alcance más amplio que "propios". */

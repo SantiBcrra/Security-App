@@ -22,7 +22,8 @@ use App\Services\Notify\Notifier;
 final class RoundAutomation
 {
     public const ABANDON_HOURS = 12;
-    public const LABELS = ['no_progress' => 'Sin marcar puntos', 'late' => 'Ronda atrasada', 'abandoned' => 'Cerrada por el sistema (abandonada)'];
+    public const LABELS = ['no_progress' => 'Sin marcar puntos', 'late' => 'Ronda atrasada', 'abandoned' => 'Cerrada por el sistema (abandonada)',
+        'battery' => 'Batería por terminarse', 'gps_off' => 'GPS apagado'];
 
     public static function enabled(): bool
     {
@@ -42,7 +43,7 @@ final class RoundAutomation
     /** @return array{no_progress:int, late:int, abandoned:int} */
     public static function run(?int $now = null): array
     {
-        $out = ['no_progress' => 0, 'late' => 0, 'abandoned' => 0];
+        $out = ['no_progress' => 0, 'late' => 0, 'abandoned' => 0, 'device' => 0];
         if (!self::enabled()) {
             return $out;
         }
@@ -64,6 +65,7 @@ final class RoundAutomation
                 }
                 if (self::checkNoProgress($r, $now)) $out['no_progress']++;
                 if (self::checkLate($r, $now, $started)) $out['late']++;
+                $out['device'] += self::checkDevice($r, $now);
             }
         } finally {
             UserAuth::setCurrent($previous);
@@ -99,6 +101,34 @@ final class RoundAutomation
         self::record((int) $r['id'], 'late', ['esperados' => $expected, 'transcurridos' => $elapsed, 'faltan' => $missing]);
         Notifier::dispatch('guard.round_late', $r + ['elapsed_minutes' => $elapsed, 'missing' => $missing]);
         return true;
+    }
+
+    /**
+     * Fase 5: celular del guardia durante la ronda (el último estado que mandó la app). Al guardia ya le avisó la app;
+     * a SyH y supervisores: batería en la mitad del umbral sin cargar (se va a apagar) o GPS apagado hace GPS_OFF_MINUTES.
+     * Una vez por ronda y por problema.
+     */
+    private static function checkDevice(array $r, int $now): int
+    {
+        $st = DeviceStatus::latestForUser((int) $r['user_id']);
+        if ($st === null || strtotime($st['received_at'] . ' UTC') < strtotime($r['started_at'] . ' UTC')) {
+            return 0; // sin datos de esta ronda
+        }
+        $sent = 0;
+        $critical = intdiv(DeviceStatus::batteryThreshold(), 2);
+        if ($st['battery'] !== null && $st['battery'] <= $critical && empty($st['charging']) && NotificationMarks::claim("round_device:{$r['id']}:battery")) {
+            self::record((int) $r['id'], 'battery', ['bateria' => $st['battery']]);
+            Notifier::dispatch('guard.device', $r + ['_kind' => 'battery', 'battery' => $st['battery']]);
+            $sent++;
+        }
+        $off = empty($st['gps']) || empty($st['permission']);
+        $since = $st['gps_off_since'] ?? $st['at'];
+        if ($off && $now - strtotime($since . ' UTC') >= DeviceStatus::GPS_OFF_MINUTES * 60 && NotificationMarks::claim("round_device:{$r['id']}:gps")) {
+            self::record((int) $r['id'], 'gps_off', ['desde' => $since, 'permiso' => !empty($st['permission'])]);
+            Notifier::dispatch('guard.device', $r + ['_kind' => 'gps', 'since' => $since]);
+            $sent++;
+        }
+        return $sent;
     }
 
     /** Cierra una ronda olvidada: hasta su última actividad conocida (marca o posición), nunca antes de empezar. */

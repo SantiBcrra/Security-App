@@ -162,6 +162,13 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   ruta con `expected_minutes` E → E + T (app) / E + 2×T (servidor `guard.round_late`, una vez). Abandonada: en curso hace
   más de 12 h → el sistema la cierra (completa/incompleta) con su última actividad. Todo queda en `patrol_round_alerts`
   (tenant 0067) y se ve en el detalle de la ronda junto con la duración real vs. esperada.
+- Fase 5, estado del celular: la app manda `device.status` en cada sincronización (`tracking/DeviceState.kt`; `Outbox.replace`
+  deja solo el último y no cuenta como "pendiente") → `user_devices.status` / `status_at` (tenant 0068, `DeviceStatus`). Al
+  guardia le avisa `RoundWatch`: batería ≤ `rondas.bateria_baja_porcentaje` sin cargar, GPS apagado o sin permiso, GPS sin
+  posiciones nuevas, registros sin enviar hace ≥ `rondas.sin_sync_minutos`. A SyH + supervisores (`guard.device`, una vez por
+  ronda y problema): batería ≤ la mitad del umbral sin cargar o GPS apagado hace `DeviceStatus::GPS_OFF_MINUTES` (5).
+  Panel: tarjeta "Celulares de los guardias" en /panel/rondas (últimas 24 h, con problemas) y estado del celular en el detalle
+  de una ronda en curso. "Sin contacto" del panel no avisa aparte: ya lo cubre `guard.silent`.
 
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`

@@ -452,8 +452,45 @@ return [
         assert_same('abandoned', $alerts()[2]);
         // Desactivadas: no hace nada
         Settings::set('rondas.automatizaciones', '0');
-        assert_same(['no_progress' => 0, 'late' => 0, 'abandoned' => 0], \App\Services\RoundAutomation::run($now + 99 * 3600));
+        assert_same(['no_progress' => 0, 'late' => 0, 'abandoned' => 0, 'device' => 0], \App\Services\RoundAutomation::run($now + 99 * 3600), 'desactivadas: no hace nada');
         Settings::set('rondas.automatizaciones', '1');
+    },
+
+    'automatizaciones: estado del celular (batería, GPS, sin enviar) y aviso a SyH durante la ronda' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        Settings::set('rondas.automatizaciones', '1');
+        Settings::set('rondas.bateria_baja_porcentaje', '20');
+        UserAuth::setCurrent($st['g1']);
+        $dev = \App\Models\UserDevices::findByUuid(\App\Models\UserDevices::upsert((int) $st['g1']['id'], Uuid::v4(), 'Moto G', hash('sha256', 'r-' . Uuid::v4()),
+            gmdate('Y-m-d H:i:s', time() + 86400), null));
+        \App\Services\ApiAuth::setDevice($dev);
+        $now = time();
+        $round = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $round, 'started_at_device' => gmdate('Y-m-d\TH:i:s\Z', $now - 600)])]);
+        $id = (int) Patrols::round($round)['id'];
+        $status = fn (array $s) => Push::run([$op('device.status', $s + ['at' => gmdate('Y-m-d\TH:i:s\Z', $now)])])[0];
+        // Batería 15 % (bajo el umbral 20): el guardia ya fue avisado por la app; SyH todavía no (avisa a la mitad, 10 %)
+        assert_same('ok', $status(['battery' => 15, 'charging' => false, 'gps' => true, 'permission' => true, 'pending' => 0, 'app_version' => '1.0.0'])['status']);
+        \App\Services\RoundAutomation::run($now);
+        assert_same([], array_column(\App\Services\RoundAutomation::alerts($id), 'type'));
+        assert_same(['Batería 15 %'], \App\Services\DeviceStatus::problems(\App\Services\DeviceStatus::latestForUser((int) $st['g1']['id']), $now));
+        $status(['battery' => 8, 'charging' => false, 'gps' => false, 'gps_off_since' => gmdate('Y-m-d\TH:i:s\Z', $now - 360), 'pending' => 4,
+            'oldest_pending_at' => gmdate('Y-m-d\TH:i:s\Z', $now - 1800), 'battery_extra' => 'x']);
+        \App\Services\RoundAutomation::run($now);
+        assert_same(['battery', 'gps_off'], array_column(\App\Services\RoundAutomation::alerts($id), 'type'), 'batería 8 % sin cargar y GPS apagado hace 6 min');
+        \App\Services\RoundAutomation::run($now + 60);
+        assert_same(2, count(\App\Services\RoundAutomation::alerts($id)), 'una vez por ronda y problema');
+        $inbox = array_column(DB::tenant()->query('SELECT title FROM notifications WHERE user_id = ' . (int) $st['hys']['id'])->fetchAll(), 'title');
+        assert_true(in_array('Batería por terminarse · Guardia1', $inbox, true) && in_array('GPS apagado · Guardia1', $inbox, true));
+        $problems = \App\Services\DeviceStatus::problems(\App\Services\DeviceStatus::latestForUser((int) $st['g1']['id']), $now);
+        assert_same(['Batería 8 %', 'GPS apagado', '4 registro(s) sin enviar'], $problems);
+        $recent = \App\Services\DeviceStatus::recent();
+        assert_same(['Guardia1', 'Moto G'], [$recent[0]['user_name'], $recent[0]['device_name']]);
+        \App\Services\ApiAuth::setDevice(null);
+        assert_same('error', $status(['battery' => 50])['status'], 'sin dispositivo identificado no se guarda');
+        $html = \App\Core\View::render('panel/rounds/index', ['points' => [], 'routes' => [], 'rounds' => [], 'devices' => $recent], null);
+        assert_true(str_contains($html, 'Celulares de los guardias') && str_contains($html, 'Batería 8 %'));
     },
 
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {

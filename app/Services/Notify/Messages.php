@@ -49,6 +49,7 @@ final class Messages
         'guard.off_site'           => 'Punto de ronda marcado lejos del lugar o con GPS falso',
         'guard.no_progress'        => 'Ronda sin marcar puntos',
         'guard.round_late'         => 'Ronda atrasada',
+        'guard.device'             => 'Celular de un guardia con problemas durante la ronda',
         'ppe.due_soon' => 'EPP por vencer', 'ppe.overdue' => 'EPP vencido', 'ppe.missing' => 'EPP pendiente',
     ];
 
@@ -104,6 +105,17 @@ final class Messages
                 'body' => "{$who} está en ronda (" . ($r['route_name'] ?: 'ronda libre') . ') y hace ' . (int) ($r['idle_minutes'] ?? 0)
                     . ' min que no marca ningún punto (último a las ' . fecha($r['since'] ?? $r['started_at'], 'H:i') . '). El celular sigue mandando su ubicación: comunicate con él.',
                 'url' => '/panel/rondas/ronda/' . $r['uuid'], 'critical' => false];
+        }
+        if ($event === 'guard.device') {
+            $who = $r['user_name'] ?? 'Un guardia';
+            $round = ' durante la ronda (' . ($r['route_name'] ?: 'ronda libre') . ')';
+            return ($r['_kind'] ?? '') === 'battery'
+                ? ['title' => 'Batería por terminarse · ' . $who,
+                    'body' => "El celular de {$who} tiene " . (int) ($r['battery'] ?? 0) . " % de batería{$round} y no está cargando. Si se apaga no hay pánico ni recorrido: comunicate con él.",
+                    'url' => '/panel/rondas/ronda/' . $r['uuid'], 'critical' => false]
+                : ['title' => 'GPS apagado · ' . $who,
+                    'body' => "{$who} tiene la ubicación apagada desde las " . fecha($r['since'] ?? $r['started_at'], 'H:i') . "{$round}: no se registra su recorrido ni dónde marca. Pedile que la active.",
+                    'url' => '/panel/rondas/ronda/' . $r['uuid'], 'critical' => false];
         }
         if ($event === 'guard.round_late') {
             $who = $r['user_name'] ?? 'Un guardia';

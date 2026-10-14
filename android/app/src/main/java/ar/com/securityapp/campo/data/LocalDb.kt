@@ -142,8 +142,22 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "campo.db", null, VE
     fun get(entity: String, uuid: String): String? =
         readableDatabase.rawQuery("SELECT data FROM records WHERE entity = ? AND uuid = ?", arrayOf(entity, uuid)).use { c -> if (c.moveToFirst()) c.getString(0) else null }
 
+    /** Lo que espera señal (sin contar el estado del celular, que se reemplaza en cada sincronización). */
     fun pendingOps(): Int =
-        readableDatabase.rawQuery("SELECT COUNT(*) FROM outbox WHERE status = 'pending'", null).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM outbox WHERE status = 'pending' AND type <> 'device.status'", null).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+
+    /** Hora (ms) de lo más viejo que espera señal, o null si no hay nada. */
+    fun oldestPendingAt(): Long? =
+        readableDatabase.rawQuery("SELECT MIN(created_at) FROM outbox WHERE status = 'pending' AND type <> 'device.status'", null)
+            .use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null }
+
+    fun deleteOpsOfType(type: String, status: String = "pending") {
+        writableDatabase.delete("outbox", "type = ? AND status = ?", arrayOf(type, status))
+    }
+
+    /** Última posición guardada de la ronda (ISO), o null. */
+    fun lastTrackAt(roundUuid: String): String? =
+        readableDatabase.rawQuery("SELECT MAX(at) FROM tracks WHERE round_uuid = ?", arrayOf(roundUuid)).use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null }
 
     // ── cola de envío ──────────────────────────────────────────────
 

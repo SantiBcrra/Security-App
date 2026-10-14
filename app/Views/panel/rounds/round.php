@@ -28,6 +28,14 @@ $locBadge = function (?string $status, int $within, ?int $radius): string {
     ?>
     · <?= $round['finished_at'] ? 'duró' : 'lleva' ?> <?= e($took) ?> min<?php if ($expected > 0): ?> (esperados <?= e($expected) ?><?= $took > $expected ? ', <span class="text-danger fw-semibold">+' . e($took - $expected) . ' min</span>' : '' ?>)<?php endif; ?>
 </p>
+<?php if (!empty($device)): $st = $device['status']; ?>
+    <p class="small mb-2">Celular del guardia (último dato <?= e(fecha($st['received_at'] ?? null, 'd/m H:i')) ?>):
+        batería <?= $st['battery'] !== null ? e($st['battery']) . ' %' . (!empty($st['charging']) ? ' (cargando)' : '') : '—' ?> ·
+        GPS <?= !empty($st['permission']) ? (!empty($st['gps']) ? 'encendido' : '<span class="text-danger">apagado</span>') : '<span class="text-danger">sin permiso</span>' ?> ·
+        <?= (int) ($st['pending'] ?? 0) ?> sin enviar<?= !empty($st['app_version']) ? ' · app ' . e($st['app_version']) : '' ?>
+        <?php foreach ($device['problems'] as $pr): ?> <span class="badge text-bg-warning"><?= e($pr) ?></span><?php endforeach; ?>
+    </p>
+<?php endif; ?>
 <?php foreach ($alerts ?? [] as $al): $d = $al['data']; ?>
     <div class="alert alert-<?= $al['type'] === 'abandoned' ? 'secondary' : 'warning' ?> py-2 small mb-2">
         <strong><?= e(\App\Services\RoundAutomation::LABELS[$al['type']] ?? $al['type']) ?></strong> · <?= e(fecha($al['created_at'])) ?> —
@@ -35,6 +43,8 @@ $locBadge = function (?string $status, int $within, ?int $radius): string {
             'no_progress' => 'llevaba ' . ($d['minutos'] ?? '?') . ' min sin marcar puntos; se avisó a SyH y supervisores.',
             'late' => 'llevaba ' . ($d['transcurridos'] ?? '?') . ' min (esperados ' . ($d['esperados'] ?? '?') . '), faltaban ' . ($d['faltan'] ?? '?') . ' punto(s); se avisó a SyH y supervisores.',
             'abandoned' => 'seguía abierta después de ' . ($d['horas'] ?? '?') . ' h: se cerró con la última actividad registrada.',
+            'battery' => 'el celular tenía ' . ($d['bateria'] ?? '?') . ' % de batería sin cargar; se avisó a SyH y supervisores.',
+            'gps_off' => ($d['permiso'] ?? true ? 'la ubicación estaba apagada' : 'la app no tenía permiso de ubicación') . ' desde las ' . fecha($d['desde'] ?? null, 'H:i') . '; se avisó a SyH y supervisores.',
             default => '',
         }) ?>
     </div>

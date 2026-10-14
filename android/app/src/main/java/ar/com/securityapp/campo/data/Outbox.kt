@@ -25,6 +25,13 @@ class Outbox(private val api: ApiClient, private val db: LocalDb) {
 
     fun pendingCount(): Int = db.pendingOps()
 
+    /** Encola reemplazando lo pendiente del mismo tipo (p. ej. el estado del celular: solo importa el último). */
+    fun replace(type: String, data: JsonObject): String {
+        db.deleteOpsOfType(type)
+        db.deleteOpsOfType(type, "failed") // un rechazo viejo de este tipo ya no sirve
+        return enqueue(type, data)
+    }
+
     fun failed(): List<LocalDb.Op> = db.ops("failed")
 
     /** Reintento manual con otro op_id (el servidor guarda la respuesta de cada op_id, también los rechazos). */

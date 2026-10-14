@@ -12,13 +12,15 @@ import kotlinx.serialization.json.put
  * Sincronización con el servidor: primero manda la cola de lo hecho offline (outbox) y después baja los cambios desde el
  * último cursor (datos maestros, rutas, lo visible para el usuario) a la base local.
  */
-class SyncRepository(private val api: ApiClient, private val prefs: Prefs, private val db: LocalDb, private val outbox: Outbox,
-                     private val uploads: Uploads, private val inspections: InspectionsRepository) {
+class SyncRepository(private val context: android.content.Context, private val api: ApiClient, private val prefs: Prefs, private val db: LocalDb,
+                     private val outbox: Outbox, private val uploads: Uploads, private val inspections: InspectionsRepository) {
 
     data class Full(val sent: Int, val failed: Int, val pulled: Result)
 
     suspend fun syncAll(): Full {
         queueTracks()
+        // Estado del celular (batería, GPS, pendientes) con cada sincronización: el panel lo muestra y avisa si hay problemas.
+        runCatching { outbox.replace("device.status", ar.com.securityapp.campo.tracking.DeviceState.read(context, db).toJson()) }
         // El cierre de una acción espera a que suban sus fotos (el servidor exige evidencia para cerrar).
         val waiting = { op: LocalDb.Op -> op.type == "action.close" && db.uploads("pending").any { it.target == "action" && op.data.contains(it.targetUuid) } }
         val first = outbox.push(hold = waiting, onResult = ::onResult)

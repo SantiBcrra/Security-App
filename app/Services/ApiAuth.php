@@ -126,6 +126,12 @@ final class ApiAuth
         return self::$device;
     }
 
+    /** Solo para tests y tareas internas. */
+    public static function setDevice(?array $device): void
+    {
+        self::$device = $device;
+    }
+
     public static function logout(): void
     {
         if (self::$device !== null) {

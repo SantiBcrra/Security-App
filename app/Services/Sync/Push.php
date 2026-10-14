@@ -20,7 +20,7 @@ use App\Services\UserAuth;
 final class Push
 {
     public const MAX_OPS = 50;
-    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'round.track', 'patrol.point_locate', 'guard.panic', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
+    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'round.track', 'device.status', 'patrol.point_locate', 'guard.panic', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
         'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
@@ -66,6 +66,7 @@ final class Push
                 'round.finish'           => self::roundFinish($data),
                 'round.track'            => ['status' => 'ok', 'data' => \App\Services\GuardSafety::track($data)],
                 'patrol.point_locate'    => self::pointLocate($data),
+                'device.status'          => ['status' => 'ok', 'data' => \App\Services\DeviceStatus::store($data)],
                 'guard.panic'            => self::panic($data),
                 'action.start'           => self::actionStep($data, 'tomar'),
                 'action.close'           => self::actionStep($data, 'cerrar'),
