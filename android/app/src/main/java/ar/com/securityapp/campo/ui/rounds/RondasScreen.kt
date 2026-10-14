@@ -63,7 +63,8 @@ private fun hour(iso: String?): String = iso?.let { runCatching { HOUR.format(In
 
 @Suppress("DEPRECATION")
 @Composable
-fun RondasScreen(onBack: () -> Unit, canWriteTags: Boolean = false, vm: RoundsViewModel = viewModel()) {
+/** @param canManagePoints permiso rondas.editar: ubicar puntos con el GPS y grabar etiquetas NFC */
+fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: RoundsViewModel = viewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val scan by vm.scan.collectAsStateWithLifecycle()
     var scanning by remember { mutableStateOf(false) }
@@ -143,19 +144,19 @@ fun RondasScreen(onBack: () -> Unit, canWriteTags: Boolean = false, vm: RoundsVi
                 item {
                     OutlinedButton({ begin(null) }, Modifier.fillMaxWidth(), enabled = !ui.busy) { Text("Ronda libre (sin ruta)") }
                 }
-                if (ui.points.isNotEmpty()) item {
+                if (canManagePoints && ui.points.isNotEmpty()) item {
                     Text("Ubicar puntos", style = MaterialTheme.typography.titleSmall, color = Muted, modifier = Modifier.padding(top = 8.dp))
                     Text("Parate junto al punto y guardá su ubicación actual. El cambio queda en cola si no hay señal.", style = MaterialTheme.typography.bodySmall, color = Muted)
                 }
-                if (ui.points.isNotEmpty()) items(ui.points.values.sortedBy { it.code }, key = { "loc-${it.uuid}" }) { point ->
+                if (canManagePoints && ui.points.isNotEmpty()) items(ui.points.values.sortedBy { it.code }, key = { "loc-${it.uuid}" }) { point ->
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
                         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) { Text("${point.code} · ${point.name}"); Text("${point.lat ?: "sin coordenadas"}, ${point.lng ?: ""}", style = MaterialTheme.typography.bodySmall, color = Muted) }
+                            Column(Modifier.weight(1f)) { Text("${point.code} · ${point.name}"); Text(if (point.lat == null || point.lng == null) "Sin coordenadas" else "%.5f, %.5f".format(java.util.Locale.US, point.lat, point.lng), style = MaterialTheme.typography.bodySmall, color = Muted) }
                             OutlinedButton({ locatingPoint = point }, enabled = !ui.busy) { Text("Tomar GPS") }
                         }
                     }
                 }
-                if (canWriteTags) item {
+                if (canManagePoints) item {
                     TextButton({ writingTags = true }, Modifier.fillMaxWidth()) { Text("Grabar etiquetas NFC de los puntos", color = Brand) }
                 }
                 if (ui.history.isNotEmpty()) {

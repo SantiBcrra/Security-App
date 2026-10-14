@@ -174,6 +174,12 @@ final class Push
             return self::error('La ubicación tiene que incluir latitud y longitud.');
         }
         $lat = (float) $data['lat']; $lng = (float) $data['lng'];
+        // La ubicación de referencia define qué marcas cuentan como "en el lugar": no se acepta un GPS falso ni impreciso.
+        if (!empty($data['mock'])) return self::error('El celular tiene una ubicación simulada (GPS falso): no se puede ubicar el punto.');
+        $accuracy = isset($data['accuracy_m']) && is_numeric($data['accuracy_m']) ? (float) $data['accuracy_m'] : null;
+        if ($accuracy === null || $accuracy > Patrols::LOCATE_MAX_ACCURACY_M) {
+            return self::error('El GPS no es preciso (' . ($accuracy === null ? 'sin dato' : '±' . (int) $accuracy . ' m') . '): esperá unos segundos al aire libre y volvé a tomarlo.');
+        }
         $before = Patrols::point($uuid);
         $after = Patrols::locatePoint($uuid, $lat, $lng);
         \App\Services\Audit::tenant('patrol_point.locate', 'patrol_point', $uuid,

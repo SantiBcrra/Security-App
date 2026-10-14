@@ -110,6 +110,10 @@ final class NotificationRulesController
 
     public function saveSettings(Request $request): Response
     {
+        // Dos formularios en la misma pantalla: cada uno guarda SOLO lo suyo (si no, guardar uno borraba el otro).
+        if ($request->input('section') === 'rondas') {
+            return $this->saveRoundAutomation($request);
+        }
         $minutes = (int) $request->input('escalation', 15);
         Settings::set('notif.escalation_minutes', (string) max(1, min(240, $minutes)));
         Settings::set('notif.digest_daily', $request->input('daily') ? '1' : '0');
@@ -120,6 +124,16 @@ final class NotificationRulesController
         Settings::set('acciones.dias_verificacion', $days('verify_days', 15, 180));
         Settings::set('incidentes.dias_investigacion', $days('inv_days', 3, 60));
         Settings::set('incidentes.horas_art', $days('art_hours', 48, 720));
+        Audit::tenant('settings.update', 'settings', null, null, ['escalamiento_min' => $minutes, 'resumen_diario' => (bool) $request->input('daily'), 'resumen_semanal' => (bool) $request->input('weekly'),
+            'acciones_aviso_dias' => Settings::get('acciones.aviso_dias'), 'acciones_escalar_dias' => Settings::get('acciones.escalar_dias'),
+            'acciones_dias_verificacion' => Settings::get('acciones.dias_verificacion')]);
+        Flash::add('success', 'Configuración guardada.');
+        return Response::redirect('/panel/configuracion/notificaciones');
+    }
+
+    /** Tarjeta "Automatizaciones de rondas" (formulario propio: no toca el resto de los ajustes). */
+    private function saveRoundAutomation(Request $request): Response
+    {
         $roundInt = function (string $key, int $default, int $min, int $max) use ($request): string {
             return (string) max($min, min($max, (int) $request->input($key, $default)));
         };
@@ -130,13 +144,11 @@ final class NotificationRulesController
         Settings::set('rondas.bateria_baja_porcentaje', $roundInt('round_battery', 20, 5, 50));
         Settings::set('rondas.sin_sync_minutos', $roundInt('round_sync', 15, 5, 1440));
         Settings::set('rondas.guia_android', $request->input('round_guidance') ? '1' : '0');
-        Audit::tenant('settings.update', 'settings', null, null, ['escalamiento_min' => $minutes, 'resumen_diario' => (bool) $request->input('daily'), 'resumen_semanal' => (bool) $request->input('weekly'),
-            'acciones_aviso_dias' => Settings::get('acciones.aviso_dias'), 'acciones_escalar_dias' => Settings::get('acciones.escalar_dias'),
-            'acciones_dias_verificacion' => Settings::get('acciones.dias_verificacion'), 'rondas_automatizaciones' => Settings::get('rondas.automatizaciones'),
+        Audit::tenant('settings.update', 'settings', null, null, ['rondas_automatizaciones' => Settings::get('rondas.automatizaciones'),
             'rondas_sin_progreso_minutos' => Settings::get('rondas.sin_progreso_minutos'), 'rondas_inicio_gracia_minutos' => Settings::get('rondas.inicio_gracia_minutos'),
             'rondas_atraso_minutos' => Settings::get('rondas.atraso_minutos'), 'rondas_bateria_baja_porcentaje' => Settings::get('rondas.bateria_baja_porcentaje'),
             'rondas_sin_sync_minutos' => Settings::get('rondas.sin_sync_minutos'), 'rondas_guia_android' => Settings::get('rondas.guia_android')]);
-        Flash::add('success', 'Configuración guardada.');
+        Flash::add('success', 'Automatizaciones de rondas guardadas.');
         return Response::redirect('/panel/configuracion/notificaciones');
     }
 }

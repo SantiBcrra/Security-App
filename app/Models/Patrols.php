@@ -27,6 +27,9 @@ final class Patrols
         return $stmt->fetch() ?: null;
     }
 
+    /** Precisión mínima del GPS para fijar la ubicación de un punto desde el celular (metros). */
+    public const LOCATE_MAX_ACCURACY_M = 30;
+
     /** Actualiza las coordenadas de un punto desde Android, con alcance por sector y auditoría del controlador. */
     public static function locatePoint(string $uuid, float $lat, float $lng): array
     {
@@ -47,8 +50,11 @@ final class Patrols
         $where = ["s.location_status IN ('lejos','simulada')"]; $params = [];
         if ($userUuid) { $where[] = 'u.uuid = ?'; $params[] = $userUuid; }
         if ($pointUuid) { $where[] = 'p.uuid = ?'; $params[] = $pointUuid; }
-        if ($from && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $from)) { $where[] = 's.scanned_at_device >= ?'; $params[] = $from . ' 00:00:00'; }
-        if ($to && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $to)) { $where[] = 's.scanned_at_device < ?'; $params[] = (new \DateTimeImmutable($to))->modify('+1 day')->format('Y-m-d') . ' 00:00:00'; }
+        // Las fechas del filtro son días locales de la empresa; en la base todo está en UTC.
+        $tz = new \DateTimeZone(\App\Core\Tenant::timezone() ?: 'America/Argentina/Buenos_Aires');
+        $utc = fn (string $day) => (new \DateTimeImmutable($day . ' 00:00:00', $tz))->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        if ($from && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $from)) { $where[] = 's.scanned_at_device >= ?'; $params[] = $utc($from); }
+        if ($to && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $to)) { $where[] = 's.scanned_at_device < ?'; $params[] = $utc((new \DateTimeImmutable($to))->modify('+1 day')->format('Y-m-d')); }
         $scope = UserAuth::scope('rondas');
         if ($scope === 'propios') { $where[] = 's.user_id = ?'; $params[] = (int)UserAuth::user()['id']; }
         elseif ($scope === 'sectores') { $ids = \App\Services\SectorScope::sectorIds('rondas') ?? [0]; $where[] = 'p.sector_id IN (' . implode(',', array_map('intval',$ids)) . ')'; }

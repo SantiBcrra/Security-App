@@ -138,6 +138,7 @@ $has = fn (string $type, ?string $value = null) => $form && (bool) array_filter(
 </div>
 <form class="card shadow-sm mt-3" method="post" action="<?= e(url('/panel/configuracion/notificaciones/ajustes')) ?>">
     <?= csrf_field() ?>
+    <input type="hidden" name="section" value="rondas">
     <div class="card-header"><strong>Automatizaciones de rondas</strong></div>
     <fieldset class="card-body" <?= $canEdit ? '' : 'disabled' ?>>
         <p class="text-body-secondary small">Estas opciones preparan la guía de la app Android y las alertas automáticas. Los destinatarios y canales se definen arriba en las reglas de notificación.</p>

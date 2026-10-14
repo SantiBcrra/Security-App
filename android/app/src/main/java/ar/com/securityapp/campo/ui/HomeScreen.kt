@@ -113,7 +113,7 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     }
     when (openModule) {
         "rondas" -> {
-            ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; vm.refreshCounts() }, canWriteTags = me.can("rondas", "editar"))
+            ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; vm.refreshCounts() }, canManagePoints = me.can("rondas", "editar"))
             return
         }
         "acciones" -> { ar.com.securityapp.campo.ui.actions.AccionesScreen(onBack = { openModule = null; vm.refreshCounts() }); return }

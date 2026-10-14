@@ -358,8 +358,14 @@ return [
         assert_same(-34.6042, (float) Patrols::point($uuid)['lat']);
         assert_same($first, Push::run([$operation])[0], 'repetir el mismo op_id no vuelve a escribir');
         assert_same(1, (int) DB::tenant()->query("SELECT COUNT(*) FROM audit_log WHERE action = 'patrol_point.locate'")->fetchColumn());
+        $fake = Push::run([$op('patrol.point_locate', ['point_uuid' => $uuid, 'lat' => -34.5, 'lng' => -58.4, 'accuracy_m' => 3, 'mock' => 1])])[0];
+        assert_true($fake['status'] === 'error' && str_contains($fake['error'], 'simulada'), 'GPS falso: no mueve el punto');
+        $vague = Push::run([$op('patrol.point_locate', ['point_uuid' => $uuid, 'lat' => -34.5, 'lng' => -58.4, 'accuracy_m' => 80])])[0];
+        assert_true($vague['status'] === 'error' && str_contains($vague['error'], '±80 m'), 'GPS impreciso: no mueve el punto');
+        assert_same('error', Push::run([$op('patrol.point_locate', ['point_uuid' => $uuid, 'lat' => -34.5, 'lng' => -58.4])])[0]['status'], 'sin precisión');
+        assert_same(-34.6042, (float) Patrols::point($uuid)['lat'], 'las coordenadas siguen siendo las buenas');
         UserAuth::setCurrent($st['g1']);
-        $bad = Push::run([$op('patrol.point_locate', ['point_uuid' => $uuid, 'lat' => -34.6, 'lng' => -58.3])])[0];
+        $bad = Push::run([$op('patrol.point_locate', ['point_uuid' => $uuid, 'lat' => -34.6, 'lng' => -58.3, 'accuracy_m' => 5])])[0];
         assert_same('error', $bad['status'], 'el guardia no puede modificar coordenadas');
     },
 
@@ -387,6 +393,18 @@ return [
         assert_same(false, $meta['automatizaciones_rondas']['activas']);
         assert_same(22, $meta['automatizaciones_rondas']['sin_progreso_minutos']);
         assert_same(10, $meta['automatizaciones_rondas']['inicio_gracia_minutos'], 'valor por defecto');
+        // Los dos formularios de /panel/configuracion/notificaciones guardan cada uno lo suyo (antes uno pisaba al otro).
+        $ctrl = new \App\Controllers\Web\Panel\NotificationRulesController();
+        Settings::set('notif.digest_daily', '1');
+        Settings::set('acciones.aviso_dias', '9');
+        $ctrl->saveSettings(new \App\Core\Request('POST', '/panel/configuracion/notificaciones/ajustes', [], ['section' => 'rondas',
+            'round_automation' => '1', 'round_no_progress' => '15', 'round_start_grace' => '5', 'round_overdue' => '20', 'round_battery' => '25', 'round_sync' => '30']));
+        assert_same(['1', '15', '0', '1', '9'], [Settings::get('rondas.automatizaciones'), Settings::get('rondas.sin_progreso_minutos'),
+            Settings::get('rondas.guia_android'), Settings::get('notif.digest_daily'), Settings::get('acciones.aviso_dias')], 'rondas no toca los demás ajustes');
+        $ctrl->saveSettings(new \App\Core\Request('POST', '/panel/configuracion/notificaciones/ajustes', [], ['escalation' => '20', 'daily' => '1',
+            'soon_days' => '4', 'escalate_days' => '3', 'verify_days' => '15', 'inv_days' => '3', 'art_hours' => '48']));
+        assert_same(['20', '4', '1', '15'], [Settings::get('notif.escalation_minutes'), Settings::get('acciones.aviso_dias'),
+            Settings::get('rondas.automatizaciones'), Settings::get('rondas.sin_progreso_minutos')], 'el general no toca rondas');
     },
 
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {

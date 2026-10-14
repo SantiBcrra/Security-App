@@ -50,6 +50,10 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
             put("point_uuid", point.uuid); put("lat", fix.lat); put("lng", fix.lng); put("accuracy_m", fix.accuracyM)
             if (fix.mock) put("mock", 1)
         })
+        // La lista muestra ya las coordenadas nuevas (el próximo pull trae las del servidor).
+        db.all("patrol_points").mapNotNull { parse(it) }.firstOrNull { it.str("uuid") == point.uuid }?.let { row ->
+            db.upsert("patrol_points", listOf(point.uuid to JsonObject(row + buildJsonObject { put("lat", fix.lat); put("lng", fix.lng) }).toString()))
+        }
         return op
     }
 

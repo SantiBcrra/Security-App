@@ -123,14 +123,26 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
     fun locatePoint(point: PatrolPoint) = viewModelScope.launch {
         _ui.value = _ui.value.copy(busy = true, locationMessage = null)
         val fix = locator.current(timeoutMs = 12_000)
-        if (fix == null) {
-            _ui.value = _ui.value.copy(busy = false, locationMessage = "No se pudo obtener el GPS. Activá la ubicación y probá de nuevo.")
+        val problem = when {
+            fix == null -> "No se pudo obtener el GPS. Activá la ubicación y probá de nuevo."
+            fix.mock -> "El celular tiene una ubicación simulada (app de GPS falso). Desactivala para ubicar el punto."
+            fix.accuracyM > LOCATE_MAX_ACCURACY_M -> "El GPS todavía no es preciso (±${fix.accuracyM.toInt()} m; hace falta ±$LOCATE_MAX_ACCURACY_M m o menos). " +
+                "Esperá unos segundos al aire libre, sin moverte, y volvé a tocar \"Tomar GPS\"."
+            else -> null
+        }
+        if (problem != null || fix == null) {
+            _ui.value = _ui.value.copy(busy = false, locationMessage = problem)
             return@launch
         }
         c.rounds.locatePoint(point, fix)
         SyncWorker.now(getApplication())
         reload()
         _ui.value = _ui.value.copy(busy = false, locationMessage = "Ubicación de ${point.code} guardada para sincronizar (±${fix.accuracyM.toInt()} m).")
+    }
+
+    private companion object {
+        /** Igual que `Patrols::LOCATE_MAX_ACCURACY_M` en el servidor. */
+        const val LOCATE_MAX_ACCURACY_M = 30
     }
 
     fun clearLocationMessage() { _ui.value = _ui.value.copy(locationMessage = null) }
