@@ -33,6 +33,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         } catch (e: ApiException) {
             if (e.status >= 500) Result.retry() else Result.success() // 401: la sesión se pide de nuevo en la pantalla
         } finally {
+            runCatching { ar.com.securityapp.campo.tracking.SlotAlarms.schedule(applicationContext, c) } // recordatorios con lo último bajado
             c.dataChanged.tryEmit(Unit)
         }
     }

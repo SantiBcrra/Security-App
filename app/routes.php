@@ -237,6 +237,12 @@ return static function (Router $r): void {
 
         $r->get('/rondas', [RoundsController::class, 'index'], [$can('rondas', 'ver')]);
         $r->get('/rondas/marcas-fuera', [RoundsController::class, 'outside'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/programacion', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'index'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/programacion/nueva', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'form'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/programacion', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'store'], [$can('rondas', 'editar')]);
+        $r->get('/rondas/programacion/{uuid}', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'form'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/programacion/{uuid}', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'store'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/programacion/{uuid}/estado', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'toggle'], [$can('rondas', 'editar')]);
         $r->get('/rondas/rutas/nueva', [RoundsController::class, 'routeForm'], [$can('rondas', 'crear')]);
         $r->get('/rondas/ronda/{uuid}', [RoundsController::class, 'round'], [$can('rondas', 'ver')]);
         $r->get('/rondas/panico/{uuid}', [RoundsController::class, 'panic'], [$can('rondas', 'ver')]);

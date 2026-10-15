@@ -50,6 +50,8 @@ final class Messages
         'guard.no_progress'        => 'Ronda sin marcar puntos',
         'guard.round_late'         => 'Ronda atrasada',
         'guard.device'             => 'Celular de un guardia con problemas durante la ronda',
+        'guard.round_not_started'  => 'Ronda programada sin empezar',
+        'guard.round_missed'       => 'Ronda programada no realizada',
         'ppe.due_soon' => 'EPP por vencer', 'ppe.overdue' => 'EPP vencido', 'ppe.missing' => 'EPP pendiente',
     ];
 
@@ -105,6 +107,19 @@ final class Messages
                 'body' => "{$who} está en ronda (" . ($r['route_name'] ?: 'ronda libre') . ') y hace ' . (int) ($r['idle_minutes'] ?? 0)
                     . ' min que no marca ningún punto (último a las ' . fecha($r['since'] ?? $r['started_at'], 'H:i') . '). El celular sigue mandando su ubicación: comunicate con él.',
                 'url' => '/panel/rondas/ronda/' . $r['uuid'], 'critical' => false];
+        }
+        if ($event === 'guard.round_not_started' || $event === 'guard.round_missed') {
+            $when = fecha($r['due_at'] ?? null, 'H:i');
+            $route = '"' . ($r['route_name'] ?? '') . '"' . (!empty($r['schedule_name']) ? ' (' . $r['schedule_name'] . ')' : '');
+            $url = '/panel/rondas/programacion?fecha=' . fecha($r['due_at'] ?? null, 'Y-m-d');
+            return $event === 'guard.round_missed'
+                ? ['title' => 'Ronda no realizada · ' . ($r['route_name'] ?? ''),
+                    'body' => "La ronda {$route} de las {$when} no se hizo: venció el plazo para empezarla. A cargo: " . ($r['guards'] ?? '—') . '.',
+                    'url' => $url, 'critical' => false]
+                : ['title' => 'Ronda sin empezar · ' . ($r['route_name'] ?? ''),
+                    'body' => "La ronda {$route} de las {$when} todavía no empezó (" . (int) ($r['late_minutes'] ?? 0) . ' min tarde). A cargo: '
+                        . ($r['guards'] ?? '—') . '. Comunicate con el guardia.',
+                    'url' => $url, 'critical' => false];
         }
         if ($event === 'guard.device') {
             $who = $r['user_name'] ?? 'Un guardia';

@@ -62,3 +62,21 @@ versión) en cada sincronización (`device.status`); el servidor guarda el últi
 | Registros sin enviar | más viejos que `rondas.sin_sync_minutos` | — (si no hay contacto, ya avisa "guardia sin señal") |
 
 Panel: "Celulares de los guardias" en `/panel/rondas` y estado del celular en el detalle de la ronda en curso.
+
+## Fase 3 — hecha: programación de rondas
+
+Decisiones del usuario: horarios fijos **y** por intervalo dentro de una franja, configurable por días, con todas las opciones
+lógicas, y registrar las no realizadas.
+
+- **Programación** (por ruta, puede haber varias): horarios fijos ("22:00, 02:00, 06:00") o "cada N min de HH:MM a HH:MM"
+  (si "hasta" < "desde" cruza la medianoche; cuenta el día en que empieza la franja; incluye la hora final), días de la semana,
+  vigencia desde/hasta, fechas excluidas (feriados), guardias a cargo (si no se eligen, los asignados a la ruta), gracia y
+  demora máxima para empezar tarde (con intervalo, no puede superar el intervalo).
+- **Cada ronda programada** queda registrada: pendiente → realizada a tiempo (empezó hasta la hora ± gracia) / realizada tarde
+  / no realizada (no empezó antes de la demora máxima). Nunca se inicia sola: la empieza el guardia.
+- **Avisos**: al guardia (app, alarmas del sistema aunque esté cerrada) a la hora y al terminar la gracia; a SyH y
+  supervisores a la hora + 2×gracia si no empezó (`guard.round_not_started`) y al quedar no realizada (`guard.round_missed`).
+- **App**: "Próximas rondas programadas" (hora, estado, Iniciar) y guía al próximo punto durante la ronda (distancia, rumbo y
+  "Cómo llegar" con el mapa del celular).
+- **Panel**: `/panel/rondas/programacion` — rondas del día con su estado y % a tiempo, navegación por fecha, programaciones con
+  editar / pausar. Editar o pausar recalcula solo lo futuro: lo pasado queda como registro.

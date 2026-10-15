@@ -18,7 +18,9 @@ data class GuardSettings(val panicPhones: List<String>, val trackSeconds: Int, v
 }
 
 /** Automatizaciones de rondas (Configuración → Notificaciones, `meta.automatizaciones_rondas` del pull). */
-data class RoundAutomationSettings(val active: Boolean, val noProgressMinutes: Int, val lateMinutes: Int, val batteryPercent: Int, val syncMinutes: Int) {
+/** @param guidance recordatorios de rondas programadas y guía al próximo punto (`rondas.guia_android`) */
+data class RoundAutomationSettings(val active: Boolean, val noProgressMinutes: Int, val lateMinutes: Int, val batteryPercent: Int, val syncMinutes: Int,
+                                   val guidance: Boolean) {
     companion object {
         fun from(prefs: Prefs, api: ApiClient): RoundAutomationSettings {
             val a = prefs.metaJson?.let { runCatching { api.json.parseToJsonElement(it).jsonObject.obj("automatizaciones_rondas") }.getOrNull() }
@@ -28,6 +30,7 @@ data class RoundAutomationSettings(val active: Boolean, val noProgressMinutes: I
                 lateMinutes = a?.int("atraso_minutos")?.takeIf { it > 0 } ?: 10,
                 batteryPercent = a?.int("bateria_baja_porcentaje")?.takeIf { it > 0 } ?: 20,
                 syncMinutes = a?.int("sin_sync_minutos")?.takeIf { it > 0 } ?: 15,
+                guidance = a?.let { it["guia_android"] == null || it.bool("guia_android") } ?: true,
             )
         }
     }

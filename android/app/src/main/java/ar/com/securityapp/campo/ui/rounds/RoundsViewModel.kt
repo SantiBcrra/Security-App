@@ -19,6 +19,9 @@ data class ProgressItem(val n: Int, val point: PatrolPoint?, val uuid: String, v
 
 data class RoundsUi(
     val routes: List<PatrolRoute> = emptyList(),
+    /** Rondas programadas por hacer (próximas 24 h) y si la empresa activó la guía. */
+    val slots: List<ar.com.securityapp.campo.data.PatrolSlot> = emptyList(),
+    val guidance: Boolean = true,
     val points: Map<String, PatrolPoint> = emptyMap(),
     val active: PatrolRound? = null,
     val activeRoute: PatrolRoute? = null,
@@ -70,16 +73,20 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
         }.orEmpty()
         _ui.value = RoundsUi(
             routes = r.routes(), points = points, active = active, activeRoute = route, progress = progress,
+            slots = r.slots().filter { it.dueAt.isBefore(java.time.Instant.now().plusSeconds(24 * 3600)) },
+            guidance = ar.com.securityapp.campo.data.RoundAutomationSettings.from(c.prefs, c.api).guidance,
             freeScans = if (route == null) scans.mapNotNull { points[it.pointUuid] } else emptyList(),
             history = r.rounds().filter { it.status != "en_curso" }.take(15),
             pending = c.outbox.pendingCount(), failed = c.outbox.failed().size,
         )
     }
 
-    fun start(route: PatrolRoute?) = viewModelScope.launch {
+    /** @param slot ronda programada que se está cumpliendo (si se inició desde "Próximas rondas") */
+    fun start(route: PatrolRoute?, slot: ar.com.securityapp.campo.data.PatrolSlot? = null) = viewModelScope.launch {
         _ui.value = _ui.value.copy(busy = true)
         val fix = locator.current(timeoutMs = 6_000)
-        val round = c.rounds.start(route?.uuid, fix)
+        val round = c.rounds.start(route?.uuid, fix, slot?.uuid)
+        runCatching { ar.com.securityapp.campo.tracking.SlotAlarms.schedule(getApplication(), c) } // cancela el "todavía no empezaste"
         TrackingStarter.ensure(getApplication(), round, route?.name)
         SyncWorker.now(getApplication())
         reload()
@@ -144,6 +151,9 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
         /** Igual que `Patrols::LOCATE_MAX_ACCURACY_M` en el servidor. */
         const val LOCATE_MAX_ACCURACY_M = 30
     }
+
+    /** Ubicación actual para la guía al próximo punto (null sin GPS). */
+    suspend fun here(): ar.com.securityapp.campo.data.Fix? = locator.current(timeoutMs = 8_000)
 
     fun clearLocationMessage() { _ui.value = _ui.value.copy(locationMessage = null) }
 

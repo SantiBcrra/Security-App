@@ -493,6 +493,105 @@ return [
         assert_true(str_contains($html, 'Celulares de los guardias') && str_contains($html, 'Batería 8 %'));
     },
 
+    'programación: horarios fijos e intervalos (medianoche, días, feriados, vigencia) en hora de la empresa' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']); // America/Argentina/Buenos_Aires (UTC−3)
+        $P = \App\Services\PatrolPlanner::class;
+        $fixed = ['mode' => 'fixed', 'times' => json_encode(['06:00', '22:00']), 'days' => '1,2,3,4,5', 'except_dates' => json_encode(['2026-10-16']),
+            'valid_from' => null, 'valid_until' => '2026-10-20'];
+        // jue 15, vie 16 (feriado), sáb 17 y dom 18 (no), lun 19, mar 20, mié 21 (fuera de vigencia)
+        assert_same(['2026-10-15 09:00:00', '2026-10-16 01:00:00', '2026-10-19 09:00:00', '2026-10-20 01:00:00', '2026-10-20 09:00:00', '2026-10-21 01:00:00'],
+            $P::occurrences($fixed, '2026-10-15', '2026-10-21'), '22:00 local = 01:00 UTC del día siguiente');
+        $night = ['mode' => 'interval', 'window_start' => '22:00', 'window_end' => '06:00', 'every_minutes' => 120, 'days' => '5', 'except_dates' => null,
+            'valid_from' => null, 'valid_until' => null];
+        assert_same(['2026-10-17 01:00:00', '2026-10-17 03:00:00', '2026-10-17 05:00:00', '2026-10-17 07:00:00', '2026-10-17 09:00:00'],
+            $P::occurrences($night, '2026-10-12', '2026-10-18'), 'viernes 22 a sábado 6: 22, 0, 2, 4 y 6 (cuenta el día en que empieza)');
+        // Validaciones
+        UserAuth::setCurrent($st['hys']);
+        $route = Uuid::v4();
+        Patrols::createRoute(['uuid' => $route, 'name' => 'Programada', 'description' => '', 'frequency' => 'manual', 'expected_minutes' => 20,
+            'point_ids' => [$st['p1']], 'user_ids' => [(int) $st['g1']['id']]]);
+        $st['sched_route'] = $route;
+        [, $e] = $P::validate(['route' => $route, 'mode' => 'fixed', 'times' => '25:00', 'days' => [1]]);
+        assert_true(isset($e['times']));
+        [, $e] = $P::validate(['route' => $route, 'mode' => 'interval', 'window_start' => '08:00', 'window_end' => '12:00', 'every_minutes' => 30, 'days' => [1], 'max_delay_minutes' => 60]);
+        assert_true(isset($e['max_delay_minutes']), 'con intervalo la demora no puede pisar a la siguiente');
+        [, $e] = $P::validate(['route' => $route, 'mode' => 'fixed', 'times' => '08:00', 'days' => [], 'users' => [$st['g2']['uuid']]]);
+        assert_true(isset($e['days']) && isset($e['users']), 'sin días / guardia no asignado a la ruta');
+        [$data, $e] = $P::validate(['route' => $route, 'mode' => 'fixed', 'times' => '8:00, 08:00 20:30', 'days' => ['1', '9', '3'], 'except_dates' => '25/12/2026',
+            'grace_minutes' => '5', 'max_delay_minutes' => '30']);
+        assert_same([[], '["08:00","20:30"]', '1,3', '["2026-12-25"]', 5], [$e, $data['times'], $data['days'], $data['except_dates'], $data['grace_minutes']]);
+    },
+
+    'programación: a tiempo, tarde, no realizada, avisos y lo que baja al celular' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        Settings::set('rondas.automatizaciones', '1');
+        $P = \App\Services\PatrolPlanner::class;
+        UserAuth::setCurrent($st['hys']);
+        $tz = new DateTimeZone('America/Argentina/Buenos_Aires');
+        // Dos horarios: dentro de 30 min y hace 2 min (gracia 5, demora máxima 20)
+        $t1 = (new DateTimeImmutable('+30 minutes', $tz))->format('H:i');
+        $t2 = (new DateTimeImmutable('-2 minutes', $tz))->format('H:i');
+        [$data, $e] = $P::validate(['route' => $st['sched_route'], 'name' => 'Noche', 'mode' => 'fixed', 'times' => "{$t1}, {$t2}", 'days' => [1, 2, 3, 4, 5, 6, 7],
+            'grace_minutes' => 5, 'max_delay_minutes' => 20]);
+        assert_same([], $e);
+        $uuid = $P::save(null, $data);
+        $sched = $P::find($uuid);
+        $slots = fn () => DB::tenant()->query('SELECT * FROM patrol_slots WHERE schedule_id = ' . (int) $sched['id'] . " AND status <> 'anulada' ORDER BY due_at")->fetchAll();
+        $n = count($slots());
+        assert_true($n >= 4, 'genera ayer, hoy, mañana y pasado: ' . $n);
+        assert_same(0, $P::generate(), 'idempotente');
+        $first = array_values(array_filter($slots(), fn ($x) => strtotime($x['due_at'] . ' UTC') > time()))[0];
+        $due = strtotime($first['due_at'] . ' UTC');
+        // Lo que baja al celular: solo al guardia a cargo
+        UserAuth::setCurrent($st['g1']);
+        $mine = array_column((array) (Pull::run(null, 1000)['changes']->patrol_slots ?? []), 'uuid');
+        assert_true(in_array($first['uuid'], $mine, true), 'el guardia asignado recibe la ronda programada');
+        UserAuth::setCurrent($st['g2']);
+        assert_true(!in_array($first['uuid'], array_column((array) (Pull::run(null, 1000)['changes']->patrol_slots ?? []), 'uuid'), true), 'otro guardia no');
+        // El horario de hace 2 min: el guardia empieza ahora (dentro de la gracia) → realizada a tiempo
+        $past = array_values(array_filter($slots(), fn ($x) => strtotime($x['due_at'] . ' UTC') <= time() && $x['status'] === 'pendiente'));
+        $second = end($past);
+        UserAuth::setCurrent($st['g1']);
+        $round = Uuid::v4();
+        $res = Push::run([$op('round.start', ['uuid' => $round, 'route_uuid' => $st['sched_route'], 'started_at_device' => gmdate('Y-m-d\TH:i:s\Z')])])[0];
+        assert_same('ok', $res['status'], json_encode($res));
+        $row = DB::tenant()->query("SELECT status, on_time, round_id FROM patrol_slots WHERE id = {$second['id']}")->fetch();
+        assert_same(['realizada', 1, (int) Patrols::round($round)['id']], [$row['status'], (int) $row['on_time'], (int) $row['round_id']]);
+        // Sin empezar a la hora + 2×gracia: aviso a SyH (una vez); a la demora máxima: no realizada + aviso
+        $inbox = fn (string $t) => (int) DB::tenant()->query('SELECT COUNT(*) FROM notifications WHERE user_id = ' . (int) $st['hys']['id'] . ' AND title = ' . DB::tenant()->quote($t))->fetchColumn();
+        $marked = fn (string $key) => (int) DB::tenant()->query('SELECT COUNT(*) FROM notification_marks WHERE mark_key = ' . DB::tenant()->quote($key))->fetchColumn();
+        $P::run($due + 9 * 60);
+        assert_same(0, $marked("slot_late:{$first['id']}"), 'a la hora + 9 min (< 2×gracia) todavía no');
+        $P::run($due + 11 * 60);
+        assert_same(1, $marked("slot_late:{$first['id']}"));
+        $before = $inbox('Ronda sin empezar · Programada');
+        assert_true($before >= 1);
+        $P::run($due + 12 * 60);
+        assert_same($before, $inbox('Ronda sin empezar · Programada'), 'no se repite');
+        $P::run($due + 21 * 60);
+        assert_same('no_realizada', DB::tenant()->query("SELECT status FROM patrol_slots WHERE id = {$first['id']}")->fetchColumn());
+        assert_same(1, $marked("slot_missed:{$first['id']}"));
+        assert_true($inbox('Ronda no realizada · Programada') >= 1);
+        // Editar la programación: lo pasado queda, lo futuro pendiente se recalcula (y no se duplica)
+        UserAuth::setCurrent($st['hys']);
+        [$data2] = $P::validate(['route' => $st['sched_route'], 'name' => 'Noche', 'mode' => 'fixed', 'times' => "{$t1}, {$t2}", 'days' => [1, 2, 3, 4, 5, 6, 7],
+            'grace_minutes' => 8, 'max_delay_minutes' => 20]);
+        $P::save($sched, $data2);
+        assert_same('no_realizada', DB::tenant()->query("SELECT status FROM patrol_slots WHERE id = {$first['id']}")->fetchColumn(), 'el registro pasado no se toca');
+        $future = array_values(array_filter($slots(), fn ($x) => $x['status'] === 'pendiente' && strtotime($x['due_at'] . ' UTC') > time()));
+        assert_true($future && (int) $future[0]['grace_minutes'] === 8, 'las futuras con la gracia nueva');
+        assert_same(count(array_unique(array_column($slots(), 'due_at'))), count($slots()), 'sin duplicados');
+        // Panel
+        $day = (new DateTimeImmutable('@' . $due))->setTimezone(new DateTimeZone('America/Argentina/Buenos_Aires'))->format('Y-m-d');
+        $html = \App\Core\View::render('panel/rounds/schedules', ['day' => $day, 'today' => $day, 'slots' => $P::day($day), 'schedules' => $P::all(), 'canEdit' => true], null);
+        assert_true(str_contains($html, 'No realizada') && str_contains($html, 'Programada'), 'el día muestra el estado');
+        $form = \App\Core\View::render('panel/rounds/schedule_form', ['schedule' => $P::find($uuid), 'routes' => Patrols::routes(), 'assignees' => [],
+            'userUuids' => [], 'defaultGrace' => 10, 'old' => null], null);
+        assert_true(str_contains($form, 'Horarios fijos'));
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

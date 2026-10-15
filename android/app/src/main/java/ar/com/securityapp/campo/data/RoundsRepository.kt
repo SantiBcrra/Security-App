@@ -20,6 +20,14 @@ data class PatrolRoute(val uuid: String, val name: String, val description: Stri
 data class PatrolRound(val uuid: String, val routeUuid: String?, val mine: Boolean, val status: String, val startedAt: String, val finishedAt: String?,
                        val local: Boolean)
 
+/** Ronda programada pendiente a cargo del guardia (la genera el servidor según la programación de la ruta). */
+data class PatrolSlot(val uuid: String, val routeUuid: String, val schedule: String?, val dueAt: java.time.Instant, val graceMinutes: Int,
+                      val deadlineAt: java.time.Instant) {
+    /** Se puede empezar desde `gracia` min antes de la hora hasta el plazo máximo. */
+    fun canStart(now: java.time.Instant = java.time.Instant.now()) = !now.isBefore(dueAt.minusSeconds(graceMinutes * 60L)) && !now.isAfter(deadlineAt)
+    fun late(now: java.time.Instant = java.time.Instant.now()) = now.isAfter(dueAt.plusSeconds(graceMinutes * 60L))
+}
+
 data class PatrolScan(val uuid: String, val roundUuid: String, val pointUuid: String, val scannedAt: String, val withinRadius: Boolean?, val local: Boolean)
 
 /** Lugar del celular al escanear (puede no haber GPS: el servidor lo marca como fuera de radio). */
@@ -68,7 +76,16 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
 
     fun route(uuid: String?): PatrolRoute? = uuid?.let { u -> routes().firstOrNull { it.uuid == u } }
 
-    fun start(routeUuid: String?, fix: Fix?): PatrolRound {
+    /** Rondas programadas que todavía se pueden hacer (las vencidas o ya hechas las saca el servidor en el próximo pull). */
+    fun slots(now: Instant = Instant.now()): List<PatrolSlot> = db.all("patrol_slots").mapNotNull { parse(it) }.mapNotNull { o ->
+        runCatching {
+            PatrolSlot(o.str("uuid"), o.str("route_uuid"), o.strOrNull("schedule"), Instant.parse(o.str("due_at")), o.int("grace_minutes"),
+                Instant.parse(o.str("deadline_at")))
+        }.getOrNull()
+    }.filter { it.deadlineAt.isAfter(now) }.sortedBy { it.dueAt }
+
+    /** @param slotUuid ronda programada que se cumple (si no, el servidor busca la que corresponda por horario) */
+    fun start(routeUuid: String?, fix: Fix?, slotUuid: String? = null): PatrolRound {
         active()?.let { return it }
         val uuid = UUID.randomUUID().toString()
         val now = Instant.now().toString()
@@ -79,7 +96,11 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
         outbox.enqueue("round.start", buildJsonObject {
             put("uuid", uuid); put("route_uuid", routeUuid); put("started_at_device", now)
             fix?.let { put("lat", it.lat); put("lng", it.lng) }
+            slotUuid?.let { put("slot_uuid", it) }
         })
+        // La ronda programada ya no está "por hacer" (el servidor la marca realizada al recibir el inicio).
+        val done = slotUuid?.let { listOf(it) } ?: slots().filter { it.routeUuid == routeUuid && it.canStart() }.take(1).map { it.uuid }
+        if (done.isNotEmpty()) db.delete("patrol_slots", done)
         return round(row)!!
     }
 

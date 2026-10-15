@@ -71,9 +71,11 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: Round
     var confirmFinish by remember { mutableStateOf(false) }
     var simulate by remember { mutableStateOf(false) } // solo en la versión de prueba (emulador sin cámara apuntable)
     var startRoute by remember { mutableStateOf<Any?>(null) } // ruta elegida (o "libre") esperando la revisión de permisos
+    var startSlot by remember { mutableStateOf<ar.com.securityapp.campo.data.PatrolSlot?>(null) } // ronda programada que se cumple
     val context = androidx.compose.ui.platform.LocalContext.current
-    fun begin(route: ar.com.securityapp.campo.data.PatrolRoute?) {
-        if (Readiness.allGood(context, vm.needsSms())) vm.start(route) else startRoute = route ?: "libre"
+    fun begin(route: ar.com.securityapp.campo.data.PatrolRoute?, slot: ar.com.securityapp.campo.data.PatrolSlot? = null) {
+        startSlot = slot
+        if (Readiness.allGood(context, vm.needsSms())) vm.start(route, slot) else startRoute = route ?: "libre"
     }
 
     var writingTags by remember { mutableStateOf(false) }
@@ -115,6 +117,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: Round
             val active = ui.active
             if (active != null) {
                 item { ActiveRoundCard(ui, active, onScan = { scanning = true }, onFinish = { confirmFinish = true }) }
+                ui.progress.firstOrNull { it.next }?.point?.let { next -> if (ui.guidance && next.lat != null && next.lng != null) item { NextPointGuide(vm, next) } }
                 if (ar.com.securityapp.campo.BuildConfig.DEBUG) item {
                     TextButton({ simulate = true }) { Text("Simular escaneo (solo versión de prueba)", color = Muted) }
                 }
@@ -125,6 +128,13 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: Round
                     items(ui.freeScans, key = { it.uuid }) { p -> Text("✓ ${p.code} · ${p.name}", Modifier.padding(start = 4.dp)) }
                 }
             } else {
+                if (ui.slots.isNotEmpty()) {
+                    item { Text("Próximas rondas programadas", style = MaterialTheme.typography.titleSmall, color = Muted) }
+                    items(ui.slots, key = { "slot-${it.uuid}" }) { slot ->
+                        val route = ui.routes.firstOrNull { it.uuid == slot.routeUuid }
+                        SlotRow(slot, route?.name ?: "Ruta no sincronizada", enabled = route != null && !ui.busy) { begin(route, slot) }
+                    }
+                }
                 item { Text("Mis rutas", style = MaterialTheme.typography.titleSmall, color = Muted) }
                 if (ui.routes.isEmpty()) item {
                     Text("No tenés rutas asignadas. Podés hacer una ronda libre, escaneando los puntos que recorras.", color = Muted)
@@ -170,7 +180,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: Round
     startRoute?.let { pending ->
         ReadyCheckDialog(needSms = vm.needsSms(), onStart = {
             startRoute = null
-            vm.start(pending as? ar.com.securityapp.campo.data.PatrolRoute)
+            vm.start(pending as? ar.com.securityapp.campo.data.PatrolRoute, startSlot)
         }, onDismiss = { startRoute = null })
     }
     if (confirmFinish) {
@@ -309,4 +319,73 @@ private fun NfcHint() {
         }
         ar.com.securityapp.campo.nfc.NfcTags.State.NONE -> {}
     }
+}
+
+private val SLOT_HOUR = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
+
+/** Ronda programada: hora, estado (falta / es la hora / atrasada) y "Iniciar" cuando ya se puede. */
+@Composable
+private fun SlotRow(slot: ar.com.securityapp.campo.data.PatrolSlot, routeName: String, enabled: Boolean, onStart: () -> Unit) {
+    val now = Instant.now()
+    val today = java.time.LocalDate.now()
+    val day = slot.dueAt.atZone(ZoneId.systemDefault()).toLocalDate()
+    val dayText = when (day) { today -> "hoy"; today.plusDays(1) -> "mañana"; else -> day.format(DateTimeFormatter.ofPattern("dd/MM")) }
+    val (status, color) = when {
+        slot.late(now) -> "Atrasada: empezala ya (hasta las ${SLOT_HOUR.format(slot.deadlineAt)})" to Danger
+        slot.canStart(now) -> "Es la hora" to Ok
+        else -> "Faltan ${java.time.Duration.between(now, slot.dueAt).toMinutes().let { if (it >= 60) "${it / 60} h ${it % 60} min" else "$it min" }}" to Muted
+    }
+    Card(colors = CardDefaults.cardColors(containerColor = if (slot.late(now)) Color(0xFFFDE3E5) else Color.White)) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("${SLOT_HOUR.format(slot.dueAt)} · $dayText", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(routeName + (slot.schedule?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodyMedium)
+                Text(status, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.SemiBold)
+            }
+            Button(onStart, enabled = enabled && slot.canStart(now), colors = ButtonDefaults.buttonColors(containerColor = if (slot.late(now)) Danger else Brand)) { Text("Iniciar") }
+        }
+    }
+}
+
+/** Guía al próximo punto de la ruta: distancia y rumbo desde donde está el guardia, y "Cómo llegar" (mapa del celular). */
+@Composable
+private fun NextPointGuide(vm: RoundsViewModel, next: ar.com.securityapp.campo.data.PatrolPoint) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var here by remember { mutableStateOf<ar.com.securityapp.campo.data.Fix?>(null) }
+    androidx.compose.runtime.LaunchedEffect(next.uuid) {
+        while (true) { vm.here()?.let { here = it }; kotlinx.coroutines.delay(15_000) }
+    }
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF3CF))) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Próximo punto", style = MaterialTheme.typography.labelMedium, color = BrandDark)
+                Text("${next.code} · ${next.name}", fontWeight = FontWeight.Bold)
+                val h = here
+                Text(if (h == null) "Buscando tu ubicación…" else {
+                    val d = distanceM(h.lat, h.lng, next.lat!!, next.lng!!)
+                    if (d < 25) "Estás en el punto: marcalo" else "A ${if (d >= 1000) "%.1f km".format(d / 1000) else "${d.toInt()} m"} hacia el ${compass(h.lat, h.lng, next.lat, next.lng!!)}"
+                }, style = MaterialTheme.typography.bodyMedium, color = BrandDark)
+            }
+            TextButton({
+                val uri = android.net.Uri.parse("geo:0,0?q=${next.lat},${next.lng}(" + android.net.Uri.encode("${next.code} ${next.name}") + ")")
+                runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)) }
+            }) { Text("Cómo llegar", color = BrandDark, fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
+private fun distanceM(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+    val r = 6_371_000.0
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLng = Math.toRadians(lng2 - lng1)
+    val a = Math.sin(dLat / 2).let { it * it } + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLng / 2).let { it * it }
+    return 2 * r * Math.asin(Math.sqrt(a))
+}
+
+/** Rumbo en palabras (norte, noreste…). */
+private fun compass(lat1: Double, lng1: Double, lat2: Double, lng2: Double): String {
+    val y = Math.sin(Math.toRadians(lng2 - lng1)) * Math.cos(Math.toRadians(lat2))
+    val x = Math.cos(Math.toRadians(lat1)) * Math.sin(Math.toRadians(lat2)) - Math.sin(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.cos(Math.toRadians(lng2 - lng1))
+    val deg = (Math.toDegrees(Math.atan2(y, x)) + 360) % 360
+    return listOf("norte", "noreste", "este", "sureste", "sur", "suroeste", "oeste", "noroeste")[((deg + 22.5) / 45).toInt() % 8]
 }

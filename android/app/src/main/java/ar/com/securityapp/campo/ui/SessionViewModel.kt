@@ -127,6 +127,7 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
             )
             c.dataChanged.tryEmit(Unit)
             refreshUnread()
+            runCatching { ar.com.securityapp.campo.tracking.SlotAlarms.schedule(getApplication(), c) }
             SyncState(lastSync = c.prefs.lastSync, message = parts.joinToString(" ").ifEmpty { "Todo al día." }, error = full.failed > 0,
                 counts = counts(), pending = c.outbox.pendingCount())
         } catch (e: OfflineException) {

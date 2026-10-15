@@ -62,11 +62,11 @@ Se conservaron las APIs v1 y la sincronización del servidor para que Android si
 - [x] Entrega 7 — NFC en rondas, ícono, firma de la versión final, versión 1.0.0 lista para publicar (EPP desactivado en la app por ahora)
 - [x] Entrega 8 — Ubicación de puntos desde el celular y reporte web de marcas fuera de lugar por guardia/punto
 
-- [x] Automatizaciones de rondas: fase 1 (configuración), fase 2 (sin marcar puntos), fase 4 (atrasada / abandonada) y fase 5 (estado del celular). Pendientes: fases 3 y 6 (`docs/design/automatizaciones-rondas.md`)
+- [x] Automatizaciones de rondas: fase 1 (configuración), fase 2 (sin marcar puntos), fase 3 (programación: horarios fijos e intervalos, no realizadas, recordatorios y guía), fase 4 (atrasada / abandonada) y fase 5 (estado del celular). Pendiente: fase 6 (resúmenes y métricas) (`docs/design/automatizaciones-rondas.md`)
 
 ## Pendiente — operación (usuario)
-- [ ] Aplicar migraciones en Indumor (`/admin/migraciones` → "Actualizar base de datos")
-- [ ] `gh auth login` y `git push` (hay commits locales sin subir)
+- [x] Aplicar migraciones en Indumor (al día hasta la 0069)
+- [x] `gh auth login` y `git push`
 - [ ] Primer deploy al hosting: URL de producción, docroot a `public/`, `/install/check.php` en verde, cron por URL
 - [ ] Respaldar `config/config.local.php` (y más adelante el keystore de la app Android)
 - [x] Crear el proyecto de Firebase y pegar `google-services.json` + cuenta de servicio en /admin/configuracion (notificaciones con la app cerrada)

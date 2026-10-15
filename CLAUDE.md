@@ -169,6 +169,18 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   ronda y problema): batería ≤ la mitad del umbral sin cargar o GPS apagado hace `DeviceStatus::GPS_OFF_MINUTES` (5).
   Panel: tarjeta "Celulares de los guardias" en /panel/rondas (últimas 24 h, con problemas) y estado del celular en el detalle
   de una ronda en curso. "Sin contacto" del panel no avisa aparte: ya lo cubre `guard.silent`.
+- Fase 3, programación (`PatrolPlanner`, tenant 0069): `patrol_schedules` por ruta (horarios fijos `times` JSON o intervalo
+  `window_start/end` + `every_minutes`, cruza la medianoche y cuenta el día en que empieza; `days` 1..7, vigencia, `except_dates`,
+  `user_ids` opcional ⊆ asignados de la ruta, `grace_minutes` (vacío = `rondas.inicio_gracia_minutos`), `max_delay_minutes`).
+  El cron (`PatrolPlanner::run()` en `CronRunner`) genera `patrol_slots` de ayer a pasado mañana en hora de la empresa (idempotente
+  por `schedule_id + due_at`; no genera horarios ya vencidos al crear/editar), avisa `guard.round_not_started` a la hora + 2×gracia y
+  marca `no_realizada` + `guard.round_missed` al pasar la demora máxima. `round.start` (con `slot_uuid` opcional) llama a
+  `attach()`: realizada, `on_time` si empezó hasta la hora + gracia. Editar o pausar anula las futuras pendientes (lo pasado queda).
+  Panel `/panel/rondas/programacion` (día con estado y % a tiempo, programaciones, alta/edición/pausa con `rondas.editar`).
+  App: pull `patrol_slots` (solo pendientes a su cargo, últimos 2 días en adelante), "Próximas rondas programadas" con Iniciar
+  (habilitado de hora − gracia a la demora máxima), recordatorios con alarmas del sistema (`tracking/SlotAlarms`, a la hora y al
+  terminar la gracia, se reprograman en cada sincronización y al prender el celular) y guía al próximo punto (distancia, rumbo,
+  "Cómo llegar" con `geo:`); recordatorios y guía se apagan con `rondas.guia_android`.
 
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`

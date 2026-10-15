@@ -48,6 +48,7 @@ final class CronRunner
                         'ppe'       => PpeReminders::run(),
                         'guards'    => \App\Services\GuardSafety::run(),
                         'rounds'    => \App\Services\RoundAutomation::run(),
+                        'schedules' => \App\Services\PatrolPlanner::run(),
                         'digests'   => Digests::run(),
                         'queue'     => QueueRunner::run($remaining, 100),
                     ];
