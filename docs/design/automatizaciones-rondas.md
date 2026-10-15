@@ -80,3 +80,20 @@ lógicas, y registrar las no realizadas.
   "Cómo llegar" con el mapa del celular).
 - **Panel**: `/panel/rondas/programacion` — rondas del día con su estado y % a tiempo, navegación por fecha, programaciones con
   editar / pausar. Editar o pausar recalcula solo lo futuro: lo pasado queda como registro.
+
+## Fase 6 — hecha: resúmenes y métricas
+
+- **Pantalla** `/panel/rondas/metricas` (Rondas → Métricas): período (por defecto los últimos 7 días), ruta y guardia.
+  - Tarjetas: rondas (completas / incompletas / en curso), % de programadas a tiempo, % de marcas en el lugar y con NFC,
+    atrasadas, abandonadas, pánicos y guardias sin actividad.
+  - **Por guardia**: rondas, incompletas, atrasadas, duración media, programadas a tiempo y no realizadas, marcas fuera de
+    lugar / dudosas, alertas y última ronda. Los asignados a rutas activas que no hicieron ninguna ronda aparecen marcados.
+  - **Por punto**, ordenado por problemas: veces salteado, marcas fuera de lugar y dudosas (un punto que falla seguido suele
+    tener el QR o la etiqueta dañados o las coordenadas mal cargadas).
+  - **Historial de alertas** con su resolución: sin marcar, atrasada, abandonada, batería, GPS, marcas fuera de lugar,
+    programadas no realizadas y pánicos (quién y en cuántos minutos lo atendió, o SIN ATENDER).
+- **CSV** de guardias, puntos y alertas (permiso exportar).
+- **Resumen diario** a SyH y supervisores (app + email, regla editable `guard.daily_summary`): a partir de las 8 h, lo del día
+  anterior; solo si hubo rondas o programadas.
+- Las lecturas fallidas de QR/NFC no se registran en el servidor (la app no sabe de qué punto eran); los puntos problemáticos
+  se detectan por salteados, fuera de lugar y dudosas.

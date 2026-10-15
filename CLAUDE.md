@@ -181,6 +181,13 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   (habilitado de hora − gracia a la demora máxima), recordatorios con alarmas del sistema (`tracking/SlotAlarms`, a la hora y al
   terminar la gracia, se reprograman en cada sincronización y al prender el celular) y guía al próximo punto (distancia, rumbo,
   "Cómo llegar" con `geo:`); recordatorios y guía se apagan con `rondas.guia_android`.
+- Fase 6, métricas (`RoundMetrics`): `/panel/rondas/metricas` (período en días locales, por defecto 7 días; filtros ruta y guardia;
+  alcance "propios" = solo las suyas): tarjetas (rondas, % programadas a tiempo, % marcas en el lugar y NFC, atrasadas /
+  abandonadas / pánicos / sin actividad), por guardia (incluye asignados a rutas activas sin rondas en el período), por punto
+  (salteado, fuera de lugar, dudosas; los que más fallan primero) e historial de alertas con resolución (alertas de ronda,
+  pánicos con quién y en cuánto los atendió, marcas fuera de lugar, programadas no realizadas). CSV `/metricas/exportar?tipo=
+  guardias|puntos|alertas` (permiso `rondas.exportar`, ";" + BOM, auditado). Resumen diario `guard.daily_summary` (tenant 0070,
+  SyH + supervisores, app + email) del día anterior, después de las 8 h, una vez por día y solo si hubo actividad.
 
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`

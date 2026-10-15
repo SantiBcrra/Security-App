@@ -52,6 +52,7 @@ final class Messages
         'guard.device'             => 'Celular de un guardia con problemas durante la ronda',
         'guard.round_not_started'  => 'Ronda programada sin empezar',
         'guard.round_missed'       => 'Ronda programada no realizada',
+        'guard.daily_summary'      => 'Resumen diario de rondas',
         'ppe.due_soon' => 'EPP por vencer', 'ppe.overdue' => 'EPP vencido', 'ppe.missing' => 'EPP pendiente',
     ];
 
@@ -107,6 +108,24 @@ final class Messages
                 'body' => "{$who} está en ronda (" . ($r['route_name'] ?: 'ronda libre') . ') y hace ' . (int) ($r['idle_minutes'] ?? 0)
                     . ' min que no marca ningún punto (último a las ' . fecha($r['since'] ?? $r['started_at'], 'H:i') . '). El celular sigue mandando su ubicación: comunicate con él.',
                 'url' => '/panel/rondas/ronda/' . $r['uuid'], 'critical' => false];
+        }
+        if ($event === 'guard.daily_summary') {
+            $m = $r['r'];
+            $ro = $m['rounds'];
+            $sl = $m['slots'];
+            $lines = ["Rondas: {$ro['rounds']} ({$ro['completas']} completas, {$ro['incompletas']} incompletas"
+                . ($ro['atrasadas'] ? ", {$ro['atrasadas']} atrasadas" : '') . ($ro['abandonadas'] ? ", {$ro['abandonadas']} abandonadas" : '') . ').'];
+            if ($sl['total'] > 0) {
+                $lines[] = "Programadas: {$sl['total']} — {$sl['tiempo']} a tiempo, {$sl['tarde']} tarde, {$sl['no']} no realizadas"
+                    . ($sl['cumplimiento'] !== null ? " ({$sl['cumplimiento']} % a tiempo)" : '') . '.';
+            }
+            $lines[] = "Marcas: {$m['scans']['total']}" . ($m['scans']['fuera'] ? ", {$m['scans']['fuera']} fuera de lugar" : '') . ($m['scans']['dudosas'] ? ", {$m['scans']['dudosas']} dudosas" : '') . '.';
+            if ($r['panics']) $lines[] = "Pánicos: {$r['panics']}.";
+            if ($m['idle']) $lines[] = 'Sin actividad: ' . implode(', ', array_column(array_slice($m['idle'], 0, 8), 'name')) . (count($m['idle']) > 8 ? '…' : '') . '.';
+            $top = array_values(array_filter($m['points'], fn ($p) => $p['problemas'] > 0));
+            if ($top) $lines[] = 'Puntos con problemas: ' . implode(', ', array_map(fn ($p) => "{$p['code']} ({$p['problemas']})", array_slice($top, 0, 5))) . '.';
+            return ['title' => 'Rondas de ayer · ' . date('d/m', strtotime($r['day'])), 'body' => implode("\n", $lines),
+                'url' => '/panel/rondas/metricas?desde=' . $r['day'] . '&hasta=' . $r['day'], 'critical' => false];
         }
         if ($event === 'guard.round_not_started' || $event === 'guard.round_missed') {
             $when = fecha($r['due_at'] ?? null, 'H:i');

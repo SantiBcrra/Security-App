@@ -592,6 +592,63 @@ return [
         assert_true(str_contains($form, 'Horarios fijos'));
     },
 
+    'métricas: rondas, marcas, puntos que fallan, guardias sin actividad, alertas, CSV y resumen diario' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        Settings::set('rondas.automatizaciones', '1');
+        UserAuth::setCurrent($st['hys']);
+        $route = Uuid::v4();
+        Patrols::createRoute(['uuid' => $route, 'name' => 'Métricas', 'description' => '', 'frequency' => 'manual', 'expected_minutes' => 10,
+            'point_ids' => [$st['p1'], $st['p2']], 'user_ids' => [(int) $st['g1']['id'], (int) $st['g2']['id']]]);
+        $routeId = (int) Patrols::route($route)['id'];
+        UserAuth::setCurrent($st['g1']);
+        $iso = fn (int $ago) => gmdate('Y-m-d\TH:i:s\Z', time() - $ago);
+        // Marca en las coordenadas actuales del punto (otro test pudo haberlo movido) + desplazamiento en latitud
+        $scan = function (string $round, int $point, float $offset, int $ago) use ($op, $st, $iso) {
+            $pt = DB::tenant()->query('SELECT lat, lng FROM patrol_points WHERE id = ' . $point)->fetch();
+            return Push::run([$op('round.scan', ['uuid' => Uuid::v4(), 'round_uuid' => $round, 'point_uuid' => ($st['uuid'])($point),
+                'lat' => (float) $pt['lat'] + $offset, 'lng' => (float) $pt['lng'], 'accuracy_m' => 5, 'scanned_at_device' => $iso($ago)])])[0];
+        };
+        // Ronda A: completa pero de 20 min (esperados 10), con P2 marcado a ~2 km
+        $a = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $a, 'route_uuid' => $route, 'started_at_device' => $iso(3 * 3600)])]);
+        $scan($a, $st['p1'], 0.0, 3 * 3600 - 60);
+        $scan($a, $st['p2'], -0.018, 3 * 3600 - 600); // ~2 km
+        Push::run([$op('round.finish', ['round_uuid' => $a, 'finished_at_device' => $iso(3 * 3600 - 1200)])]);
+        // Ronda B: salteó P2
+        $b = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $b, 'route_uuid' => $route, 'started_at_device' => $iso(2 * 3600)])]);
+        $scan($b, $st['p1'], 0.0, 2 * 3600 - 60);
+        Push::run([$op('round.finish', ['round_uuid' => $b, 'finished_at_device' => $iso(2 * 3600 - 300)])]);
+        UserAuth::setCurrent($st['hys']);
+        $tz = new DateTimeZone('America/Argentina/Buenos_Aires');
+        $today = (new DateTimeImmutable('now', $tz))->format('Y-m-d');
+        $yesterday = (new DateTimeImmutable('now', $tz))->modify('-1 day')->format('Y-m-d');
+        $r = \App\Services\RoundMetrics::report($yesterday, $today, ['route_id' => $routeId]);
+        assert_same([2, 1, 1, 1], [$r['rounds']['rounds'], $r['rounds']['completas'], $r['rounds']['incompletas'], $r['rounds']['atrasadas']]);
+        assert_same([3, 2, 1], [$r['scans']['total'], $r['scans']['ok'], $r['scans']['fuera']]);
+        assert_same(['P2', 1, 1, 2], [$r['points'][0]['code'], $r['points'][0]['salteados'], $r['points'][0]['fuera'], $r['points'][0]['problemas']], 'el punto que más falla primero');
+        assert_same(['Guardia2'], array_column($r['idle'], 'name'), 'asignado a la ruta y sin rondas');
+        assert_same([2, 1, 13], [$r['guards'][0]['rounds'], $r['guards'][0]['fuera'], $r['guards'][0]['duracion_media']]);
+        assert_true(in_array('off_site', array_column($r['alerts'], 'type'), true), 'la marca fuera de lugar entra al historial');
+        // Por guardia: con el filtro de guardia no aparecen los sin actividad
+        assert_same([], \App\Services\RoundMetrics::report($yesterday, $today, ['route_id' => $routeId, 'user_id' => (int) $st['g1']['id']])['idle']);
+        $csv = \App\Services\RoundMetrics::csv($r, 'guardias');
+        assert_true(str_starts_with($csv, "\xEF\xBB\xBF") && str_contains($csv, 'Guardia1;2;1;1;1') && str_contains($csv, 'Guardia2;0'), $csv);
+        assert_true(str_contains(\App\Services\RoundMetrics::csv($r, 'puntos'), 'P2;Depósito;1;0;1;0;1'));
+        $html = \App\Core\View::render('panel/rounds/metrics', ['r' => $r, 'filters' => ['desde' => $yesterday, 'hasta' => $today, 'ruta' => $route, 'guardia' => ''],
+            'routes' => Patrols::routes(), 'users' => [], 'canExport' => true], null);
+        assert_true(str_contains($html, 'Por guardia') && str_contains($html, 'Marca fuera de lugar') && str_contains($html, 'Sin rondas en el período'));
+        // Resumen diario: mañana después de las 8 h, del día de hoy; una sola vez
+        $tomorrow9 = (new DateTimeImmutable($today . ' 09:00:00', $tz))->modify('+1 day')->getTimestamp();
+        assert_same(false, \App\Services\RoundMetrics::dailySummary($tomorrow9 - 2 * 3600), 'antes de las 8 h no');
+        assert_same(true, \App\Services\RoundMetrics::dailySummary($tomorrow9));
+        assert_same(false, \App\Services\RoundMetrics::dailySummary($tomorrow9 + 600), 'una vez por día');
+        $title = 'Rondas de ayer · ' . date('d/m', strtotime($today));
+        $body = DB::tenant()->query('SELECT body FROM notifications WHERE user_id = ' . (int) $st['hys']['id'] . ' AND title = ' . DB::tenant()->quote($title))->fetchColumn();
+        assert_true(is_string($body) && str_contains($body, 'Rondas:') && str_contains($body, 'fuera de lugar'), (string) $body);
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

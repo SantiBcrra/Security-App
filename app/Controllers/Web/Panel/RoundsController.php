@@ -26,6 +26,41 @@ final class RoundsController
         ], 'layouts/app'));
     }
 
+    /** Métricas de rondas (fase 6): período, ruta y guardia. Alcance "propios" = solo las suyas. */
+    public function metrics(Request $request): Response
+    {
+        [$report, $filters] = $this->metricsReport($request);
+        return Response::html(View::render('panel/rounds/metrics', ['title' => 'Métricas de rondas', 'r' => $report, 'filters' => $filters,
+            'routes' => Patrols::routes(), 'users' => $this->onlyUser() === null ? array_filter(Users::all(), fn ($u) => (int) $u['is_active'] === 1) : [],
+            'canExport' => UserAuth::can('rondas', 'exportar')], 'layouts/app'));
+    }
+
+    public function metricsExport(Request $request): Response
+    {
+        [$report, $filters] = $this->metricsReport($request);
+        $type = in_array($request->input('tipo'), ['guardias', 'puntos', 'alertas'], true) ? (string) $request->input('tipo') : 'guardias';
+        Audit::tenant('rounds.export', 'patrol_round', null, null, ['tipo' => $type, 'desde' => $filters['desde'], 'hasta' => $filters['hasta']]);
+        return new Response(\App\Services\RoundMetrics::csv($report, $type), 200, ['Content-Type' => 'text/csv; charset=utf-8',
+            'Content-Disposition' => "attachment; filename=\"rondas-{$type}-{$filters['desde']}-a-{$filters['hasta']}.csv\""]);
+    }
+
+    /** @return array{0: array, 1: array} */
+    private function metricsReport(Request $request): array
+    {
+        $tz = new \DateTimeZone(\App\Core\Tenant::timezone() ?: 'America/Argentina/Buenos_Aires');
+        $today = new \DateTimeImmutable('now', $tz);
+        $date = fn (string $k, string $def) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $request->input($k, '')) ? (string) $request->input($k) : $def;
+        $from = $date('desde', $today->modify('-6 days')->format('Y-m-d'));
+        $to = $date('hasta', $today->format('Y-m-d'));
+        if ($to < $from) [$from, $to] = [$to, $from];
+        if ((new \DateTimeImmutable($from))->diff(new \DateTimeImmutable($to))->days > 366) $from = (new \DateTimeImmutable($to))->modify('-366 days')->format('Y-m-d');
+        $route = ($request->input('ruta') ?? '') !== '' ? Patrols::route((string) $request->input('ruta')) : null;
+        $guard = ($request->input('guardia') ?? '') !== '' ? Users::findByUuid((string) $request->input('guardia')) : null;
+        $userId = $this->onlyUser() ?? ($guard ? (int) $guard['id'] : null);
+        $report = \App\Services\RoundMetrics::report($from, $to, ['route_id' => $route ? (int) $route['id'] : null, 'user_id' => $userId]);
+        return [$report, ['desde' => $from, 'hasta' => $to, 'ruta' => $route['uuid'] ?? '', 'guardia' => $guard['uuid'] ?? '']];
+    }
+
     public function outside(Request $request): Response
     {
         $guard = trim((string) $request->input('guardia', ''));
