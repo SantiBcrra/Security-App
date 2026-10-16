@@ -66,6 +66,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ar.com.securityapp.campo.data.Me
 import ar.com.securityapp.campo.ui.theme.Accent
@@ -105,49 +106,79 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     var openModule by remember(me.isPreview) { mutableStateOf<String?>(null) }
     var openScanner by remember(me.isPreview) { mutableStateOf(false) }
     var showShifts by remember(me.isPreview) { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val unread by vm.unread.collectAsStateWithLifecycle()
+    val openAvisos by vm.openAvisos.collectAsStateWithLifecycle()
     val openShift by vm.openShift.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(openShift) {
         if (openShift) { openModule = null; showSettings = false; showShifts = false; vm.openShift.value = false }
     }
     if (showShifts) {
-        ar.com.securityapp.campo.ui.shifts.ShiftsScreen(onBack = { showShifts = false })
+        HomeWithNavigation(onHome = { showShifts = false }, onActivity = { showShifts = false; openModule = "rondas" },
+            onScan = { showShifts = false; openModule = "rondas"; openScanner = true },
+            onNotices = { showShifts = false; vm.openAvisos.value = true }, onMore = { showShifts = false; showSettings = true }) {
+            ar.com.securityapp.campo.ui.shifts.ShiftsScreen(onBack = { showShifts = false })
+        }
         return
     }
-    val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     if (showSettings) {
-        SettingsScreen(vm, me, onBack = { showSettings = false })
+        HomeWithNavigation(onHome = { showSettings = false }, onActivity = { showSettings = false; openModule = "rondas" },
+            onScan = { showSettings = false; openModule = "rondas"; openScanner = true },
+            onNotices = { showSettings = false; vm.openAvisos.value = true }, onMore = { showSettings = false }) {
+            SettingsScreen(vm, me, onBack = { showSettings = false })
+        }
         return
     }
-    val unread by vm.unread.collectAsStateWithLifecycle()
-    val openAvisos by vm.openAvisos.collectAsStateWithLifecycle()
     val notifPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         if (android.os.Build.VERSION.SDK_INT >= 33) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
     if (openAvisos) {
-        AvisosScreen(onBack = { vm.openAvisos.value = false; vm.refreshUnread() })
+        HomeWithNavigation(onHome = { vm.openAvisos.value = false }, onActivity = { vm.openAvisos.value = false; openModule = "rondas" },
+            onScan = { vm.openAvisos.value = false; openModule = "rondas"; openScanner = true },
+            onNotices = { vm.openAvisos.value = false }, onMore = { vm.openAvisos.value = false; showSettings = true }) {
+            AvisosScreen(onBack = { vm.openAvisos.value = false; vm.refreshUnread() })
+        }
         return
     }
     when (openModule) {
         "rondas" -> {
-            ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; openScanner = false; vm.refreshCounts() }, canManagePoints = me.can("rondas", "editar"), initialScan = openScanner)
+            HomeWithNavigation(onHome = { openModule = null; openScanner = false }, onActivity = { openScanner = false },
+                onScan = { openScanner = true }, onNotices = { openModule = null; openScanner = false; vm.openAvisos.value = true },
+                onMore = { openModule = null; openScanner = false; showSettings = true }) {
+                ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; openScanner = false; vm.refreshCounts() }, canManagePoints = me.can("rondas", "editar"), initialScan = openScanner)
+            }
             return
         }
-        "acciones" -> { ar.com.securityapp.campo.ui.actions.AccionesScreen(onBack = { openModule = null; vm.refreshCounts() }); return }
+        "acciones" -> { HomeWithNavigation(onHome = { openModule = null }, onActivity = { openModule = "rondas" },
+            onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
+            onMore = { openModule = null; showSettings = true }) {
+                ar.com.securityapp.campo.ui.actions.AccionesScreen(onBack = { openModule = null; vm.refreshCounts() })
+            }; return }
         "inspecciones" -> {
-            ar.com.securityapp.campo.ui.inspections.InspeccionesScreen(onBack = { openModule = null; vm.refreshCounts() },
-                canCreate = me.can("inspecciones", "crear"))
+            HomeWithNavigation(onHome = { openModule = null }, onActivity = { openModule = "rondas" },
+                onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
+                onMore = { openModule = null; showSettings = true }) {
+                ar.com.securityapp.campo.ui.inspections.InspeccionesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("inspecciones", "crear"))
+            }
             return
         }
         "incidentes" -> {
-            ar.com.securityapp.campo.ui.incidents.IncidentesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("incidentes", "crear"))
+            HomeWithNavigation(onHome = { openModule = null }, onActivity = { openModule = "rondas" },
+                onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
+                onMore = { openModule = null; showSettings = true }) {
+                ar.com.securityapp.campo.ui.incidents.IncidentesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("incidentes", "crear"))
+            }
             return
         }
         "observaciones" -> {
-            ar.com.securityapp.campo.ui.observations.ObservacionesScreen(onBack = { openModule = null; vm.refreshCounts() },
-                canCreate = me.can("observaciones", "crear"))
+            HomeWithNavigation(onHome = { openModule = null }, onActivity = { openModule = "rondas" },
+                onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
+                onMore = { openModule = null; showSettings = true }) {
+                ar.com.securityapp.campo.ui.observations.ObservacionesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("observaciones", "crear"))
+            }
             return
         }
     }
@@ -155,7 +186,11 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     val modules = MODULES.filter { me.can(it.key) || (it.key == "acciones" && (sync.counts["actions"] ?: 0) > 0) }
     val panic by vm.panic.collectAsStateWithLifecycle()
     panic?.let { state ->
-        ar.com.securityapp.campo.panic.PanicScreen((state as? SessionViewModel.PanicState.Done)?.result, onClose = { vm.closePanic() })
+        HomeWithNavigation(onHome = { vm.closePanic() }, onActivity = { vm.closePanic(); openModule = "rondas" },
+            onScan = { vm.closePanic(); openModule = "rondas"; openScanner = true },
+            onNotices = { vm.closePanic(); vm.openAvisos.value = true }, onMore = { vm.closePanic(); showSettings = true }) {
+            ar.com.securityapp.campo.panic.PanicScreen((state as? SessionViewModel.PanicState.Done)?.result, onClose = { vm.closePanic() })
+        }
         return
     }
 
@@ -238,7 +273,7 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
 /** Navegación rápida inspirada en billeteras móviles: el QR queda siempre al alcance del pulgar. */
 @Composable
 private fun HomeBottomBar(onHome: () -> Unit, onActivity: () -> Unit, onScan: () -> Unit, onNotices: () -> Unit, onMore: () -> Unit) {
-    Box(Modifier.fillMaxWidth().height(78.dp)) {
+    Box(Modifier.fillMaxWidth().height(94.dp).zIndex(10f)) {
         NavigationBar(containerColor = Color.White, tonalElevation = 6.dp, modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)) {
             NavigationBarItem(selected = true, onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { Text("Inicio") })
             NavigationBarItem(selected = false, onClick = onActivity, icon = { Icon(Icons.Filled.CheckCircle, "Actividad") }, label = { Text("Actividad") })
@@ -256,6 +291,24 @@ private fun HomeBottomBar(onHome: () -> Unit, onActivity: () -> Unit, onScan: ()
                 Icon(painterResource(R.drawable.ic_qr), "Escanear QR", Modifier.size(32.dp))
             }
         }
+    }
+}
+
+/** Contenedor común para que la navegación inferior siga visible al entrar a cualquier módulo. */
+@Composable
+private fun HomeWithNavigation(
+    onHome: () -> Unit,
+    onActivity: () -> Unit,
+    onScan: () -> Unit,
+    onNotices: () -> Unit,
+    onMore: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = { HomeBottomBar(onHome, onActivity, onScan, onNotices, onMore) },
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) { content() }
     }
 }
 

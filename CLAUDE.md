@@ -150,7 +150,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Prueba de estrés: `php tools/sync-stress.php http://localhost/securityapp {empresa} {usuario} {clave} 500 10`.
 
 ### App Android — navegación y marca (versión 1.2)
-- El inicio usa una navegación inferior compacta, con Inicio, Actividad, Avisos y Más. El botón central amarillo abre directamente la cámara para leer un QR y entra a Rondas; si no hay ronda activa, se aplica el inicio automático por primer escaneo ya documentado.
+- La app usa una navegación inferior compacta y persistente, con Inicio, Actividad, Avisos y Más. Se monta en el contenedor común de todas las vistas autenticadas para que no desaparezca al entrar a un módulo. El botón central amarillo abre directamente la cámara para leer un QR y entra a Rondas; si no hay ronda activa, se aplica el inicio automático por primer escaneo ya documentado.
 - El logo compartido por la marca se guarda en `android/app/src/main/res/drawable/security_logo.png` y se usa en el ícono adaptable, el ingreso y el encabezado. Se conserva la paleta `Brand`/`Accent` existente; no se agregan librerías ni servicios.
 
 ## Rondas de guardias (Etapa 9 adelantada)
