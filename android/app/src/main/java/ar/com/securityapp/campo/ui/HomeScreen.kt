@@ -272,7 +272,7 @@ private fun HomeTopBar(vm: SessionViewModel, me: Me, unread: Int, syncing: Boole
 /** Navegación rápida inspirada en billeteras móviles: el QR queda siempre al alcance del pulgar. */
 @Composable
 private fun HomeBottomBar(selected: String, onHome: () -> Unit, onActivity: () -> Unit, onScan: () -> Unit, onNotices: () -> Unit, onMore: () -> Unit) {
-    Box(Modifier.fillMaxWidth().height(104.dp).background(Color.White).zIndex(10f)) {
+    Box(Modifier.fillMaxWidth().height(94.dp).background(Color.White).zIndex(10f)) {
         NavigationBar(containerColor = Color.White, tonalElevation = 6.dp,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp).align(Alignment.BottomCenter).zIndex(1f)) {
             NavigationBarItem(selected = selected == "home", onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { Text("Inicio") })
