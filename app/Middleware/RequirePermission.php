@@ -20,9 +20,12 @@ final class RequirePermission
         if (UserAuth::can($this->module, $this->action)) {
             return $next($request);
         }
+        $off = !\App\Services\Modules::enabled($this->module); // la empresa desactivó el módulo (Configuración → Módulos)
         if ($request->wantsJson()) {
-            return Response::jsonError('No tenés permiso para esta acción.', 403, 'forbidden');
+            return $off ? Response::jsonError('Este módulo está desactivado en la empresa.', 403, 'module_disabled')
+                : Response::jsonError('No tenés permiso para esta acción.', 403, 'forbidden');
         }
-        return Response::html(View::render('errors/403', ['title' => 'Sin permiso'], 'layouts/app'), 403);
+        return Response::html(View::render('errors/403', ['title' => $off ? 'Módulo desactivado' : 'Sin permiso', 'moduleOff' => $off,
+            'canConfigure' => $off && UserAuth::can('configuracion', 'editar')], 'layouts/app'), 403);
     }
 }

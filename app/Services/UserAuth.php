@@ -160,14 +160,19 @@ final class UserAuth
         return self::$user;
     }
 
+    /** Permisos efectivos (sin los módulos que la empresa desactivó): los usa la app del celular para armar su menú. */
     public static function permissions(): array
     {
-        return self::$permissions;
+        $off = Modules::disabled();
+        return $off ? array_diff_key(self::$permissions, array_flip($off)) : self::$permissions;
     }
 
     /** En modo soporte (super-admin dentro de la empresa) se puede ver todo, nada más. */
     public static function can(string $module, string $action): bool
     {
+        if (!Modules::enabled($module)) {
+            return false; // módulo desactivado por la empresa (Configuración → Módulos)
+        }
         if (self::$user === null) {
             return Impersonation::active() && $action === 'ver' && isset(Permissions::MODULES[$module]);
         }
@@ -176,6 +181,9 @@ final class UserAuth
 
     public static function scope(string $module): ?string
     {
+        if (!Modules::enabled($module)) {
+            return null;
+        }
         if (self::$user === null) {
             return Impersonation::active() ? 'todo' : null;
         }

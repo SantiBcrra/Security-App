@@ -59,6 +59,11 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   de cada empresa lo crea el super-admin desde el detalle de la empresa.
 - Permisos: registro único en `app/Policies/Permissions.php` (módulos × acciones + alcance
   todo/sectores/propios). Roles base `is_system` no editables: se copian y se ajusta la copia.
+- **Módulos activables por empresa** (`Services\Modules`, setting `modulos.desactivados`, /panel/configuracion#modulos): rondas,
+  permisos de trabajo, EPP, observaciones, inspecciones, acciones, incidentes. Desactivado = `UserAuth::can()` false, `scope()`
+  null y fuera de `UserAuth::permissions()` (así desaparece del menú, del inicio, de sus páginas — `RequirePermission` muestra
+  "Módulo desactivado" — y de la app, que arma su menú con `/me.permisos`). No se borra nada. Menú lateral: Operación →
+  Prevención → Administración.
 - En código: `UserAuth::can('modulo', 'accion')`, `UserAuth::scope('modulo')`; por ruta:
   `new RequirePermission('modulo', 'accion')`. El menú de `/panel` se arma con `can()`.
 - El usuario se recarga desde la base en cada request: desactivarlo, vencerle el acceso o

@@ -32,6 +32,24 @@ final class SettingsController
     public const COMPANY = ['domicilio' => 'empresa.domicilio', 'actividad' => 'empresa.actividad', 'ciiu' => 'empresa.ciiu',
         'art' => 'empresa.art_nombre', 'art_contrato' => 'empresa.art_contrato', 'art_telefono' => 'empresa.art_telefono'];
 
+    /** Módulos activos de la empresa (los desactivados desaparecen del menú, del inicio y de la app). */
+    public function updateModules(Request $request): Response
+    {
+        $before = \App\Services\Modules::disabled();
+        $on = array_values(array_intersect((array) $request->input('modules', []), \App\Services\Modules::keys()));
+        $off = \App\Services\Modules::save($on);
+        \App\Services\Audit::tenant('settings.modules', 'settings', null, ['desactivados' => $before], ['desactivados' => $off]);
+        \App\Core\Flash::add('success', $off ? 'Módulos guardados. Desactivados: ' . implode(', ', array_map(fn ($k) => self::moduleName($k), $off)) . '.'
+            : 'Módulos guardados: todos activos.');
+        return Response::redirect('/panel/configuracion#modulos');
+    }
+
+    private static function moduleName(string $key): string
+    {
+        foreach (\App\Services\Modules::GROUPS as $mods) if (isset($mods[$key])) return $mods[$key][0];
+        return $key;
+    }
+
     public function updateCompany(Request $request): Response
     {
         $before = array_map(fn ($k) => Settings::get($k), self::COMPANY);

@@ -14,21 +14,22 @@ $hasOwnActions = function () use ($me): bool {
         return false; // base sin la migración de la Etapa 10 todavía
     }
 };
-// [enlace, texto, ícono, visible, prefijo que lo marca activo]
+// [enlace, texto, ícono, visible, prefijo que lo marca activo]. Los módulos desactivados (Configuración → Módulos) no se ven:
+// UserAuth::can() da false.
 $sections = [
     '' => [
         ['/panel', 'Inicio', 'home', true, null],
-    ],
-    'Prevención' => [
-        ['/panel/observaciones', 'Observaciones', 'eye', UserAuth::can('observaciones', 'ver'), '/panel/observaciones'],
-        ['/panel/inspecciones', 'Inspecciones', 'clipboard', UserAuth::can('inspecciones', 'ver'), '/panel/inspecciones'],
-        ['/panel/acciones', 'Acciones', 'check', UserAuth::can('acciones', 'ver') || $hasOwnActions(), '/panel/acciones'],
-        ['/panel/incidentes', 'Incidentes', 'alert', UserAuth::can('incidentes', 'ver'), '/panel/incidentes'],
     ],
     'Operación' => [
         ['/panel/permisos', 'Permisos de trabajo', 'file', UserAuth::can('permisos_trabajo', 'ver'), '/panel/permisos'],
         ['/panel/epp', 'EPP', 'helmet', UserAuth::can('epp', 'ver'), '/panel/epp'],
         ['/panel/rondas', 'Rondas', 'route', UserAuth::can('rondas', 'ver'), '/panel/rondas'],
+    ],
+    'Prevención' => [
+        ['/panel/observaciones', 'Observaciones', 'eye', UserAuth::can('observaciones', 'ver'), '/panel/observaciones'],
+        ['/panel/inspecciones', 'Inspecciones', 'clipboard', UserAuth::can('inspecciones', 'ver'), '/panel/inspecciones'],
+        ['/panel/acciones', 'Acciones', 'check', UserAuth::can('acciones', 'ver') || (App\Services\Modules::enabled('acciones') && $hasOwnActions()), '/panel/acciones'],
+        ['/panel/incidentes', 'Incidentes', 'alert', UserAuth::can('incidentes', 'ver'), '/panel/incidentes'],
     ],
     'Administración' => [
         ['/panel/datos/empleados', 'Datos maestros', 'database', UserAuth::can('datos_maestros', 'ver'), '/panel/datos'],

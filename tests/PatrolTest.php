@@ -756,6 +756,30 @@ return [
         assert_true(str_contains($detail, 'Fuera de orden') && str_contains($detail, 'SAMaps.route'));
     },
 
+    'módulos: desactivar uno lo saca de permisos, del menú del celular y de sus páginas; reactivarlo lo devuelve' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        assert_true(UserAuth::can('epp', 'ver') && UserAuth::can('rondas', 'ver'));
+        $ctrl = new \App\Controllers\Web\Panel\SettingsController();
+        $on = array_values(array_diff(\App\Services\Modules::keys(), ['epp', 'permisos_trabajo']));
+        $ctrl->updateModules(new \App\Core\Request('POST', '/panel/configuracion/modulos', [], ['modules' => array_merge($on, ['usuarios', 'inventado'])]));
+        assert_same(['permisos_trabajo', 'epp'], \App\Services\Modules::disabled(), 'solo módulos que se pueden desactivar');
+        assert_true(!UserAuth::can('epp', 'ver') && !UserAuth::can('permisos_trabajo', 'crear') && UserAuth::can('rondas', 'ver') && UserAuth::can('usuarios', 'ver'));
+        assert_same(null, UserAuth::scope('epp'));
+        assert_true(!isset(UserAuth::permissions()['epp']) && isset(UserAuth::permissions()['rondas']), 'la app del celular no lo recibe');
+        assert_true(!isset(Pull::run(null, 10)['meta']['permisos']['permisos_trabajo']));
+        $res = (new \App\Middleware\RequirePermission('epp', 'ver'))(new \App\Core\Request('GET', '/panel/epp'), fn () => new \App\Core\Response('ok'));
+        assert_same(403, $res->status);
+        assert_true(str_contains($res->body, 'Módulo desactivado'));
+        // Reactivar
+        $ctrl->updateModules(new \App\Core\Request('POST', '/panel/configuracion/modulos', [], ['modules' => \App\Services\Modules::keys()]));
+        assert_same([], \App\Services\Modules::disabled());
+        assert_true(UserAuth::can('epp', 'ver'));
+        $html = $ctrl->show(new \App\Core\Request('GET', '/panel/configuracion'))->body;
+        assert_true(str_contains($html, 'id="modulos"') && str_contains($html, 'mod-rondas'));
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

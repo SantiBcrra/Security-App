@@ -3,6 +3,26 @@
     <h1 class="h4 m-0">Configuración</h1>
     <a class="btn btn-outline-primary btn-sm" href="<?= e(url('/panel/configuracion/notificaciones')) ?>">Notificaciones y alertas →</a>
 </div>
+<form class="card shadow-sm mb-3" style="max-width: 640px" method="post" action="<?= e(url('/panel/configuracion/modulos')) ?>" id="modulos">
+    <?= csrf_field() ?>
+    <div class="card-header"><strong>Módulos</strong> <span class="small text-body-secondary">· qué herramientas usa la empresa</span></div>
+    <fieldset class="card-body" <?= $canEdit ? '' : 'disabled' ?>>
+        <p class="small text-body-secondary">Desactivá lo que todavía no usan para simplificar el menú; se activa cuando lo necesiten. Un módulo desactivado
+            desaparece del menú, del inicio y de la app del celular para todos. <strong>No se borra nada</strong>: al reactivarlo vuelve todo como estaba.</p>
+        <?php $off = App\Services\Modules::disabled(); ?>
+        <?php foreach (App\Services\Modules::GROUPS as $group => $mods): ?>
+            <div class="fw-semibold small text-uppercase text-body-secondary mt-2 mb-1"><?= e($group) ?></div>
+            <?php foreach ($mods as $key => [$name, $help]): ?>
+                <div class="form-check form-switch mb-1">
+                    <input class="form-check-input" type="checkbox" role="switch" name="modules[]" value="<?= e($key) ?>" id="mod-<?= e($key) ?>" <?= in_array($key, $off, true) ? '' : 'checked' ?>>
+                    <label class="form-check-label" for="mod-<?= e($key) ?>"><?= e($name) ?> <span class="small text-body-secondary">— <?= e($help) ?></span></label>
+                </div>
+            <?php endforeach; ?>
+        <?php endforeach; ?>
+        <div class="form-text">Inicio, Datos maestros, Usuarios, Roles y Configuración están siempre activos.</div>
+        <?php if ($canEdit): ?><button class="btn btn-primary btn-sm mt-2">Guardar módulos</button><?php endif; ?>
+    </fieldset>
+</form>
 <div class="card shadow-sm mb-3" style="max-width: 640px" id="logo">
     <div class="card-header"><strong>Logo de la empresa</strong> <span class="small text-body-secondary">· se muestra arriba del menú lateral</span></div>
     <div class="card-body">

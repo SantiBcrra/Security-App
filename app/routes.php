@@ -272,6 +272,7 @@ return static function (Router $r): void {
         $r->get('/configuracion', [SettingsController::class, 'show'], [$can('configuracion', 'ver')]);
         $r->post('/configuracion', [SettingsController::class, 'update'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/empresa', [SettingsController::class, 'updateCompany'], [$can('configuracion', 'editar')]);
+        $r->post('/configuracion/modulos', [SettingsController::class, 'updateModules'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/permisos', [SettingsController::class, 'updatePermits'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/epp', [SettingsController::class, 'updateEpp'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/logo', [SettingsController::class, 'uploadLogo'], [$can('configuracion', 'editar')]);
