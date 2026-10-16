@@ -256,8 +256,8 @@ private fun HomeTopBar(vm: SessionViewModel, me: Me, unread: Int, syncing: Boole
     Row(Modifier.fillMaxWidth().background(Brand).statusBarsPadding().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Image(painterResource(R.drawable.security_logo), "Logo de Security App", Modifier.size(38.dp).padding(end = 8.dp))
         Column(Modifier.weight(1f)) {
-            Text(me.companyName, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${me.name} · ${me.role}", color = Color(0xFFB4BACB), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(me.name, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(me.role, color = Color(0xFFB4BACB), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onNotices) {
             androidx.compose.material3.BadgedBox(badge = { if (unread > 0) androidx.compose.material3.Badge(containerColor = Accent, contentColor = BrandDark) { Text(if (unread > 99) "99+" else "$unread") } }) {
