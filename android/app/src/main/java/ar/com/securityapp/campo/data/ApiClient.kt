@@ -38,6 +38,14 @@ class ApiClient(private val prefs: Prefs, private val tokens: TokenStore, privat
         .build()
     private val refreshLock = Mutex()
 
+    /**
+     * "Ver como" (vista previa de un administrador): mientras no es null, todo se pide con este token de SOLO LECTURA.
+     * Lo que no es GET se corta acá mismo (el servidor también lo rechaza). `/preview/...` usa siempre la sesión propia.
+     */
+    @Volatile var previewToken: String? = null
+    /** El servidor dio por terminada la vista previa (venció o le sacaron el permiso). */
+    var onPreviewLost: () -> Unit = {}
+
     fun apiUrl(path: String): String = prefs.serverUrl.trimEnd('/') + "/api/v1" + path
 
     suspend fun get(path: String, query: Map<String, String> = emptyMap(), auth: Boolean = true): JsonElement =
@@ -49,7 +57,8 @@ class ApiClient(private val prefs: Prefs, private val tokens: TokenStore, privat
     /** Archivo protegido de la API (fotos): `path` relativo a /api/v1 o URL completa del servidor. null si no está. */
     suspend fun bytes(path: String, retried: Boolean = false): ByteArray? {
         val rel = if (path.startsWith("http")) path.substringAfter("/api/v1", "") else path
-        val usedAccess = tokens.access
+        val preview = previewToken
+        val usedAccess = preview ?: tokens.access
         val (status, bytes) = withContext(Dispatchers.IO) {
             val req = Request.Builder().url(apiUrl(rel)).apply { usedAccess?.let { header("Authorization", "Bearer $it") } }.build()
             try {
@@ -58,12 +67,14 @@ class ApiClient(private val prefs: Prefs, private val tokens: TokenStore, privat
                 throw OfflineException()
             }
         }
-        if (status == 401 && !retried && refreshTokens(usedAccess)) return bytes(path, retried = true)
+        if (status == 401 && preview == null && !retried && refreshTokens(usedAccess)) return bytes(path, retried = true)
         return bytes
     }
 
     private suspend fun call(method: String, path: String, query: Map<String, String>, body: JsonObject?, auth: Boolean, retried: Boolean = false): JsonElement {
-        val usedAccess = tokens.access
+        val preview = previewToken?.takeIf { auth && !path.startsWith("/preview/") }
+        if (preview != null && method != "GET") throw ApiException(403, "preview_read_only", "Vista previa: no se guarda ni se envía nada.")
+        val usedAccess = preview ?: tokens.access
         val (status, payload) = withContext(Dispatchers.IO) {
             val url = apiUrl(path).toHttpUrl().newBuilder().apply { query.forEach { (k, v) -> addQueryParameter(k, v) } }.build()
             val builder = Request.Builder().url(url).header("Accept", "application/json")
@@ -83,6 +94,10 @@ class ApiClient(private val prefs: Prefs, private val tokens: TokenStore, privat
         val error = (parsed["error"] as? JsonObject)
         val code = error?.get("code")?.let { if (it is JsonNull) null else it.toString().trim('"') }
         val message = error?.get("message")?.toString()?.trim('"') ?: "Error del servidor ($status)."
+        if (status == 401 && preview != null) {
+            onPreviewLost()
+            throw ApiException(401, "preview_expired", "Terminó la vista previa.")
+        }
         if (status == 401 && auth && !retried && code != "totp_required" && code != "totp_invalid") {
             if (refreshTokens(usedAccess)) return call(method, path, query, body, auth, retried = true)
             tokens.clear()

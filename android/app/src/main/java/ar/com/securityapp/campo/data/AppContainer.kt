@@ -25,4 +25,17 @@ class AppContainer(context: Context) {
     /** Se emite después de cada sincronización (la UI vuelve a leer la base local). */
     val dataChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     val updates = UpdateManager(appContext, api)
+
+    /**
+     * Fin de una vista previa ("Ver como"): se borra lo bajado como el otro usuario (y lo que se simuló, que nunca se
+     * envió) para que la próxima sincronización baje de nuevo lo propio. Para entrar se exige no tener nada pendiente.
+     */
+    fun discardPreviewData() {
+        api.previewToken = null
+        db.clearAll()
+        prefs.cursor = null
+        prefs.lastSync = 0L
+        prefs.metaJson = null
+        prefs.previewActive = false
+    }
 }

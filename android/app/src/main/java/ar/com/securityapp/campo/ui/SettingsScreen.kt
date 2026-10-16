@@ -2,6 +2,10 @@ package ar.com.securityapp.campo.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,6 +65,16 @@ fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit) {
                     Row2("Dispositivo", vm.prefs.deviceUuid.take(8) + "…")
                 }
             }
+            if (vm.canPreview(me)) PreviewCard(vm)
+            if (me.can("usuarios", "editar") && !me.isPreview) {
+                // Detalle técnico: solo para administradores (el guardia no lo necesita).
+                val counts = vm.sync.collectAsStateWithLifecycle().value.counts
+                val labels = mapOf("sectors" to "sectores", "equipment" to "equipos", "employees" to "empleados", "patrol_routes" to "rutas",
+                    "patrol_points" to "puntos de ronda", "actions" to "acciones", "inspection_schedule" to "inspecciones programadas")
+                Text("Datos guardados en el celular", style = MaterialTheme.typography.titleSmall, color = Muted, modifier = Modifier.padding(top = 16.dp))
+                Text(counts.filter { it.value > 0 }.map { "${it.value} ${labels[it.key]}" }.joinToString(" · ").ifEmpty { "Sin datos todavía" },
+                    style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 4.dp))
+            }
             if (failed.isNotEmpty()) {
                 Text("Envíos rechazados por el servidor", style = MaterialTheme.typography.titleSmall, color = Danger, modifier = Modifier.padding(top = 16.dp))
                 for (op in failed) {
@@ -76,9 +90,13 @@ fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit) {
                     }
                 }
             }
-            OutlinedButton({ confirmLogout = true }, Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("Cerrar sesión", color = Danger) }
-            Text("Al cerrar sesión se borra del celular todo lo descargado.", style = MaterialTheme.typography.bodySmall, color = Muted,
-                modifier = Modifier.padding(top = 6.dp))
+            if (me.isPreview) {
+                OutlinedButton({ vm.exitPreview(); onBack() }, Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("Salir de la vista previa") }
+            } else {
+                OutlinedButton({ confirmLogout = true }, Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("Cerrar sesión", color = Danger) }
+                Text("Al cerrar sesión se borra del celular todo lo descargado.", style = MaterialTheme.typography.bodySmall, color = Muted,
+                    modifier = Modifier.padding(top = 6.dp))
+            }
         }
     }
     if (confirmLogout) {
@@ -92,6 +110,57 @@ fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit) {
             },
             confirmButton = { TextButton({ confirmLogout = false; vm.logout() }) { Text("Cerrar sesión", color = Danger) } },
             dismissButton = { TextButton({ confirmLogout = false }) { Text("Cancelar") } },
+        )
+    }
+}
+
+/**
+ * "Ver como" (típico de los sistemas con roles): el administrador elige un usuario y ve la app exactamente como él,
+ * con sus módulos, sus botones y los datos que le bajan a él. Solo lectura.
+ */
+@Composable
+private fun PreviewCard(vm: SessionViewModel) {
+    val state by vm.preview.collectAsStateWithLifecycle()
+    var open by remember { mutableStateOf(false) }
+    var users by remember { mutableStateOf<List<SessionViewModel.PreviewUser>?>(null) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    Card(Modifier.fillMaxWidth().padding(top = 16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Ver la app como otro usuario", fontWeight = FontWeight.SemiBold)
+            Text("Para saber qué ve exactamente un guardia o un supervisor: sus módulos, sus botones y sus datos. Es solo una vista previa: " +
+                "podés tocar todo, pero no se guarda ni se envía nada.", style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 4.dp))
+            (state.error)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Danger, modifier = Modifier.padding(top = 6.dp)) }
+            OutlinedButton({ vm.clearPreviewNotice(); open = true }, Modifier.fillMaxWidth().padding(top = 8.dp), enabled = !state.busy) {
+                Text(if (state.busy) "Entrando…" else "Elegir usuario")
+            }
+        }
+    }
+    if (open) {
+        LaunchedEffect(Unit) {
+            loadError = null
+            users = try { vm.previewUsers() } catch (e: Exception) { loadError = if (e is ar.com.securityapp.campo.data.OfflineException) "Hace falta señal." else e.message; emptyList() }
+        }
+        AlertDialog(
+            onDismissRequest = { open = false },
+            title = { Text("Ver como…") },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    val list = users
+                    when {
+                        loadError != null -> Text(loadError!!, color = Danger)
+                        list == null -> Text("Cargando…", color = Muted)
+                        list.isEmpty() -> Text("No hay otros usuarios activos.", color = Muted)
+                        else -> list.groupBy { it.role }.forEach { (role, people) ->
+                            Text(role, style = MaterialTheme.typography.labelLarge, color = Muted, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
+                            people.forEach { u ->
+                                Text(u.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.fillMaxWidth()
+                                    .clickable { open = false; vm.enterPreview(u) }.padding(vertical = 10.dp))
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton({ open = false }) { Text("Cancelar") } },
         )
     }
 }

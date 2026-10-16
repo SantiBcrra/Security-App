@@ -92,8 +92,8 @@ private val MODULES = listOf(
 fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     val sync by vm.sync.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
-    var showSettings by remember { mutableStateOf(false) }
-    var openModule by remember { mutableStateOf<String?>(null) }
+    var showSettings by remember(me.isPreview) { mutableStateOf(false) } // al entrar o salir de "Ver como" se vuelve al inicio
+    var openModule by remember(me.isPreview) { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     if (showSettings) {
@@ -162,12 +162,23 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
             IconButton({ showSettings = true }) { Icon(Icons.Filled.Settings, "Ajustes", tint = Color.White) }
         }
     }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+        if (me.isPreview) PreviewBanner(me) { vm.exitPreview() }
+        val previewState by vm.preview.collectAsStateWithLifecycle()
+        previewState.notice?.let { n ->
+            Card(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF3CF))) {
+                Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(n, style = MaterialTheme.typography.bodySmall, color = BrandDark, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.TextButton({ vm.clearPreviewNotice() }) { Text("OK") }
+                }
+            }
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             contentPadding = PaddingValues(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize().padding(padding),
+            modifier = Modifier.fillMaxWidth().weight(1f),
         ) {
             update.release?.let { release ->
                 item(span = { GridItemSpan(2) }) { UpdateCard(release.versionName, update, onInstall = { vm.installUpdate(openIntent) }) }
@@ -191,6 +202,21 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
                 }
             }
         }
+        }
+    }
+}
+
+/** "Ver como": siempre visible arriba, con la salida a mano. */
+@Composable
+private fun PreviewBanner(me: Me, onExit: () -> Unit) {
+    Row(Modifier.fillMaxWidth().background(Accent).padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("VISTA PREVIA · ${me.name}", color = BrandDark, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Rol ${me.role}. Podés probar todo: no se guarda ni se envía nada.", color = BrandDark,
+                style = MaterialTheme.typography.bodySmall)
+        }
+        androidx.compose.material3.Button(onExit, colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = BrandDark)) { Text("Salir") }
     }
 }
 
@@ -230,12 +256,6 @@ private fun SyncCard(sync: SyncState) {
             if (sync.pending > 0) Text("${sync.pending} envío(s) esperando señal", style = MaterialTheme.typography.bodySmall,
                 color = BrandDark, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
             sync.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if (sync.error) Danger else Muted, modifier = Modifier.padding(top = 4.dp)) }
-            if (sync.counts.isNotEmpty()) {
-                val labels = mapOf("sectors" to "sectores", "equipment" to "equipos", "employees" to "empleados", "patrol_routes" to "rutas",
-                    "patrol_points" to "puntos de ronda", "actions" to "acciones", "inspection_schedule" to "inspecciones programadas")
-                Text("En el celular: " + sync.counts.filter { it.value > 0 }.map { "${it.value} ${labels[it.key]}" }.joinToString(" · ").ifEmpty { "sin datos todavía" },
-                    style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 4.dp))
-            }
         }
     }
 }

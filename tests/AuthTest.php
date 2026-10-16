@@ -292,6 +292,46 @@ return [
         assert_same('session_revoked', ApiAuth::authenticate($tokens['access_token']), 'logout revoca el dispositivo');
     },
 
+    'API: "ver como" otro usuario en la app (solo lectura, auditado, solo administradores)' => function () use ($setup, &$st) {
+        $setup();
+        $api = function (string $method, string $path, string $token, array $post = []): App\Core\Response {
+            UserAuth::setCurrent(null);
+            Tenant::deactivate();
+            $router = new Router();
+            (require BASE_PATH . '/app/routes.php')($router);
+            return $router->dispatch(new Request($method, $path, [], $post, ['authorization' => 'Bearer ' . $token]));
+        };
+        $admin = ApiAuth::login('auth-a', 'ana@demo.test', 'clave-de-A-123', App\Core\Uuid::v4(), 'Moto G', null, '10.0.0.5');
+        $users = json_decode($api('GET', '/api/v1/preview/users', $admin['access_token'])->body, true)['data']['usuarios'];
+        assert_true(in_array('Raúl Reportante', array_column($users, 'nombre'), true) && !in_array('Ana A', array_column($users, 'nombre'), true), 'lista sin uno mismo');
+        $res = json_decode($api('POST', '/api/v1/preview/start', $admin['access_token'], ['user_uuid' => $st['a_rep']['uuid']])->body, true);
+        $preview = $res['data']['access_token'];
+        assert_same('Reportante', $res['data']['usuario']['rol']['nombre']);
+
+        $me = json_decode($api('GET', '/api/v1/me', $preview)->body, true)['data'];
+        assert_same(['Raúl Reportante', 'Ana A'], [$me['usuario']['nombre'], $me['vista_previa']['por']], 've lo del usuario elegido');
+        assert_true(!isset($me['permisos']['usuarios']) && isset($me['permisos']['rondas']), 'con los permisos de su rol');
+        assert_same(200, $api('GET', '/api/v1/sync/pull', $preview)->status, 'puede sincronizar (bajar) como él');
+        $push = $api('POST', '/api/v1/sync/push', $preview, ['ops' => []]);
+        assert_same([403, 'preview_read_only'], [$push->status, json_decode($push->body, true)['error']['code']], 'nunca guarda nada');
+        assert_same(403, $api('POST', '/api/v1/panic', $preview, ['uuid' => App\Core\Uuid::v4()])->status);
+        Tenant::activate($st['a']);
+        assert_true((int) DB::tenant()->query("SELECT COUNT(*) FROM audit_log WHERE action = 'app.preview_start'")->fetchColumn() >= 1, 'queda auditado');
+
+        // Un reportante no puede; y si al administrador le sacan el permiso o lo desactivan, la vista previa se corta.
+        $rep = ApiAuth::login('auth-a', '30111222', 'clave-rep-1234', App\Core\Uuid::v4(), 'A10', null, '10.0.0.7');
+        assert_same(403, $api('GET', '/api/v1/preview/users', $rep['access_token'])->status);
+        assert_same(422, $api('POST', '/api/v1/preview/start', $rep['access_token'], ['user_uuid' => $st['a_admin']['uuid']])->status);
+        assert_same(401, $api('GET', '/api/v1/me', $preview . 'x')->status, 'token adulterado');
+        Tenant::activate($st['a']);
+        DB::tenant()->prepare('UPDATE users SET is_active = 0 WHERE id = ?')->execute([$st['a_admin']['id']]);
+        assert_same(401, $api('GET', '/api/v1/me', $preview)->status, 'quien mira ya no puede entrar');
+        Tenant::activate($st['a']);
+        DB::tenant()->prepare('UPDATE users SET is_active = 1 WHERE id = ?')->execute([$st['a_admin']['id']]);
+        assert_same(200, $api('GET', '/api/v1/me', $preview)->status);
+        \App\Services\AppPreview::reset();
+    },
+
     'no se puede dejar a la empresa sin administrador' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['b']);

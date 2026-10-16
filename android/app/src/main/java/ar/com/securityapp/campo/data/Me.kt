@@ -11,7 +11,11 @@ data class Me(
     val permissions: Map<String, Set<String>>,
     val consentVersion: String,
     val consentAccepted: Boolean,
+    /** "Ver como": nombre del administrador que está mirando la app como este usuario (null = uso normal). */
+    val previewBy: String? = null,
 ) {
+    val isPreview: Boolean get() = previewBy != null
+
     fun can(module: String, action: String = "ver"): Boolean = permissions[module]?.contains(action) == true
 
     companion object {
@@ -22,10 +26,11 @@ data class Me(
             val perms = (o.obj("permisos") ?: JsonObject(emptyMap())).mapValues { (_, v) ->
                 (v as? JsonObject)?.arr("acciones")?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }?.toSet() ?: emptySet()
             }
+            val previewBy = o.obj("vista_previa")?.strOrNull("por")
             return Me(
                 name = user.str("nombre"), role = user.obj("rol")?.str("nombre") ?: "",
                 companyName = company.str("nombre"), companySlug = company.str("slug"),
-                permissions = perms, consentVersion = consent.str("version"), consentAccepted = consent.bool("aceptado"),
+                permissions = perms, consentVersion = consent.str("version"), consentAccepted = consent.bool("aceptado") || previewBy != null, previewBy = previewBy,
             )
         }
     }

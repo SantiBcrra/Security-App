@@ -445,6 +445,16 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   crear la clave y publicar: `docs/design/app-android-guardias.md` → "Firma de la versión final".
 - **Permisos de trabajo y EPP desactivados en la app** (decisión del usuario, 09/10/2026): comentados en `MODULES` de
   `HomeScreen.kt`; el servidor los sigue soportando. No activarlos hasta que el usuario lo pida.
+- **Roles en la app**: el menú, los botones y lo que baja la sync dependen del rol (`/me.permisos` + alcance en `Sync\Pull`);
+  el servidor valida todo igual (p. ej. `patrol.point_locate` exige `rondas.editar`). Los datos técnicos (conteos de lo
+  guardado) solo se ven en Ajustes y solo para administradores (`usuarios.editar`).
+- **"Ver como"** (`Services\AppPreview`, Ajustes → "Ver la app como otro usuario", permiso `usuarios.editar`):
+  `GET /api/v1/preview/users`, `POST /preview/start` → JWT `typ = preview` (`sub` = usuario visto, `pv` = quien mira, 30 min,
+  ligado al dispositivo de quien mira); `RequireApiUser` rechaza todo lo que no sea GET (`preview_read_only`). Entrar y
+  salir queda auditado (`app.preview_start|stop`); `/me.vista_previa`. En la app (`ApiClient.previewToken`): se exige no tener
+  nada pendiente ni ronda en curso, se borra lo bajado y se baja como el otro usuario; se puede simular todo (nada sale:
+  `syncAll` solo baja, el pánico no envía ni SMS); al salir (o si la app se cerró en el medio: `Prefs.previewActive`) se
+  borra y se vuelve a bajar lo propio. Banner "VISTA PREVIA" con "Salir" en el inicio.
 - **`targetSdk` 35 a propósito**: apuntando a Android 17 (37) el sistema bloquea las conexiones a la red local y la app no
   llega al XAMPP de la Mac (10.0.2.2 o la IP por Wi-Fi). Sin Google Play no hay exigencia de subirlo.
 - Consentimiento (celular personal, Ley 25.326): `Consent::VERSION` + texto en el servidor, `user_consents` (tenant 0061),

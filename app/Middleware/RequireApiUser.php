@@ -24,6 +24,9 @@ final class RequireApiUser
         if ($error !== null) {
             return Response::jsonError(self::MESSAGES[$error] ?? 'No autorizado.', 401, $error);
         }
+        if (\App\Services\AppPreview::active() && $request->method !== 'GET') {
+            return Response::jsonError('Vista previa: no se guarda ni se envía nada.', 403, 'preview_read_only');
+        }
         return $next($request);
     }
 }

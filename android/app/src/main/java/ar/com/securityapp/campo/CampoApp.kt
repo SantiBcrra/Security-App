@@ -11,6 +11,7 @@ class CampoApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        if (container.prefs.previewActive) container.discardPreviewData()
         ar.com.securityapp.campo.push.Notifs.ensureChannels(this)
         ar.com.securityapp.campo.push.PushRegistrar.initFromCache(this)
     }

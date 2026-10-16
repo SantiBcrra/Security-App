@@ -12,6 +12,9 @@ import ar.com.securityapp.campo.data.UpdateManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import ar.com.securityapp.campo.data.obj
+import ar.com.securityapp.campo.data.str
+import kotlinx.serialization.json.jsonObject
 
 /** Qué pantalla se ve: ingreso → consentimiento → inicio. Una versión obligatoria bloquea todo hasta actualizar. */
 sealed interface Screen {
@@ -44,10 +47,12 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch { c.sessionLost.collect { _screen.value = Screen.Login(error = "Tu sesión venció o fue cerrada. Ingresá de nuevo.") } }
         viewModelScope.launch { c.dataChanged.collect { refreshCounts() } }
+        c.api.onPreviewLost = { viewModelScope.launch { exitPreview("La vista previa terminó (dura 30 minutos). Podés volver a entrar desde Ajustes.") } }
         start()
     }
 
     private fun start() = viewModelScope.launch {
+        if (c.prefs.previewActive) c.discardPreviewData()
         checkUpdate()
         if (_screen.value is Screen.UpdateRequired) return@launch
         if (!c.auth.isLoggedIn) {
@@ -116,14 +121,15 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
     fun syncNow() = viewModelScope.launch {
         if (_sync.value.running) return@launch
         _sync.value = _sync.value.copy(running = true, message = null, error = false)
+        val hadPending = c.outbox.pendingCount() // sin el estado del celular, que sale en cada sincronización
         _sync.value = try {
             val full = c.sync.syncAll()
             val r = full.pulled
             (_screen.value as? Screen.Home)?.let { runCatching { _screen.value = Screen.Home(c.auth.refreshMe()) } }
+            // Mensajes simples para quien usa la app (el detalle técnico está en Ajustes, solo para administradores).
             val parts = listOfNotNull(
-                if (full.sent > 0) "Se enviaron ${full.sent} registro(s)." else null,
-                if (full.failed > 0) "${full.failed} rechazado(s): ver Ajustes." else null,
-                if (r.changes + r.deleted > 0) "Se actualizaron ${r.changes} dato(s)." else null,
+                if (hadPending > 0 && full.failed == 0 && c.outbox.pendingCount() == 0) "Lo que tenías pendiente ya se envió." else null,
+                if (full.failed > 0) "${full.failed} envío(s) rechazado(s): ver Ajustes." else null,
             )
             c.dataChanged.tryEmit(Unit)
             refreshUnread()
@@ -137,6 +143,63 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
             SyncState(lastSync = c.prefs.lastSync, message = e.message, error = true, counts = counts(), pending = c.outbox.pendingCount())
         }
     }
+
+    // ── "Ver como" (vista previa de un administrador) ──────────────
+    data class PreviewUser(val uuid: String, val name: String, val role: String)
+    private val _preview = MutableStateFlow<PreviewState>(PreviewState())
+    val preview: StateFlow<PreviewState> = _preview
+    data class PreviewState(val busy: Boolean = false, val error: String? = null, val notice: String? = null, val userUuid: String? = null)
+
+    fun canPreview(me: Me) = !me.isPreview && me.can("usuarios", "editar")
+
+    suspend fun previewUsers(): List<PreviewUser> =
+        (c.api.get("/preview/users").jsonObject["usuarios"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { it as? kotlinx.serialization.json.JsonObject }
+            .map { PreviewUser(it.str("uuid"), it.str("nombre"), it.obj("rol")?.str("nombre") ?: "") }
+
+    /** Para entrar no puede haber nada sin enviar: al salir se borra lo bajado y se vuelve a bajar lo propio. */
+    fun previewBlocker(): String? = when {
+        c.rounds.active() != null -> "Tenés una ronda en curso. Finalizala antes de ver la app como otro usuario."
+        c.outbox.pendingCount() > 0 || c.outbox.failed().isNotEmpty() || c.db.uploads("pending").isNotEmpty() ->
+            "Tenés registros sin enviar. Sincronizá (o revisá los rechazados) antes de ver la app como otro usuario."
+        else -> null
+    }
+
+    fun enterPreview(user: PreviewUser) = viewModelScope.launch {
+        previewBlocker()?.let { _preview.value = PreviewState(error = it); return@launch }
+        _preview.value = PreviewState(busy = true)
+        try {
+            val data = c.api.post("/preview/start", kotlinx.serialization.json.buildJsonObject { put("user_uuid", kotlinx.serialization.json.JsonPrimitive(user.uuid)) }).jsonObject
+            androidx.work.WorkManager.getInstance(getApplication()).cancelAllWork()
+            c.prefs.previewActive = true
+            c.discardPreviewData()
+            c.prefs.previewActive = true
+            c.api.previewToken = data.str("access_token")
+            _preview.value = PreviewState(userUuid = user.uuid)
+            _sync.value = SyncState()
+            _screen.value = Screen.Home(c.auth.refreshMe())
+            syncNow()
+        } catch (e: Exception) {
+            c.api.previewToken = null
+            if (c.prefs.previewActive) { c.discardPreviewData(); start() }
+            _preview.value = PreviewState(error = if (e is OfflineException) "Hace falta señal para ver la app como otro usuario." else e.message)
+        }
+    }
+
+    fun exitPreview(notice: String? = null) = viewModelScope.launch {
+        if (c.api.previewToken == null && !c.prefs.previewActive) return@launch
+        val who = _preview.value.userUuid
+        ar.com.securityapp.campo.tracking.RoundTrackingService.stop(getApplication())
+        androidx.work.WorkManager.getInstance(getApplication()).cancelAllWork()
+        c.discardPreviewData()
+        runCatching { ar.com.securityapp.campo.tracking.SlotAlarms.schedule(getApplication(), c) } // sin datos: cancela los recordatorios del otro
+        runCatching { c.api.post("/preview/stop", kotlinx.serialization.json.buildJsonObject { who?.let { put("user_uuid", kotlinx.serialization.json.JsonPrimitive(it)) } }) }
+        _preview.value = PreviewState(notice = notice)
+        _sync.value = SyncState()
+        _screen.value = Screen.Loading
+        start()
+    }
+
+    fun clearPreviewNotice() { _preview.value = _preview.value.copy(error = null, notice = null) }
 
     fun refreshCounts() {
         _sync.value = _sync.value.copy(counts = counts(), pending = c.outbox.pendingCount(), lastSync = c.prefs.lastSync)

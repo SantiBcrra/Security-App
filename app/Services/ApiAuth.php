@@ -101,7 +101,9 @@ final class ApiAuth
         } catch (\App\Core\JwtException $e) {
             return $e->reason === 'expired' ? 'token_expired' : 'invalid_token';
         }
-        if (($claims['typ'] ?? null) !== 'access') {
+        AppPreview::reset();
+        $typ = $claims['typ'] ?? null;
+        if ($typ !== 'access' && $typ !== 'preview') {
             return 'invalid_token';
         }
         $tenant = Tenants::findByUuid((string) ($claims['tid'] ?? ''));
@@ -111,6 +113,11 @@ final class ApiAuth
             return 'tenant_unavailable';
         }
         $device = UserDevices::findByUuid((string) ($claims['did'] ?? ''));
+        if ($typ === 'preview') { // "Ver como" de un administrador: solo lectura (AppPreview)
+            $error = AppPreview::authenticate($claims, $device);
+            self::$device = $error === null ? $device : null;
+            return $error;
+        }
         $user = Users::findByUuid((string) ($claims['sub'] ?? ''));
         if ($device === null || !UserDevices::isUsable($device) || $user === null
             || (int) $device['user_id'] !== (int) $user['id'] || !Users::canSignIn($user)) {

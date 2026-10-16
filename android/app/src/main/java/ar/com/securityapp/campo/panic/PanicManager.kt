@@ -37,6 +37,9 @@ class PanicManager(private val context: Context, private val c: AppContainer) {
 
     suspend fun trigger(): Result {
         vibrate()
+        if (c.api.previewToken != null) { // "Ver como": se muestra la pantalla, pero no sale ningún aviso ni SMS
+            return Result(false, emptyList(), false, "Vista previa: no se envió el pánico ni ningún SMS.", phones())
+        }
         val fix = Locator(context).current(timeoutMs = 5_000)
         val uuid = UUID.randomUUID().toString()
         val data = buildJsonObject {

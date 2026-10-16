@@ -43,8 +43,9 @@ class AuthRepository(
 
     suspend fun refreshMe(): Me {
         val data = api.get("/me").jsonObject
-        prefs.meJson = data.toString()
-        return Me.from(data)
+        val me = Me.from(data)
+        if (!me.isPreview) prefs.meJson = data.toString() // la vista previa nunca queda como "el usuario de este celular"
+        return me
     }
 
     /** @return (versión, texto) del consentimiento vigente */

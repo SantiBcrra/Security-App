@@ -43,6 +43,11 @@ class Prefs(context: Context) {
         get() = sp.getLong("last_sync", 0L)
         set(value) { sp.edit().putLong("last_sync", value).apply() }
 
+    /** Hay una vista previa ("Ver como") en curso: si la app se cierra en el medio, al abrirla se descarta todo lo bajado. */
+    var previewActive: Boolean
+        get() = sp.getBoolean("preview_active", false)
+        set(value) { sp.edit().putBoolean("preview_active", value).apply() }
+
     /** Borra lo de la sesión (al salir o al cambiar de usuario). Conserva el dispositivo, el servidor y la empresa. */
     fun clearSession() {
         sp.edit().remove("me").remove("cursor").remove("last_sync").remove("meta").apply()

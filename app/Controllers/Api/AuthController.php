@@ -58,8 +58,33 @@ final class AuthController
             'permisos' => UserAuth::permissions(),
             'empresa'  => ['uuid' => $tenant['uuid'], 'nombre' => $tenant['name'], 'slug' => $tenant['slug'], 'zona_horaria' => $tenant['timezone']],
             'dispositivo' => ApiAuth::device()['uuid'] ?? null,
+            'vista_previa' => \App\Services\AppPreview::active() ? ['por' => \App\Services\AppPreview::viewer()['name']] : null,
             'consentimiento' => ['version' => \App\Services\Consent::VERSION, 'aceptado' => \App\Services\Consent::accepted((int) $user['id'])],
         ]);
+    }
+
+    /** "Ver como": usuarios que el administrador puede ver (solo con permiso usuarios.editar). */
+    public function previewUsers(Request $request): Response
+    {
+        if (!\App\Services\AppPreview::canUse()) {
+            return Response::jsonError('No tenés permiso para ver la app como otro usuario.', 403);
+        }
+        return Response::json(['usuarios' => \App\Services\AppPreview::users()]);
+    }
+
+    public function previewStart(Request $request): Response
+    {
+        try {
+            return Response::json(\App\Services\AppPreview::start((string) $request->input('user_uuid', '')));
+        } catch (\App\Core\UserError $e) {
+            return Response::jsonError($e->getMessage(), 422);
+        }
+    }
+
+    public function previewStop(Request $request): Response
+    {
+        \App\Services\AppPreview::stop((string) $request->input('user_uuid', '') ?: null);
+        return Response::json(['stopped' => true]);
     }
 
     private static function respond(array $result): Response

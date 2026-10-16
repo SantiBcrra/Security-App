@@ -317,6 +317,9 @@ return static function (Router $r): void {
         $r->group('', [new RequireApiUser(), new ApiRateLimit(300)], static function (Router $r): void {
             $r->post('/auth/logout', [ApiAuthController::class, 'logout']);
             $r->get('/me', [ApiAuthController::class, 'me']);
+            $r->get('/preview/users', [ApiAuthController::class, 'previewUsers']);
+            $r->post('/preview/start', [ApiAuthController::class, 'previewStart']);
+            $r->post('/preview/stop', [ApiAuthController::class, 'previewStop']);
             $r->get('/consent', [ApiAppController::class, 'consent']);
             $r->post('/consent', [ApiAppController::class, 'accept']);
             $r->post('/panic', [ApiAppController::class, 'panic']);

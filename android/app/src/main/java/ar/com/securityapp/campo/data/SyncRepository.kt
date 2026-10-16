@@ -18,6 +18,7 @@ class SyncRepository(private val context: android.content.Context, private val a
     data class Full(val sent: Int, val failed: Int, val pulled: Result)
 
     suspend fun syncAll(): Full {
+        if (api.previewToken != null) return Full(0, 0, pull()) // "Ver como": solo lectura, la cola nunca sale
         queueTracks()
         // Estado del celular (batería, GPS, pendientes) con cada sincronización: el panel lo muestra y avisa si hay problemas.
         runCatching { outbox.replace("device.status", ar.com.securityapp.campo.tracking.DeviceState.read(context, db).toJson()) }
