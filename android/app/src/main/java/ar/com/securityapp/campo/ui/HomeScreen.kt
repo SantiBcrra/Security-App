@@ -66,6 +66,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ar.com.securityapp.campo.data.Me
@@ -272,9 +273,9 @@ private fun HomeTopBar(vm: SessionViewModel, me: Me, unread: Int, syncing: Boole
 /** Navegación rápida inspirada en billeteras móviles: el QR queda siempre al alcance del pulgar. */
 @Composable
 private fun HomeBottomBar(selected: String, onHome: () -> Unit, onActivity: () -> Unit, onScan: () -> Unit, onNotices: () -> Unit, onMore: () -> Unit) {
-    Box(Modifier.fillMaxWidth().height(94.dp).background(Color.White).zIndex(10f)) {
+    Box(Modifier.fillMaxWidth().height(80.dp).background(Color.White).zIndex(10f)) {
         NavigationBar(containerColor = Color.White, tonalElevation = 6.dp,
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp).align(Alignment.BottomCenter).zIndex(1f)) {
+            modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).zIndex(1f)) {
             NavigationBarItem(selected = selected == "home", onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { Text("Inicio") })
             NavigationBarItem(selected = selected == "activity", onClick = onActivity, icon = { Icon(Icons.Filled.CheckCircle, "Actividad") }, label = { Text("Actividad") })
             Spacer(Modifier.weight(1f))
@@ -282,7 +283,7 @@ private fun HomeBottomBar(selected: String, onHome: () -> Unit, onActivity: () -
             NavigationBarItem(selected = selected == "more", onClick = onMore, icon = { Icon(Icons.Filled.Menu, "Más") }, label = { Text("Más") })
         }
         Surface(
-            modifier = Modifier.align(Alignment.TopCenter).size(70.dp).zIndex(2f),
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = (-18).dp).size(72.dp).zIndex(2f),
             shape = androidx.compose.foundation.shape.CircleShape,
             color = Color.White,
             shadowElevation = 5.dp,
