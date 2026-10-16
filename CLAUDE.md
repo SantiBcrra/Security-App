@@ -101,7 +101,11 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Alcance: `ObservationService::scope()` / `canView()` (propios, sectores + lo propio, todo).
 - Anónimo (setting `observaciones.anonimo_habilitado`): sin autor, sin auditoría que lo vincule.
 - Riesgo inminente: evento `imminent_alert` + `ObservationAlerts::imminent()` (Etapa 7 envía avisos).
-- Mapas: Leaflet local (`public/assets/vendor/leaflet`) + tiles de OpenStreetMap (permitidos en la CSP).
+- Mapas: Leaflet local (`public/assets/vendor/leaflet`) + `public/assets/js/maps.js` (`SAMaps.base(map, 'satellite'|'map')`: capas
+  "Satélite" = Esri World Imagery + calles y lugares, y "Mapa" = OpenStreetMap, con selector; recuerda la elegida en el navegador).
+  CSP: `*.tile.openstreetmap.org` y `server.arcgisonline.com`. Rondas/pánico arrancan en satélite; observaciones en mapa.
+  ⚠️ Las imágenes de Esri sin clave sirven para desarrollo/uso bajo; para producción comercial sacar una clave gratuita de
+  ArcGIS Location Platform (o usar otro proveedor) y agregarla a las URL de `maps.js`.
 - "PDF" = página imprimible (`/imprimir`), sin librerías.
 - Datos demo SOLO en local (las pruebas e2e lo sobrescriben: hacer backup de `storage/demo-links.txt`): `php tools/seed-demo.php {empresa} http://localhost/securityapp`
   (aplica migraciones pendientes, solo agrega, links de activación en `storage/demo-links.txt`).

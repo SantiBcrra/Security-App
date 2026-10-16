@@ -83,13 +83,13 @@ $openAction = $old['action'] ?? null;
             </div>
             <?php if ($obs['lat'] !== null): ?>
                 <link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>">
-                <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script>
+                <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src=\"<?= e(asset('js/maps.js')) ?>\"></script>
                 <div id="obs-map" style="height: 220px"></div>
                 <script>
                 (function () {
                     var p = [<?= (float) $obs['lat'] ?>, <?= (float) $obs['lng'] ?>];
                     var map = L.map('obs-map', { scrollWheelZoom: false }).setView(p, 17);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+                    SAMaps.base(map, 'map');
                     L.circleMarker(p, { radius: 9, color: '#fff', weight: 2, fillColor: '<?= e($obs['severity_color'] ?: '#dc3545') ?>', fillOpacity: .9 }).addTo(map);
                     <?php if ($obs['gps_accuracy_m']): ?>L.circle(p, { radius: <?= (int) $obs['gps_accuracy_m'] ?>, weight: 1, fillOpacity: .08 }).addTo(map);<?php endif; ?>
                 })();

@@ -117,7 +117,8 @@ final class RoundsController
     public function pointForm(Request $request): Response
     {
         [$old, $errors] = Flash::pullInput();
-        return Response::html(View::render('panel/rounds/point', ['title' => 'Nuevo punto de ronda', 'sites' => Sites::options(), 'sectors' => Sectors::options(), 'old' => $old, 'errors' => $errors], 'layouts/app'));
+        return Response::html(View::render('panel/rounds/point', ['title' => 'Nuevo punto de ronda', 'sites' => Sites::options(), 'sectors' => Sectors::options(), 'old' => $old, 'errors' => $errors,
+            'points' => Patrols::points()], 'layouts/app'));
     }
 
     public function routeForm(Request $request): Response

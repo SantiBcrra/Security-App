@@ -60,14 +60,14 @@ $mapScans = array_values(array_filter(array_merge($round['route_points'] ?? [], 
         <?= $tracks ? count($tracks) . ' posición(es) del recorrido' . ($round['last_track_at'] ?? null ? ' · última ' . e(fecha($round['last_track_at'], 'H:i')) : '') : 'Sin recorrido registrado (solo los escaneos).' ?>
         · Línea = recorrido del celular · círculos = escaneos (verde en el lugar, rojo fuera de radio).
     </div>
-    <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script>
+    <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src=\"<?= e(asset('js/maps.js')) ?>\"></script>
     <script>
     (function () {
         var tracks = <?= json_encode(array_map(fn ($t) => [(float) $t['lat'], (float) $t['lng']], $tracks)) ?>;
         var scans = <?= json_encode(array_map(fn ($s) => ['lat' => (float) $s['lat'], 'lng' => (float) $s['lng'], 'ok' => (int) ($s['within_radius'] ?? 0) === 1,
             'label' => ($s['code'] ?? $s['point_code'] ?? '') . ' · ' . ($s['name'] ?? $s['point_name'] ?? '')], $mapScans), JSON_UNESCAPED_UNICODE) ?>;
         var map = L.map('track-map', { scrollWheelZoom: false });
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+        SAMaps.base(map, 'satellite');
         var bounds = [];
         if (tracks.length) { L.polyline(tracks, { color: '#353c4f', weight: 4, opacity: .8 }).addTo(map); bounds = bounds.concat(tracks);
             L.circleMarker(tracks[tracks.length - 1], { radius: 7, color: '#f2c014', fillOpacity: 1 }).addTo(map).bindTooltip('Última posición'); }

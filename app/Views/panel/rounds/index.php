@@ -8,9 +8,13 @@
 <?php endforeach; ?>
 <div class="alert alert-info">Cada punto tiene un QR único. Imprimilo y colocálo en el lugar de control. La app Android registra hora, GPS y distancia.</div>
 <h2 class="h5">Puntos de ronda</h2>
-<?php if ($points): ?><link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>"><div id="round-map" style="height:280px" class="rounded border mb-3"></div><script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script>
-const roundPoints=<?= json_encode(array_map(fn($p)=>['name'=>$p['name'],'code'=>$p['code'],'lat'=>(float)$p['lat'],'lng'=>(float)$p['lng']],$points),JSON_UNESCAPED_UNICODE) ?>;
-const map=L.map('round-map'); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(map); const bounds=[]; roundPoints.forEach(p=>{const el=document.createElement('div');el.textContent=p.code+' · '+p.name;L.marker([p.lat,p.lng]).addTo(map).bindPopup(el);bounds.push([p.lat,p.lng]);}); map.fitBounds(bounds,{padding:[20,20]});
+<?php if ($points): ?><link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>"><div id="round-map" style="height:420px" class="rounded border mb-3"></div><script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src=\"<?= e(asset('js/maps.js')) ?>\"></script><script>
+const roundPoints=<?= json_encode(array_map(fn($p)=>['name'=>$p['name'],'code'=>$p['code'],'lat'=>(float)$p['lat'],'lng'=>(float)$p['lng'],'radius'=>(int)$p['radius_m'],'critical'=>(bool)$p['is_critical']],$points),JSON_UNESCAPED_UNICODE) ?>;
+const map=L.map('round-map'); SAMaps.base(map, 'satellite'); const bounds=[];
+roundPoints.forEach(p=>{const el=document.createElement('div');el.textContent=p.code+' · '+p.name+' (radio '+p.radius+' m)';
+  L.circle([p.lat,p.lng],{radius:p.radius,color:p.critical?'#dc3545':'#f2c014',weight:2,fillOpacity:0.15}).addTo(map);
+  L.marker([p.lat,p.lng]).addTo(map).bindPopup(el).bindTooltip(p.code,{permanent:true,direction:'top',offset:[0,-30]});bounds.push([p.lat,p.lng]);});
+map.fitBounds(bounds,{padding:[30,30],maxZoom:18});
 </script><?php endif; ?>
 <div class="table-responsive mb-4"><table class="table table-sm align-middle"><thead><tr><th>Código</th><th>Nombre</th><th>Ubicación</th><th>Radio</th><th></th></tr></thead><tbody>
 <?php foreach ($points as $p): ?><tr><td><code><?= e($p['code']) ?></code></td><td><?= e($p['name']) ?><?= $p['is_critical'] ? ' ⚠' : '' ?></td><td><?= e($p['sector_name'] ?: $p['site_name'] ?: '—') ?></td><td><?= e($p['radius_m']) ?> m</td><td><a class="btn btn-outline-secondary btn-sm" target="_blank" href="<?= e(url('/panel/rondas/puntos/' . $p['uuid'] . '/qr')) ?>">Imprimir QR</a></td></tr><?php endforeach; ?>

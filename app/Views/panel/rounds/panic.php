@@ -17,13 +17,13 @@
             <div id="panic-map" style="height: 380px" class="rounded border mb-2"></div>
             <div class="small mb-3"><a target="_blank" rel="noopener" href="https://maps.google.com/?q=<?= e($p['lat']) ?>,<?= e($p['lng']) ?>">Abrir en Google Maps</a>
                 <?= $p['accuracy_m'] !== null ? ' · precisión ±' . e((int) $p['accuracy_m']) . ' m' : '' ?></div>
-            <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script>
+            <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src=\"<?= e(asset('js/maps.js')) ?>\"></script>
             <script>
             (function () {
                 var at = [<?= (float) $p['lat'] ?>, <?= (float) $p['lng'] ?>];
                 var tracks = <?= json_encode(array_map(fn ($t) => [(float) $t['lat'], (float) $t['lng']], $tracks)) ?>;
                 var map = L.map('panic-map').setView(at, 17);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+                SAMaps.base(map, 'satellite');
                 if (tracks.length) L.polyline(tracks, { color: '#353c4f', weight: 4, opacity: .6 }).addTo(map);
                 L.circle(at, { radius: <?= max(10, (int) ($p['accuracy_m'] ?? 10)) ?>, color: '#dc3545', fillOpacity: .15 }).addTo(map);
                 L.circleMarker(at, { radius: 10, color: '#dc3545', fillOpacity: 1 }).addTo(map).bindTooltip('Pánico', { permanent: true });
