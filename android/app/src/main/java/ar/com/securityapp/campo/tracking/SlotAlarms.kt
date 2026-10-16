@@ -15,7 +15,7 @@ import java.time.format.DateTimeFormatter
 
 /**
  * Recordatorios de las rondas programadas, sin señal también (alarmas del sistema, aunque la app esté cerrada):
- * a la hora ("Es hora de la ronda…") y al terminar la gracia si no empezó ("Todavía no empezaste…"). Se reprograman en
+ * cinco minutos antes, a la hora ("Es hora de la ronda…") y al terminar la gracia si no empezó ("Todavía no empezaste…"). Se reprograman en
  * cada sincronización y al prender el celular. Al sonar se revisa si ya empezó: si empezó, no avisa.
  */
 object SlotAlarms {
@@ -31,7 +31,11 @@ object SlotAlarms {
         val cfg = RoundAutomationSettings.from(c.prefs, c.api)
         if (cfg.guidance) {
             for (slot in c.rounds.slots(now).filter { it.dueAt.isBefore(now.plusSeconds(36 * 3600)) }) {
-                for ((kind, at) in listOf("due" to slot.dueAt, "late" to slot.dueAt.plusSeconds(slot.graceMinutes * 60L))) {
+                for ((kind, at) in listOf(
+                    "pre" to slot.dueAt.minusSeconds(5 * 60L),
+                    "due" to slot.dueAt,
+                    "late" to slot.dueAt.plusSeconds(slot.graceMinutes * 60L),
+                )) {
                     if (!at.isAfter(now)) continue
                     val key = "${slot.uuid}:$kind"
                     wanted += key
@@ -58,7 +62,10 @@ object SlotAlarms {
         if (c.rounds.active()?.routeUuid == slot.routeUuid) return
         val route = c.rounds.route(slot.routeUuid)?.name ?: "la ronda"
         val at = HOUR.format(slot.dueAt)
-        if (kind == "late") {
+        if (kind == "pre") {
+            Notifs.show(context, "slot:$slotUuid:pre", "En 5 minutos: ronda $route",
+                "Prepará el celular y acercate al primer punto. Podés tocar la ronda desde el inicio o escanear directamente el primer QR/NFC.", critical = false, openAvisos = false)
+        } else if (kind == "late") {
             Notifs.show(context, "slot:$slotUuid:late", "Todavía no empezaste la ronda de las $at",
                 "$route: empezala ya. Si no empieza antes de las ${HOUR.format(slot.deadlineAt)} queda como no realizada y se avisa a tu supervisor.",
                 critical = false, openAvisos = false)

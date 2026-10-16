@@ -30,6 +30,7 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
 - [x] App Android: navegación inferior respeta el área de botones nativos del sistema y deja el espacio inferior negro
 - [x] App Android: advertencia visible y bloqueo preventivo de acciones de turno en modo «Ver como» (solo lectura)
 - [x] App Android: mapa de rutas con Google Maps (puntos, recorrido y vista satelital opcional; clave local fuera del repositorio)
+- [x] App Android: recordatorio de rondas programadas 5 minutos antes, aviso a la hora, atraso y próxima ronda visible en el inicio
 
 ### Decisión sobre el cliente móvil
 

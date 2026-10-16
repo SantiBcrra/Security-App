@@ -112,6 +112,7 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     val unread by vm.unread.collectAsStateWithLifecycle()
     val openAvisos by vm.openAvisos.collectAsStateWithLifecycle()
     val openShift by vm.openShift.collectAsStateWithLifecycle()
+    val nextRound = vm.nextScheduledRound()
     androidx.compose.runtime.LaunchedEffect(openShift) {
         if (openShift) { openModule = null; showSettings = false; showShifts = false; vm.openShift.value = false }
     }
@@ -231,6 +232,11 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
             if (me.can("rondas", "crear")) {
                 item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.ui.shifts.ShiftCard(onOpen = { showShifts = true }) }
                 item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.panic.PanicButton(onTrigger = { vm.triggerPanic() }) }
+            }
+            if (nextRound != null && me.can("rondas")) {
+                item(span = { GridItemSpan(2) }) {
+                    ScheduledRoundCard(nextRound) { openModule = "rondas" }
+                }
             }
             item(span = { GridItemSpan(2) }) { SyncCard(sync) }
             item(span = { GridItemSpan(2) }) {
@@ -363,6 +369,27 @@ private fun SyncCard(sync: SyncState) {
             if (sync.pending > 0) Text("${sync.pending} envío(s) esperando señal", style = MaterialTheme.typography.bodySmall,
                 color = BrandDark, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
             sync.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = if (sync.error) Danger else Muted, modifier = Modifier.padding(top = 4.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun ScheduledRoundCard(round: SessionViewModel.ScheduledRound, onOpen: () -> Unit) {
+    val now = java.time.Instant.now()
+    val minutes = java.time.Duration.between(now, round.slot.dueAt).toMinutes()
+    val whenText = when {
+        minutes <= 0 -> "Es la hora de empezar"
+        minutes < 60 -> "Empieza en $minutes min"
+        else -> "Empieza en ${minutes / 60} h ${minutes % 60} min"
+    }
+    Card(Modifier.fillMaxWidth().clickable(onClick = onOpen), colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF3CF))) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Próxima ronda", style = MaterialTheme.typography.labelLarge, color = BrandDark)
+                Text(round.routeName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(whenText, style = MaterialTheme.typography.bodyMedium, color = BrandDark)
+            }
+            Button(onOpen, colors = ButtonDefaults.buttonColors(containerColor = Brand)) { Text("Preparar") }
         }
     }
 }
