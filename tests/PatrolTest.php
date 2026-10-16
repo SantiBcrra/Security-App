@@ -419,6 +419,23 @@ return [
             Settings::get('rondas.automatizaciones'), Settings::get('rondas.sin_progreso_minutos')], 'el general no toca rondas');
     },
 
+    'rondas: el primer escaneo puede iniciar y registrar la ronda en una sola operación' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $round = Uuid::v4();
+        $scan = Uuid::v4();
+        $now = gmdate('Y-m-d\TH:i:s\Z');
+        $operation = $op('round.scan_auto', ['round_uuid' => $round, 'uuid' => $scan, 'point_uuid' => ($st['uuid'])($st['p1']),
+            'lat' => -34.6037, 'lng' => -58.3816, 'accuracy_m' => 5, 'method' => 'nfc', 'started_at_device' => $now, 'scanned_at_device' => $now]);
+        $result = Push::run([$operation])[0];
+        assert_same('ok', $result['status'], json_encode($result));
+        assert_same(true, $result['data']['auto_started']);
+        assert_same('en_curso', Patrols::round($round)['status']);
+        assert_same('nfc', DB::tenant()->query('SELECT method FROM patrol_scans WHERE uuid = ' . DB::tenant()->quote($scan))->fetchColumn());
+        assert_same($result, Push::run([$operation])[0], 'reintentar el op_id no duplica');
+    },
+
     'automatizaciones: sin progreso, atrasada y abandonada (primero la app, después SyH; una vez cada una)' => function () use ($setup, &$st, $op) {
         $setup();
         Tenant::activate($st['a']);

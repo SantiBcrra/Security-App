@@ -19,6 +19,8 @@ Centralizar la configuración de las automatizaciones que usarán el panel, el c
 
 La alerta de fuera de perímetro ya utiliza la regla `guard.off_site`; sus destinatarios y canales se editan en la misma pantalla de notificaciones.
 
+La app puede iniciar una ronda al leer el primer QR/NFC. Si hay una sola ruta asignada que contiene el punto, la usa; si hay varias, pide elegir; si no hay ninguna, crea una ronda libre. `round.scan_auto` registra inicio y primer escaneo como una única operación idempotente.
+
 ## Pantalla y contrato
 
 - Panel: `/panel/configuracion/notificaciones`, tarjeta “Automatizaciones de rondas”.
@@ -73,13 +75,13 @@ lógicas, y registrar las no realizadas.
   vigencia desde/hasta, fechas excluidas (feriados), guardias a cargo (si no se eligen, los asignados a la ruta), gracia y
   demora máxima para empezar tarde (con intervalo, no puede superar el intervalo).
 - **Cada ronda programada** queda registrada: pendiente → realizada a tiempo (empezó hasta la hora ± gracia) / realizada tarde
-  / no realizada (no empezó antes de la demora máxima). Nunca se inicia sola: la empieza el guardia.
+  / no realizada (no empezó antes de la demora máxima). La inicia el guardia tocando el botón o escaneando el primer punto.
 - **Avisos**: al guardia (app, alarmas del sistema aunque esté cerrada) a la hora y al terminar la gracia; a SyH y
   supervisores a la hora + 2×gracia si no empezó (`guard.round_not_started`) y al quedar no realizada (`guard.round_missed`).
 - **App**: "Próximas rondas programadas" (hora, estado, Iniciar) y guía al próximo punto durante la ronda (distancia, rumbo y
   "Cómo llegar" con el mapa del celular).
 - **Panel**: `/panel/rondas/programacion` — rondas del día con su estado y % a tiempo, navegación por fecha, programaciones con
-  editar / pausar. Editar o pausar recalcula solo lo futuro: lo pasado queda como registro.
+  editar / pausar. Editar o pausar recalcula solo lo futuro: lo pasado queda como registro. La ronda también puede iniciarse al escanear el primer QR/NFC, según la resolución automática de ruta documentada arriba.
 
 ## Fase 6 — hecha: resúmenes y métricas
 

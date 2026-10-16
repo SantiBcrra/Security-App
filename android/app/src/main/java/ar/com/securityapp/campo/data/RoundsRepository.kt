@@ -80,6 +80,8 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
 
     fun route(uuid: String?): PatrolRoute? = uuid?.let { u -> routes().firstOrNull { it.uuid == u } }
 
+    fun routesForPoint(pointUuid: String): List<PatrolRoute> = routes().filter { pointUuid in it.points }
+
     /** Rondas programadas que todavía se pueden hacer (las vencidas o ya hechas las saca el servidor en el próximo pull). */
     fun slots(now: Instant = Instant.now()): List<PatrolSlot> = db.all("patrol_slots").mapNotNull { parse(it) }.mapNotNull { o ->
         runCatching {
@@ -138,6 +140,33 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
         val expectedUuid = round.pointOrder?.firstOrNull { p -> done.none { it.pointUuid == p } }
         val expected = expectedUuid?.takeIf { it != pointUuid && pointUuid in round.pointOrder }?.let { points()[it] }
         return ScanResult.Ok(point, fix != null, if (route == null) null else remaining, expected)
+    }
+
+    /** Inicia una ronda al leer el primer QR/NFC y guarda inicio + primer escaneo en una sola operación. */
+    fun autoStartAndScan(raw: String, fix: Fix?, routeUuid: String?, method: String = "qr"): ScanResult {
+        val pointUuid = pointUuidFrom(raw) ?: return ScanResult.UnknownQr
+        val point = points()[pointUuid] ?: return ScanResult.UnknownQr
+        val route = route(routeUuid)
+        if (route != null && pointUuid !in route.points) return ScanResult.UnknownQr
+        val roundUuid = UUID.randomUUID().toString()
+        val scanUuid = UUID.randomUUID().toString()
+        val now = Instant.now().toString()
+        val order = when (route?.orderMode) { "azar" -> route.points.shuffled(); "secuencial" -> route.points; else -> null }
+        val roundRow = buildJsonObject {
+            put("uuid", roundUuid); put("route_uuid", routeUuid); put("mine", true); put("status", "en_curso"); put("started_at", now); put("local", true)
+            order?.let { o -> put("point_order", JsonArray(o.map { JsonPrimitive(it) })) }
+        }
+        db.upsert("patrol_rounds", listOf(roundUuid to roundRow.toString()))
+        val data = buildJsonObject {
+            put("uuid", scanUuid); put("round_uuid", roundUuid); put("route_uuid", routeUuid); put("point_uuid", pointUuid)
+            put("started_at_device", now); put("scanned_at_device", now); put("method", method)
+            order?.let { o -> put("point_order", JsonArray(o.map { JsonPrimitive(it) })) }
+            fix?.let { put("lat", it.lat); put("lng", it.lng); put("accuracy_m", it.accuracyM); if (it.mock) put("mock", 1) }
+        }
+        db.upsert("patrol_scans", listOf(scanUuid to buildJsonObject { data.forEach { (k, v) -> put(k, v) }; put("local", true) }.toString()))
+        outbox.enqueue("round.scan_auto", data)
+        val remaining = route?.points?.count { it != pointUuid }
+        return ScanResult.Ok(point, fix != null, remaining)
     }
 
     /** Los puntos de la ruta que faltan quedan como salteados (el servidor marca la ronda "incompleta"). */

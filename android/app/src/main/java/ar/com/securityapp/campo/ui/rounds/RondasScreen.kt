@@ -67,6 +67,7 @@ private fun hour(iso: String?): String = iso?.let { runCatching { HOUR.format(In
 fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: RoundsViewModel = viewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val scan by vm.scan.collectAsStateWithLifecycle()
+    val autoRoutes by vm.autoRoutes.collectAsStateWithLifecycle()
     var scanning by remember { mutableStateOf(false) }
     var confirmFinish by remember { mutableStateOf(false) }
     var simulate by remember { mutableStateOf(false) } // solo en la versión de prueba (emulador sin cámara apuntable)
@@ -86,7 +87,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: Round
         return
     }
     // Ronda en curso: acercar el celular a la etiqueta NFC del punto marca igual que el QR.
-    ar.com.securityapp.campo.nfc.NfcListener(enabled = ui.active != null && !scanning && scan == null) { tag ->
+    ar.com.securityapp.campo.nfc.NfcListener(enabled = !scanning && scan == null && autoRoutes.isEmpty()) { tag ->
         val raw = ar.com.securityapp.campo.nfc.NfcTags.read(tag)
         if (raw == null) {
             ScanFeedback.play(context, ScanFeedback.Kind.ERROR)
@@ -128,6 +129,10 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: Round
                     items(ui.freeScans, key = { it.uuid }) { p -> Text("✓ ${p.code} · ${p.name}", Modifier.padding(start = 4.dp)) }
                 }
             } else {
+                item {
+                    OutlinedButton({ scanning = true }, Modifier.fillMaxWidth(), enabled = !ui.busy) { Text("Escanear primer punto (inicia la ronda)") }
+                    Text("Si el punto pertenece a una sola ruta asignada, se inicia esa ruta. Si no, se crea una ronda libre.", style = MaterialTheme.typography.bodySmall, color = Muted)
+                }
                 if (ui.slots.isNotEmpty()) {
                     item { Text("Próximas rondas programadas", style = MaterialTheme.typography.titleSmall, color = Muted) }
                     items(ui.slots, key = { "slot-${it.uuid}" }) { slot ->
@@ -211,6 +216,13 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: Round
     }
     nfcMessage?.let { m -> AlertDialog({ nfcMessage = null }, confirmButton = { TextButton({ nfcMessage = null }) { Text("Entendido") } }, text = { Text(m) }) }
     ui.locationMessage?.let { m -> AlertDialog(onDismissRequest = vm::clearLocationMessage, confirmButton = { TextButton(vm::clearLocationMessage) { Text("Entendido") } }, text = { Text(m) }) }
+    if (autoRoutes.isNotEmpty()) {
+        AlertDialog(onDismissRequest = vm::cancelAutoRouteChoice, title = { Text("Elegí la ruta") },
+            text = { Column { Text("Este punto pertenece a varias rutas asignadas:", style = MaterialTheme.typography.bodyMedium); autoRoutes.forEach { route ->
+                TextButton({ vm.chooseAutoRoute(route) }, Modifier.fillMaxWidth()) { Text(route.name, modifier = Modifier.fillMaxWidth()) }
+            } } },
+            confirmButton = { TextButton(vm::cancelAutoRouteChoice) { Text("Cancelar") } })
+    }
     locatingPoint?.let { point ->
         AlertDialog(onDismissRequest = { locatingPoint = null }, title = { Text("¿Tomar ubicación?") },
             text = { Text("Parate junto a ${point.code} · ${point.name} y mantené el celular quieto unos segundos. Se reemplazarán las coordenadas actuales.") },

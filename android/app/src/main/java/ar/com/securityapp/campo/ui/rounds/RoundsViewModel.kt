@@ -42,6 +42,8 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
     /** Resultado del último escaneo para mostrar (y pedir confirmación si el punto no es de la ruta). */
     private val _scan = MutableStateFlow<ScanResult?>(null)
     val scan: StateFlow<ScanResult?> = _scan
+    private val _autoRoutes = MutableStateFlow<List<PatrolRoute>>(emptyList())
+    val autoRoutes: StateFlow<List<PatrolRoute>> = _autoRoutes
     private var pendingRaw: String? = null
     private var pendingMethod = "qr"
 
@@ -96,6 +98,27 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
     /** @param method "qr" o "nfc" (queda registrado en el servidor) */
     fun onQr(raw: String, allowOutsideRoute: Boolean = false, method: String = "qr") = viewModelScope.launch {
         _ui.value = _ui.value.copy(busy = true)
+        if (_ui.value.active == null && !allowOutsideRoute) {
+            val pointUuid = ar.com.securityapp.campo.data.RoundsRepository.pointUuidFrom(raw)
+            val point = pointUuid?.let { c.rounds.points()[it] }
+            if (point == null) {
+                _scan.value = ScanResult.UnknownQr
+                _ui.value = _ui.value.copy(busy = false)
+                return@launch
+            }
+            val candidates = c.rounds.routesForPoint(point.uuid)
+            if (candidates.size > 1) {
+                pendingRaw = raw; pendingMethod = method; _autoRoutes.value = candidates
+                _ui.value = _ui.value.copy(busy = false)
+                return@launch
+            }
+            val fix = locator.current()
+            _scan.value = c.rounds.autoStartAndScan(raw, fix, candidates.singleOrNull()?.uuid, method)
+            _autoRoutes.value = emptyList()
+            SyncWorker.now(getApplication())
+            reload()
+            return@launch
+        }
         val fix = locator.current()
         val result = c.rounds.scan(raw, fix, allowOutsideRoute, method)
         pendingRaw = if (result is ScanResult.NotInRoute) raw else null
@@ -116,6 +139,18 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
         _scan.value = null
         pendingRaw = null
     }
+
+    fun chooseAutoRoute(route: PatrolRoute) = viewModelScope.launch {
+        val raw = pendingRaw ?: return@launch
+        _autoRoutes.value = emptyList(); _ui.value = _ui.value.copy(busy = true)
+        val fix = locator.current()
+        _scan.value = c.rounds.autoStartAndScan(raw, fix, route.uuid, pendingMethod)
+        pendingRaw = null
+        SyncWorker.now(getApplication())
+        reload()
+    }
+
+    fun cancelAutoRouteChoice() { pendingRaw = null; _autoRoutes.value = emptyList() }
 
     fun finish() {
         val round = _ui.value.active ?: return

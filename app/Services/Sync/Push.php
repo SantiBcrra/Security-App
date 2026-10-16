@@ -20,7 +20,7 @@ use App\Services\UserAuth;
 final class Push
 {
     public const MAX_OPS = 50;
-    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'round.track', 'device.status', 'patrol.point_locate', 'guard.panic', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
+    public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.scan_auto', 'round.finish', 'round.track', 'device.status', 'patrol.point_locate', 'guard.panic', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
         'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close',
         'shift.start', 'shift.end', 'shift.exit', 'shift.exit_reason', 'shift.return', 'shift.track', 'absence.request'];
 
@@ -64,6 +64,7 @@ final class Push
                 'observation.transition' => self::transition($data),
                 'round.start'            => self::roundStart($data),
                 'round.scan'             => self::roundScan($data),
+                'round.scan_auto'        => self::roundScanAuto($data),
                 'round.finish'           => self::roundFinish($data),
                 'round.track'            => ['status' => 'ok', 'data' => \App\Services\GuardSafety::track($data)],
                 'patrol.point_locate'    => self::pointLocate($data),
@@ -166,6 +167,26 @@ final class Push
     {
         if (!UserAuth::can('rondas', 'crear')) return self::error('Tu rol no puede registrar rondas.');
         return ['status' => 'ok', 'data' => Patrols::scan($data)];
+    }
+
+    /** Inicia una ronda y registra su primer punto en una sola operación offline. */
+    private static function roundScanAuto(array $data): array
+    {
+        if (!UserAuth::can('rondas', 'crear')) return self::error('Tu rol no puede iniciar rondas.');
+        $roundUuid = (string) ($data['round_uuid'] ?? '');
+        if (!Uuid::isValid($roundUuid)) return self::error('Falta el identificador de la ronda.');
+        $round = Patrols::round($roundUuid);
+        if ($round === null) {
+            $round = Patrols::start(!empty($data['route_uuid']) ? (string) $data['route_uuid'] : null,
+                isset($data['lat']) ? (float) $data['lat'] : null, isset($data['lng']) ? (float) $data['lng'] : null,
+                $roundUuid, isset($data['started_at_device']) ? (string) $data['started_at_device'] : null,
+                is_array($data['point_order'] ?? null) ? $data['point_order'] : null);
+            \App\Services\PatrolPlanner::attach($round, !empty($data['slot_uuid']) ? (string) $data['slot_uuid'] : null);
+            \App\Services\Audit::tenant('patrol_round.auto_start', 'patrol_round', $roundUuid, null,
+                ['route_uuid' => $data['route_uuid'] ?? null, 'point_uuid' => $data['point_uuid'] ?? null, 'method' => $data['method'] ?? 'qr']);
+        }
+        $scan = Patrols::scan($data);
+        return ['status' => 'ok', 'data' => $scan + ['auto_started' => true]];
     }
 
     /** Pánico que quedó en la cola (sin señal o si falló el envío directo): no duplica si ya llegó por /panic. */

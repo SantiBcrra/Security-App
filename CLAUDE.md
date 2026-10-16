@@ -180,6 +180,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - `round.start` es idempotente también por uuid de la ronda; el escaneo valida punto activo, uuid y hora del
   celular (máx. 30 días atrás). La app Android recupera la ronda en curso (`mine` + `en_curso`) al reabrir y ofrece "Tomar GPS" para ubicar un punto parado en el lugar.
 - Automatizaciones (Fase 1): `/panel/configuracion/notificaciones` permite ajustar por empresa activación, tolerancias de progreso/inicio/atraso, batería baja, sincronización demorada y guía Android. Los valores viajan en `sync/pull.meta.automatizaciones_rondas`; los destinatarios y canales se mantienen en `notification_rules`. La tarjeta tiene su propio formulario (`section=rondas` en `saveSettings`): cada formulario de esa pantalla guarda solo sus campos. Detalle en `docs/design/automatizaciones-rondas.md`.
+- Inicio automático: si no hay ronda activa, el primer QR/NFC inicia una ruta única asignada; si el punto pertenece a varias, Android pide elegir; si no pertenece a ninguna, inicia una ronda libre. `round.scan_auto` guarda inicio y primer escaneo en una sola operación idempotente.
 - Automatizaciones fases 2 y 4 (`RoundAutomation::run()` en el cron + `tracking/RoundWatch.kt` en la app): primero avisa la
   app al guardia (local, sin señal también; revisa cada minuto desde `RoundTrackingService`) y si sigue igual después de
   OTRO plazo igual avisa el servidor a SyH + supervisores. Sin progreso: N min sin marcar (app) / 2×N (servidor
