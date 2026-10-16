@@ -7,6 +7,7 @@ import ar.com.securityapp.campo.BuildConfig
 import ar.com.securityapp.campo.CampoApp
 import ar.com.securityapp.campo.data.ApiException
 import ar.com.securityapp.campo.data.Me
+import ar.com.securityapp.campo.data.PatrolSlot
 import ar.com.securityapp.campo.data.OfflineException
 import ar.com.securityapp.campo.data.UpdateManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -109,6 +110,15 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { _unread.value = c.notifications.list().second }
         runCatching { c.notifications.notifyNew() }
     }
+
+    /** Próxima ronda pendiente para mostrarla en el inicio, sin exponer detalles técnicos. */
+    fun nextScheduledRound(): ScheduledRound? {
+        val slot = c.rounds.slots().firstOrNull() ?: return null
+        val route = c.rounds.route(slot.routeUuid) ?: return null
+        return ScheduledRound(slot, route.name)
+    }
+
+    data class ScheduledRound(val slot: PatrolSlot, val routeName: String)
 
     fun acceptConsent() = viewModelScope.launch {
         val s = _screen.value as? Screen.Consent ?: return@launch
