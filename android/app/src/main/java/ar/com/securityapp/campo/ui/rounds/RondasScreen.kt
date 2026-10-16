@@ -217,7 +217,8 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: Round
             confirmButton = { TextButton({ locatingPoint = null; vm.locatePoint(point) }) { Text("Guardar ubicación") } },
             dismissButton = { TextButton({ locatingPoint = null }) { Text("Cancelar") } })
     }
-    scan?.let { result -> ScanDialog(result, onConfirmOutside = { vm.confirmOutsideRoute() }, onDismiss = { vm.dismissScan() }, onScanAgain = { vm.dismissScan(); scanning = true }) }
+    scan?.let { result -> ScanDialog(result, onConfirmOutside = { vm.confirmOutsideRoute() }, onDismiss = { vm.dismissScan() }, onScanAgain = { vm.dismissScan(); scanning = true },
+        onFinish = { vm.dismissScan(); vm.finish() }) }
 }
 
 @Composable
@@ -277,14 +278,19 @@ private fun HistoryRow(r: PatrolRound, routeName: String?) {
 }
 
 @Composable
-private fun ScanDialog(result: ScanResult, onConfirmOutside: () -> Unit, onDismiss: () -> Unit, onScanAgain: () -> Unit) {
+private fun ScanDialog(result: ScanResult, onConfirmOutside: () -> Unit, onDismiss: () -> Unit, onScanAgain: () -> Unit, onFinish: () -> Unit) {
+    // Último punto de la ruta: la ronda se finaliza sola en unos segundos (salvo que elija seguir).
+    if (result is ScanResult.Ok && result.remaining == 0) {
+        AutoFinishDialog(result, onFinish = onFinish, onContinue = onDismiss)
+        return
+    }
     val (title, text) = when (result) {
         is ScanResult.Ok -> "✓ Registrado: ${result.point.name}" to buildString {
             append(if (result.hasGps) "Punto registrado con ubicación." else "Punto registrado SIN ubicación (activá el GPS).")
             result.expected?.let { append("\n⚠ Fuera de orden: tocaba ${it.code} · ${it.name}. Queda registrado así; seguí el orden de la lista.") }
             when (result.remaining) {
                 null -> {}
-                0 -> append("\nNo quedan puntos de la ruta: ya podés finalizar la ronda.")
+                0 -> append("\nNo quedan puntos de la ruta.")
                 else -> append("\nFaltan ${result.remaining} punto(s).")
             }
         }
@@ -391,3 +397,29 @@ private fun compass(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Str
     val deg = (Math.toDegrees(Math.atan2(y, x)) + 360) % 360
     return listOf("norte", "noreste", "este", "sureste", "sur", "suroeste", "oeste", "noroeste")[((deg + 22.5) / 45).toInt() % 8]
 }
+
+/** "Ronda completa": cuenta regresiva y se finaliza sola; "Seguir en la ronda" la deja abierta (finaliza a mano después). */
+@Composable
+private fun AutoFinishDialog(result: ScanResult.Ok, onFinish: () -> Unit, onContinue: () -> Unit) {
+    var seconds by remember { mutableStateOf(AUTO_FINISH_SECONDS) }
+    androidx.compose.runtime.LaunchedEffect(result.point.uuid) {
+        while (seconds > 0) { kotlinx.coroutines.delay(1_000); seconds-- }
+        onFinish()
+    }
+    AlertDialog(
+        onDismissRequest = {}, // tocar afuera no cancela: o finaliza, o elige seguir
+        title = { Text("✓ Ronda completa", color = Ok, fontWeight = FontWeight.Bold) },
+        text = {
+            Text(buildString {
+                append("Registrado: ${result.point.name}.")
+                result.expected?.let { append("\n⚠ Fuera de orden: tocaba ${it.code} · ${it.name}.") }
+                if (!result.hasGps) append("\nSin ubicación (activá el GPS).")
+                append("\n\nMarcaste todos los puntos. La ronda se finaliza en $seconds s.")
+            })
+        },
+        confirmButton = { TextButton(onFinish) { Text("Finalizar ahora", fontWeight = FontWeight.Bold) } },
+        dismissButton = { TextButton(onContinue) { Text("Seguir en la ronda") } },
+    )
+}
+
+private const val AUTO_FINISH_SECONDS = 10

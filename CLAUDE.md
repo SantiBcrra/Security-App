@@ -427,6 +427,8 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   (reader mode solo en la pantalla de la ronda) y `NfcWriterScreen` (permiso `rondas.editar`, opción de bloquear la etiqueta).
   `round.scan` lleva `method` qr | nfc → `patrol_scans.method` (tenant 0065), visible en el detalle de la ronda.
   Cada escaneo suena y vibra según el resultado (`ScanFeedback`: registrado, ruta completa, ya marcado, error / etiqueta vacía).
+  Al marcar el último punto de una ruta, la ronda se finaliza sola tras 10 s (`AutoFinishDialog`: "Finalizar ahora" / "Seguir en la
+  ronda"); las rondas libres y las que tienen puntos salteados se finalizan a mano.
 - Ubicación de cada marca (`Patrols::locationStatus`, columnas `patrol_scans.location_status` + `is_mock`, tenant 0066): ok (≤ radio)
   | impreciso (fuera, pero distancia − precisión ≤ radio: no se acusa por un GPS malo) | lejos | sin_gps | simulada (la app
   manda `mock: 1` si Android marca la ubicación como simulada; nunca vale). La marca NUNCA se rechaza y el guardia no se entera:
