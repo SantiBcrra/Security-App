@@ -501,7 +501,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   salir queda auditado (`app.preview_start|stop`); `/me.vista_previa`. En la app (`ApiClient.previewToken`): se exige no tener
   nada pendiente ni ronda en curso, se borra lo bajado y se baja como el otro usuario; se puede simular todo (nada sale:
   `syncAll` solo baja, el pánico no envía ni SMS); al salir (o si la app se cerró en el medio: `Prefs.previewActive`) se
-  borra y se vuelve a bajar lo propio. Banner "VISTA PREVIA" con "Salir" en el inicio; dentro de cada vista tambien aparece el aviso de solo lectura y las acciones de turno muestran una advertencia inmediata antes de bloquearse.
+  borra y se vuelve a bajar lo propio. Banner "VISTA PREVIA" con "Salir" en el inicio; dentro de cada vista tambien aparece el aviso de solo lectura y las acciones de turnos y rondas muestran una advertencia inmediata antes de bloquearse.
 - **`targetSdk` 35 a propósito**: apuntando a Android 17 (37) el sistema bloquea las conexiones a la red local y la app no
   llega al XAMPP de la Mac (10.0.2.2 o la IP por Wi-Fi). Sin Google Play no hay exigencia de subirlo.
 - Consentimiento (celular personal, Ley 25.326): `Consent::VERSION` + texto en el servidor, `user_consents` (tenant 0061),
