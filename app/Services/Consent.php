@@ -11,12 +11,15 @@ use App\Core\DB;
  */
 final class Consent
 {
-    public const VERSION = '2026-10';
+    public const VERSION = '2026-10-turnos';
 
     public static function text(): string
     {
         return "Esta app es la herramienta de trabajo de Seguridad e Higiene de tu empresa. Al usarla en tu celular:\n\n"
-            . "• Tu ubicación (GPS) se registra SOLO mientras hacés una ronda y al escanear un punto o reportar algo. Fuera de eso la app no te sigue.\n"
+            . "• Tu ubicación (GPS) se usa SOLO mientras estás en tu turno de trabajo (desde que tocás \"Empezar turno\" hasta \"Terminar turno\"), durante las rondas y al escanear un punto o reportar algo. Fuera del turno la app no te sigue. Mientras estás en turno vas a ver la notificación \"En turno\".\n"
+            . "• Durante el turno la app controla si estás dentro del predio. Si salís, te pregunta el motivo y se avisa a tu supervisor; solo mientras estás afuera se guarda tu recorrido.\n"
+            . "• Se registran la hora real de inicio y fin de cada turno (horas trabajadas). Podés ver tu historial en la app.\n"
+            . "• Las posiciones detalladas se borran a los " . ShiftService::retentionDays() . " días; las horas, salidas y motivos se conservan.\n"
             . "• Se guardan los reportes, fotos, firmas y escaneos que cargues, con la hora y el dispositivo.\n"
             . "• El botón de pánico envía tu ubicación por datos y, si no hay señal, por SMS a los números de emergencia de la empresa.\n"
             . "• Los datos los usa tu empleador solo para la gestión de seguridad e higiene y se guardan en sus servidores.\n"

@@ -25,7 +25,7 @@ use App\Services\Notify\Notifier;
 final class PatrolPlanner
 {
     public const DAYS = [1 => 'Lun', 2 => 'Mar', 3 => 'Mié', 4 => 'Jue', 5 => 'Vie', 6 => 'Sáb', 7 => 'Dom'];
-    public const STATUS = ['pendiente' => 'Pendiente', 'realizada' => 'Realizada', 'no_realizada' => 'No realizada'];
+    public const STATUS = ['pendiente' => 'Pendiente', 'realizada' => 'Realizada', 'no_realizada' => 'No realizada', 'justificada' => 'Justificada (guardia ausente)'];
 
     public static function defaultGrace(): int
     {
@@ -285,6 +285,13 @@ final class PatrolPlanner
             $q->execute([gmdate('Y-m-d H:i:s', $now)]);
             foreach ($q->fetchAll() as $slot) {
                 $due = strtotime($slot['due_at'] . ' UTC');
+                // Todos los guardias a cargo con ausencia aprobada: queda justificada, sin alarmas.
+                if (ShiftAbsences::allAbsentAt(self::assignees((int) $slot['schedule_id']), $slot['due_at'])) {
+                    DB::tenant()->prepare("UPDATE patrol_slots SET status = 'justificada', note = 'Guardias con ausencia aprobada', updated_at = UTC_TIMESTAMP() WHERE id = ? AND status = 'pendiente'")
+                        ->execute([(int) $slot['id']]);
+                    $out['justified'] = ($out['justified'] ?? 0) + 1;
+                    continue;
+                }
                 $row = $slot + ['guards' => self::guardNames((int) $slot['schedule_id'])];
                 if ($now >= strtotime($slot['deadline_at'] . ' UTC')) {
                     DB::tenant()->prepare("UPDATE patrol_slots SET status = 'no_realizada', updated_at = UTC_TIMESTAMP() WHERE id = ? AND status = 'pendiente'")
@@ -337,6 +344,7 @@ final class PatrolPlanner
             $slot['status'] === 'realizada' && (int) $slot['on_time'] === 1 => ['Realizada a tiempo', 'success'],
             $slot['status'] === 'realizada' => ['Realizada tarde', 'warning'],
             $slot['status'] === 'no_realizada' => ['No realizada', 'danger'],
+            $slot['status'] === 'justificada' => ['Justificada (guardia ausente)', 'info'],
             $now < strtotime($slot['due_at'] . ' UTC') - (int) $slot['grace_minutes'] * 60 => ['Pendiente', 'secondary'],
             $now <= strtotime($slot['due_at'] . ' UTC') + (int) $slot['grace_minutes'] * 60 => ['Es la hora', 'info'],
             default => ['Sin empezar (atrasada)', 'warning'],

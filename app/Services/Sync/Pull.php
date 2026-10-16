@@ -23,7 +23,7 @@ use App\Services\UserAuth;
  */
 final class Pull
 {
-    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'patrol_slots', 'actions', 'inspection_templates', 'inspection_schedule', 'incidents', 'work_permits', 'ppe_items', 'ppe_matrix', 'ppe_deliveries'];
+    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'patrol_slots', 'guard_shift_slots', 'guard_absences', 'actions', 'inspection_templates', 'inspection_schedule', 'incidents', 'work_permits', 'ppe_items', 'ppe_matrix', 'ppe_deliveries'];
     private const OVERLAP_SECONDS = 5;
     private const OBS_HISTORY_DAYS = 180;
 
@@ -57,6 +57,10 @@ final class Pull
                     // Rondas programadas: solo las pendientes a cargo del usuario (realizada, no realizada, anulada o ajena = baja).
                     || ($entity === 'patrol_slots' && ($row['status'] !== 'pendiente'
                         || !in_array((int) (UserAuth::user()['id'] ?? 0), \App\Services\PatrolPlanner::assignees((int) $row['schedule_id']), true)))
+                    // Turnos y ausencias: solo los propios (turnos pendientes o en curso; los terminados viven en "Mis turnos").
+                    || ($entity === 'guard_shift_slots' && ((int) $row['user_id'] !== (int) (UserAuth::user()['id'] ?? 0)
+                        || !in_array($row['status'], ['programado', 'en_curso', 'justificado'], true)))
+                    || ($entity === 'guard_absences' && (int) $row['user_id'] !== (int) (UserAuth::user()['id'] ?? 0))
                     // Incidentes: al celular solo llegan los que reportó el usuario (sin datos de salud).
                     || ($entity === 'incidents' && (int) $row['reported_by'] !== (int) (UserAuth::user()['id'] ?? 0))
                     // Permisos de trabajo: los que el usuario puede ver según su alcance (solicitante, autorizante o sector).
@@ -94,6 +98,7 @@ final class Pull
                     'bateria_baja_porcentaje' => (int) (Settings::get('rondas.bateria_baja_porcentaje', '20')),
                     'sin_sync_minutos' => (int) (Settings::get('rondas.sin_sync_minutos', '15')),
                     'guia_android' => Settings::bool('rondas.guia_android', true), 'gracia_minutos' => \App\Services\PatrolPlanner::defaultGrace()],
+                'turnos'            => \App\Services\ShiftService::meta(),
                 'gases'             => \App\Services\WorkPermitControls::gasLimits() + ['vigencia_min' => \App\Services\WorkPermitControls::MEASUREMENT_VALID_MINUTES],
                 'usuario'           => $user ? ['uuid' => $user['uuid'], 'nombre' => $user['name'], 'rol' => $user['role_name']] : null,
             ],
@@ -203,6 +208,12 @@ final class Pull
                 // Solo de los últimos 2 días en adelante (el historial está en la web).
                 return ["SELECT t.*, r.uuid AS route_uuid, sc.name AS schedule_name FROM patrol_slots t JOIN patrol_routes r ON r.id = t.route_id
                     JOIN patrol_schedules sc ON sc.id = t.schedule_id WHERE {$after} AND t.due_at > UTC_TIMESTAMP() - INTERVAL 2 DAY{$order}", $params];
+            case 'guard_shift_slots':
+                return ["SELECT t.*, s.uuid AS site_uuid, s.name AS site_name, s.lat AS site_lat, s.lng AS site_lng, s.geofence_radius_m AS site_radius,
+                        g.name AS shift_name, NULL AS open_exit_uuid FROM guard_shift_slots t JOIN sites s ON s.id = t.site_id
+                        LEFT JOIN guard_shifts g ON g.id = t.shift_id WHERE {$after} AND t.end_at > UTC_TIMESTAMP() - INTERVAL 1 DAY{$order}", $params];
+            case 'guard_absences':
+                return ["SELECT t.* FROM guard_absences t WHERE {$after} AND t.date_to >= CURDATE() - INTERVAL 60 DAY{$order}", $params];
             case 'patrol_points':
                 return ["SELECT t.* FROM patrol_points t WHERE {$after}{$order}", $params];
             case 'patrol_routes':
@@ -279,6 +290,10 @@ final class Pull
             'patrol_slots' => ['uuid' => $r['uuid'], 'route_uuid' => $r['route_uuid'], 'schedule' => $r['schedule_name'],
                 'due_at' => str_replace(' ', 'T', $r['due_at']) . 'Z', 'grace_minutes' => (int) $r['grace_minutes'],
                 'deadline_at' => str_replace(' ', 'T', $r['deadline_at']) . 'Z'],
+            'guard_shift_slots' => \App\Services\ShiftService::shape($r),
+            'guard_absences' => ['uuid' => $r['uuid'], 'date_from' => $r['date_from'], 'date_to' => $r['date_to'], 'type' => $r['type'],
+                'type_label' => \App\Services\ShiftAbsences::TYPES[$r['type']] ?? $r['type'], 'reason' => $r['reason'], 'status' => $r['status'],
+                'decision_note' => $r['decision_note']],
             'patrol_points' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'code' => $r['code'], 'description' => $r['description'], 'lat' => (float) $r['lat'], 'lng' => (float) $r['lng'], 'radius_m' => (int) $r['radius_m'], 'critical' => (bool) $r['is_critical']],
             'patrol_routes' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'description' => $r['description'], 'frequency' => $r['frequency'],
                 'expected_minutes' => $r['expected_minutes'] !== null ? (int) $r['expected_minutes'] : null, 'order_mode' => $r['order_mode'] ?? 'libre',

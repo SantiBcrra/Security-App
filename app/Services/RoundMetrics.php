@@ -76,7 +76,7 @@ final class RoundMetrics
         }
 
         // Rondas programadas del período (no realizadas = a cargo de todos los asignados)
-        $sw = ['sl.due_at >= ?', 'sl.due_at < ?', "sl.status <> 'anulada'"];
+        $sw = ['sl.due_at >= ?', 'sl.due_at < ?', "sl.status NOT IN ('anulada', 'justificada')"];
         $sp = [$from, $to];
         if (!empty($f['route_id'])) { $sw[] = 'sl.route_id = ?'; $sp[] = (int) $f['route_id']; }
         $q = $db->prepare('SELECT sl.status, sl.on_time, sl.schedule_id, ro.user_id FROM patrol_slots sl LEFT JOIN patrol_rounds ro ON ro.id = sl.round_id

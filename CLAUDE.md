@@ -214,6 +214,37 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   guardias|puntos|alertas` (permiso `rondas.exportar`, ";" + BOM, auditado). Resumen diario `guard.daily_summary` (tenant 0070,
   SyH + supervisores, app + email) del día anterior, después de las 8 h, una vez por día y solo si hubo actividad.
 
+## Turnos de guardias — diseño en `docs/design/turnos-guardias.md`
+- Decisiones del usuario: inicio **manual**, turnos **fijos y rotativos**, la salida del predio la **justifica el guardia**,
+  ausencias **aprobadas por el supervisor**, un guardia en **varios predios**, reporte de **horas reales**.
+- **Privacidad**: ubicación SOLO durante el turno (de "Empezar" a "Terminar" o cierre automático), con notificación fija
+  "En turno"; solo se guardan posiciones **fuera del predio**. Posiciones (turnos y rondas) se borran a los
+  `turnos.dias_posiciones` (90) días (`ShiftService::purge` en el cron). Consentimiento `Consent::VERSION = 2026-10-turnos`.
+- Tablas (tenant 0072): `guard_shifts` (programación: `pattern` weekly | rotation con `rotation_on/off` + `anchor_date`,
+  `start_time/end_time`, cruza la medianoche, `user_ids`), `guard_shift_slots` (un turno por guardia: programado | en_curso |
+  cumplido | ausente | justificado | anulado; inicio/fin reales, `start_inside`, `out_seconds`, `end_mode` manual|auto,
+  `unscheduled`, `replaces_slot_id`, `absence_id`), `guard_absences` (solicitada | aprobada | rechazada | cancelada, reemplazo),
+  `guard_closures` (días sin servicio por predio o todos), `guard_shift_exits` (motivo, avisó antes, vuelta, distancia máx.),
+  `guard_shift_positions`. `patrol_slots.status = justificada` (+ `note`) cuando todos los guardias a cargo están ausentes.
+- Servicios: `ShiftPlanner` (validar/guardar, `occurrences`, `worksOn`, `generate` de ayer a +6 días, idempotente, sin días sin
+  servicio; ausencia aprobada → nace `justificado`), `ShiftAbsences` (pedir, cargar aprobada, aprobar/rechazar con reemplazo,
+  cancelar, `apply` idempotente, `allAbsentAt`, días sin servicio), `ShiftService` (start/end/exit/exitReason/exitReturn/track,
+  `where` = radio del predio + `turnos.tolerancia_m` sin acusar a un GPS impreciso, `run` en el cron), `ShiftReport` (horas).
+- Avisos (`guard.shift_*`, `guard.absence_*`, migración 0072): sin empezar a hora + 2×tolerancia (`turnos.gracia_minutos` 15),
+  ausente al pasar el fin, cierre automático a fin + `turnos.cierre_auto_minutos` (120) con la hora programada, empezó fuera del
+  predio o con GPS falso, salida con motivo (informativo), salida sin motivo a `turnos.minutos_sin_motivo` (10) (alarma, una vez),
+  sin contacto `turnos.minutos_sin_contacto` (30) o GPS apagado 5 min, puesto sin cubrir (una vez por ausencia sin reemplazo),
+  pedido y respuesta de ausencia (al guardia: destinatario `reporter`).
+- Sync: push `shift.start` (uuid del turno o uno nuevo no programado con `site_uuid`; desde 60 min antes; uno a la vez),
+  `shift.end`, `shift.exit` (con o sin `reason`; `announced` = "Salgo por una emergencia"), `shift.exit_reason`, `shift.return`,
+  `shift.track` (posiciones fuera del predio), `absence.request`; pull `guard_shift_slots` (propios programado/en curso/justificado)
+  y `guard_absences` (propias) + `meta.turnos` (tolerancias y motivos). `GET /api/v1/shifts/mine` (historial y horas),
+  `POST /api/v1/absences/{uuid}/cancel`. El celular toma el área del predio de la entidad `sites` (puede cambiar).
+- Panel: pestaña **Turnos** en Rondas (`panel/shifts/_subnav`): Hoy `/panel/rondas/turnos`, Programación (+ "Predios: Ubicar en
+  el mapa" `/turnos/predio/{uuid}`), Ausencias y días sin servicio, Horas trabajadas (Reportes; CSV por guardia o turno);
+  detalle `/panel/rondas/turno/{uuid}` (línea de tiempo + mapa con el predio y las salidas). Ajustes: Configuración →
+  notificaciones → "Turnos de guardias" (`section=turnos`).
+
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`
   (solo inserción) y `action_attachments` (evidencia inmutable, fotos o PDF, por `cycle`).

@@ -48,6 +48,10 @@ final class NotificationRulesController
                 'round_battery' => Settings::get('rondas.bateria_baja_porcentaje', '20'),
                 'round_sync' => Settings::get('rondas.sin_sync_minutos', '15'),
                 'round_guidance' => Settings::get('rondas.guia_android', '1') === '1',
+                'shift' => ['activas' => \App\Services\ShiftService::enabled(), 'gracia' => \App\Services\ShiftPlanner::defaultGrace(),
+                    'tolerancia_m' => \App\Services\ShiftService::toleranceM(), 'minutos_fuera' => \App\Services\ShiftService::outMinutes(),
+                    'sin_motivo' => \App\Services\ShiftService::noReasonMinutes(), 'cierre' => \App\Services\ShiftService::autoEndMinutes(),
+                    'sin_contacto' => \App\Services\ShiftService::silentMinutes(), 'dias' => \App\Services\ShiftService::retentionDays()],
             ],
             'queue'    => NotificationQueue::recent(30),
             'stats'    => NotificationQueue::stats(),
@@ -114,6 +118,9 @@ final class NotificationRulesController
         if ($request->input('section') === 'rondas') {
             return $this->saveRoundAutomation($request);
         }
+        if ($request->input('section') === 'turnos') {
+            return $this->saveShifts($request);
+        }
         $minutes = (int) $request->input('escalation', 15);
         Settings::set('notif.escalation_minutes', (string) max(1, min(240, $minutes)));
         Settings::set('notif.digest_daily', $request->input('daily') ? '1' : '0');
@@ -128,6 +135,24 @@ final class NotificationRulesController
             'acciones_aviso_dias' => Settings::get('acciones.aviso_dias'), 'acciones_escalar_dias' => Settings::get('acciones.escalar_dias'),
             'acciones_dias_verificacion' => Settings::get('acciones.dias_verificacion')]);
         Flash::add('success', 'Configuración guardada.');
+        return Response::redirect('/panel/configuracion/notificaciones');
+    }
+
+    /** Tarjeta "Turnos de guardias" (formulario propio). */
+    private function saveShifts(Request $request): Response
+    {
+        $int = fn (string $key, int $default, int $min, int $max): string => (string) max($min, min($max, (int) $request->input($key, $default)));
+        Settings::set('turnos.automatizaciones', $request->input('shift_automation') ? '1' : '0');
+        Settings::set('turnos.gracia_minutos', $int('shift_grace', 15, 1, 120));
+        Settings::set('turnos.tolerancia_m', $int('shift_tolerance', 100, 0, 2000));
+        Settings::set('turnos.minutos_fuera', $int('shift_out', 3, 1, 60));
+        Settings::set('turnos.minutos_sin_motivo', $int('shift_no_reason', 10, 1, 240));
+        Settings::set('turnos.cierre_auto_minutos', $int('shift_auto_end', 120, 15, 720));
+        Settings::set('turnos.minutos_sin_contacto', $int('shift_silent', 30, 10, 720));
+        Settings::set('turnos.dias_posiciones', $int('shift_days', 90, 7, 3650));
+        $keys = ['automatizaciones', 'gracia_minutos', 'tolerancia_m', 'minutos_fuera', 'minutos_sin_motivo', 'cierre_auto_minutos', 'minutos_sin_contacto', 'dias_posiciones'];
+        Audit::tenant('settings.update', 'settings', null, null, array_combine(array_map(fn ($k) => "turnos_{$k}", $keys), array_map(fn ($k) => Settings::get("turnos.{$k}"), $keys)));
+        Flash::add('success', 'Ajustes de turnos guardados.');
         return Response::redirect('/panel/configuracion/notificaciones');
     }
 

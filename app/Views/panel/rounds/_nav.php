@@ -1,7 +1,7 @@
 <?php
 /**
  * Barra del módulo Rondas: siempre la misma en todas sus pantallas (pestañas + "Reportes ▾" + "+ Nuevo ▾"), y arriba los
- * pánicos sin atender. @var string $tab hoy | rondas | programacion | rutas | puntos | reportes @var ?string $subtitle
+ * pánicos sin atender. @var string $tab hoy | rondas | programacion | turnos | rutas | puntos | reportes @var ?string $subtitle
  */
 use App\Services\UserAuth;
 $tab ??= '';
@@ -12,6 +12,7 @@ $tabs = [
     'hoy'          => ['Hoy', '/panel/rondas'],
     'rondas'       => ['Rondas realizadas', '/panel/rondas/historial'],
     'programacion' => ['Programación', '/panel/rondas/programacion'],
+    'turnos'       => ['Turnos', '/panel/rondas/turnos'],
     'rutas'        => ['Rutas', '/panel/rondas/rutas'],
     'puntos'       => ['Puntos', '/panel/rondas/puntos'],
 ];
@@ -36,7 +37,10 @@ $tabs = [
                     <li><a class="dropdown-item" href="<?= e(url('/panel/rondas/rutas/nueva')) ?>"><strong>Ruta</strong><div class="small text-body-secondary">Puntos en orden + guardias asignados</div></a></li>
                 <?php endif; ?>
                 <?php if ($canEdit): ?>
-                    <li><a class="dropdown-item" href="<?= e(url('/panel/rondas/programacion/nueva')) ?>"><strong>Programación</strong><div class="small text-body-secondary">Horarios en que se tiene que hacer una ruta</div></a></li>
+                    <li><a class="dropdown-item" href="<?= e(url('/panel/rondas/programacion/nueva')) ?>"><strong>Programación de ronda</strong><div class="small text-body-secondary">Horarios en que se tiene que hacer una ruta</div></a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="<?= e(url('/panel/rondas/turnos/programacion/nuevo')) ?>"><strong>Turno de guardia</strong><div class="small text-body-secondary">Horario de trabajo fijo o rotativo (12×36, 2×2…)</div></a></li>
+                    <li><a class="dropdown-item" href="<?= e(url('/panel/rondas/turnos/ausencias#cargar')) ?>"><strong>Ausencia</strong><div class="small text-body-secondary">Franco, enfermedad, vacaciones… (sin alarmas ese día)</div></a></li>
                 <?php endif; ?>
             </ul>
         </div>
@@ -50,6 +54,7 @@ $tabs = [
         <a class="nav-link dropdown-toggle text-nowrap <?= $tab === 'reportes' ? 'active fw-semibold' : '' ?>" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">Reportes</a>
         <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="<?= e(url('/panel/rondas/metricas')) ?>"><strong>Métricas</strong><div class="small text-body-secondary">Cumplimiento por guardia y por punto, alertas, CSV</div></a></li>
+            <li><a class="dropdown-item" href="<?= e(url('/panel/rondas/turnos/horas')) ?>"><strong>Horas trabajadas</strong><div class="small text-body-secondary">Inicio y fin real de cada turno, tardanzas, tiempo fuera</div></a></li>
             <li><a class="dropdown-item" href="<?= e(url('/panel/rondas/marcas-fuera')) ?>"><strong>Marcas fuera de lugar</strong><div class="small text-body-secondary">Marcas lejos del punto o con GPS falso</div></a></li>
         </ul>
     </li>

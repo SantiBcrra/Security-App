@@ -120,7 +120,7 @@ return [
         UserAuth::setCurrent($st['user']);
         $ctl = new App\Controllers\Api\AppController();
         $c = json_decode($ctl->consent(new \App\Core\Request('GET', '/'))->body, true)['data'];
-        assert_true($c['version'] === Consent::VERSION && !$c['aceptado'] && str_contains($c['texto'], 'SOLO mientras hacés una ronda'));
+        assert_true($c['version'] === Consent::VERSION && !$c['aceptado'] && str_contains($c['texto'], 'SOLO mientras estás en tu turno'));
         $old = $ctl->accept(new \App\Core\Request('POST', '/', [], ['version' => '2020-01']));
         assert_same(409, $old->status, 'un texto viejo no vale');
         assert_same(200, $ctl->accept(new \App\Core\Request('POST', '/', [], ['version' => Consent::VERSION]))->status);

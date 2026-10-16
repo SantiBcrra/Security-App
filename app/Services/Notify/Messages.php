@@ -53,6 +53,16 @@ final class Messages
         'guard.round_not_started'  => 'Ronda programada sin empezar',
         'guard.round_missed'       => 'Ronda programada no realizada',
         'guard.daily_summary'      => 'Resumen diario de rondas',
+        'guard.shift_not_started'  => 'Turno de guardia sin empezar',
+        'guard.shift_missed'       => 'Guardia ausente (no vino al turno)',
+        'guard.shift_no_end'       => 'Turno sin marcar el fin (cerrado solo)',
+        'guard.shift_start_outside'=> 'Turno empezado fuera del predio',
+        'guard.shift_exit'         => 'Guardia salió del predio (con motivo)',
+        'guard.shift_exit_alarm'   => 'Guardia fuera del predio sin motivo',
+        'guard.shift_silent'       => 'Guardia en turno sin contacto o sin GPS',
+        'guard.shift_uncovered'    => 'Puesto sin cubrir (ausencia sin reemplazo)',
+        'guard.absence_requested'  => 'Pedido de ausencia de un guardia',
+        'guard.absence_decided'    => 'Respuesta a un pedido de ausencia',
         'ppe.due_soon' => 'EPP por vencer', 'ppe.overdue' => 'EPP vencido', 'ppe.missing' => 'EPP pendiente',
     ];
 
@@ -102,6 +112,9 @@ final class Messages
 
     private static function forGuard(string $event, array $r, array $extra): array
     {
+        if (str_starts_with($event, 'guard.shift_') || str_starts_with($event, 'guard.absence_')) {
+            return self::forShift($event, $r);
+        }
         if ($event === 'guard.no_progress') {
             $who = $r['user_name'] ?? 'Un guardia';
             return ['title' => 'Ronda sin marcar puntos · ' . $who,
@@ -190,6 +203,50 @@ final class Messages
 {$where}
 Llamalo y marcá la alerta como atendida.",
             'url' => '/panel/rondas/panico/' . $r['uuid'], 'critical' => true];
+    }
+
+    /** Turnos de guardias y ausencias (docs/design/turnos-guardias.md). */
+    private static function forShift(string $event, array $r): array
+    {
+        $who = $r['user_name'] ?? 'Un guardia';
+        $site = $r['site_name'] ?? '';
+        $url = isset($r['uuid']) && str_starts_with($event, 'guard.shift_') && $event !== 'guard.shift_uncovered'
+            ? '/panel/rondas/turno/' . $r['uuid'] : '/panel/rondas/turnos/ausencias';
+        $span = fn () => fecha($r['start_at'] ?? null, 'd/m H:i') . ' a ' . fecha($r['end_at'] ?? null, 'H:i');
+        $map = fn ($lat, $lng) => $lat !== null ? "\nUbicación: https://maps.google.com/?q={$lat},{$lng}" : '';
+        $far = function ($d): string {
+            $d = (float) $d;
+            return $d >= 1000 ? number_format($d / 1000, 1, ',', '.') . ' km' : (int) round($d) . ' m';
+        };
+        [$title, $body] = match ($event) {
+            'guard.shift_not_started' => ["Turno sin empezar · {$who}", "{$who} tenía que empezar el turno en {$site} a las " . fecha($r['start_at'], 'H:i')
+                . ' y todavía no lo empezó (' . (int) ($r['late_minutes'] ?? 0) . ' min tarde). Comunicate con él.'],
+            'guard.shift_missed' => ["Guardia ausente · {$who}", "{$who} no empezó el turno de {$site} ({$span()}): quedó como ausente sin justificar."],
+            'guard.shift_no_end' => ["Turno sin marcar el fin · {$who}", "{$who} no marcó el fin del turno de {$site} ({$span()}). Se cerró solo con la hora programada."],
+            'guard.shift_start_outside' => [($r['_kind'] ?? '') === 'simulada' ? "⚠ Turno empezado con GPS falso · {$who}" : "Turno empezado fuera del predio · {$who}",
+                ($r['_kind'] ?? '') === 'simulada'
+                    ? "{$who} empezó el turno de {$site} con una ubicación simulada (app que falsea el GPS): no se sabe dónde estaba."
+                    : "{$who} empezó el turno de {$site} a " . $far($r['distance_m'] ?? 0) . ' del predio.' . $map($r['start_lat'] ?? null, $r['start_lng'] ?? null)],
+            'guard.shift_exit' => ["Salió del predio · {$who}", "{$who} salió del predio {$site} a las " . fecha($r['exit']['left_at'] ?? null, 'H:i')
+                . '. Motivo: ' . ($r['reason_label'] ?? '') . (!empty($r['exit']['note']) ? ' — ' . $r['exit']['note'] : '') . '.'
+                . $map($r['exit']['lat'] ?? null, $r['exit']['lng'] ?? null)],
+            'guard.shift_exit_alarm' => ["⚠ Fuera del predio sin motivo · {$who}", "{$who} salió del predio {$site} a las " . fecha($r['exit']['left_at'] ?? null, 'H:i')
+                . ' y no indicó el motivo. Comunicate con él.' . $map($r['exit']['lat'] ?? null, $r['exit']['lng'] ?? null)],
+            'guard.shift_silent' => ($r['_kind'] ?? '') === 'gps'
+                ? ["GPS apagado en turno · {$who}", "{$who} está en turno en {$site} con la ubicación apagada desde las " . fecha($r['since'] ?? null, 'H:i') . '. Pedile que la active.']
+                : ["Guardia en turno sin contacto · {$who}", "{$who} está en turno en {$site} y su celular no se comunica desde las " . fecha($r['since'] ?? null, 'H:i')
+                    . '. Puede estar sin señal o con el celular apagado: comunicate con él.'],
+            'guard.shift_uncovered' => ["Puesto sin cubrir · {$site}", "{$who} tiene ausencia aprobada (" . ($r['type_label'] ?? '') . ') del ' . date('d/m', strtotime((string) $r['date_from']))
+                . ' al ' . date('d/m', strtotime((string) $r['date_to'])) . ' y no tiene reemplazo: ' . (int) ($r['slots'] ?? 0) . ' turno(s) sin cubrir desde el '
+                . fecha($r['first_start'] ?? null, 'd/m H:i') . '.'],
+            'guard.absence_requested' => ["Pedido de ausencia · {$who}", "{$who} pide ausencia (" . ($r['type_label'] ?? '') . ') del ' . date('d/m', strtotime((string) $r['date_from']))
+                . ' al ' . date('d/m', strtotime((string) $r['date_to'])) . (!empty($r['reason']) ? ': ' . $r['reason'] : '') . '. Aprobala o rechazala en Turnos → Ausencias.'],
+            'guard.absence_decided' => [$r['status'] === 'aprobada' ? 'Ausencia aprobada' : 'Ausencia rechazada',
+                'Tu pedido de ausencia del ' . date('d/m', strtotime((string) $r['date_from'])) . ' al ' . date('d/m', strtotime((string) $r['date_to'])) . ' fue '
+                . ($r['status'] === 'aprobada' ? 'aprobado' : 'rechazado') . (!empty($r['decision_note']) ? ': ' . $r['decision_note'] : '.')],
+            default => [self::EVENTS[$event] ?? $event, ''],
+        };
+        return ['title' => $title, 'body' => $body, 'url' => $url, 'critical' => false];
     }
 
     private static function forPpe(string $event, array $e, array $extra): array

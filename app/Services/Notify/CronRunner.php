@@ -49,6 +49,7 @@ final class CronRunner
                         'guards'    => \App\Services\GuardSafety::run(),
                         'rounds'    => \App\Services\RoundAutomation::run(),
                         'schedules' => \App\Services\PatrolPlanner::run(),
+                        'shifts'    => \App\Services\ShiftService::run(),
                         'round_summary' => \App\Services\RoundMetrics::dailySummary(),
                         'digests'   => Digests::run(),
                         'queue'     => QueueRunner::run($remaining, 100),

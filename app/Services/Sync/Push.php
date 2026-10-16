@@ -21,7 +21,8 @@ final class Push
 {
     public const MAX_OPS = 50;
     public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.finish', 'round.track', 'device.status', 'patrol.point_locate', 'guard.panic', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
-        'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close'];
+        'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close',
+        'shift.start', 'shift.end', 'shift.exit', 'shift.exit_reason', 'shift.return', 'shift.track', 'absence.request'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
     public static function run(array $operations): array
@@ -67,6 +68,13 @@ final class Push
                 'round.track'            => ['status' => 'ok', 'data' => \App\Services\GuardSafety::track($data)],
                 'patrol.point_locate'    => self::pointLocate($data),
                 'device.status'          => ['status' => 'ok', 'data' => \App\Services\DeviceStatus::store($data)],
+                'shift.start'            => ['status' => 'ok', 'data' => \App\Services\ShiftService::start($data)],
+                'shift.end'              => ['status' => 'ok', 'data' => \App\Services\ShiftService::end($data)],
+                'shift.exit'             => ['status' => 'ok', 'data' => \App\Services\ShiftService::exit($data)],
+                'shift.exit_reason'      => ['status' => 'ok', 'data' => \App\Services\ShiftService::exitReason($data)],
+                'shift.return'           => ['status' => 'ok', 'data' => \App\Services\ShiftService::exitReturn($data)],
+                'shift.track'            => ['status' => 'ok', 'data' => \App\Services\ShiftService::track($data)],
+                'absence.request'        => ['status' => 'ok', 'data' => self::absenceRequest($data)],
                 'guard.panic'            => self::panic($data),
                 'action.start'           => self::actionStep($data, 'tomar'),
                 'action.close'           => self::actionStep($data, 'cerrar'),
@@ -84,6 +92,14 @@ final class Push
             \App\Core\Logger::error('Sync push: falló una operación', ['type' => $type, 'error' => $e->getMessage()]);
             return self::error('Error del servidor al procesar la operación.');
         }
+    }
+
+    private static function absenceRequest(array $data): array
+    {
+        $uuid = strtolower((string) ($data['uuid'] ?? ''));
+        if (!Uuid::isValid($uuid)) return self::error('Falta el identificador del pedido.');
+        $a = \App\Services\ShiftAbsences::request($data, $uuid);
+        return ['uuid' => $a['uuid'], 'status' => $a['status']];
     }
 
     private static function create(array $data): array

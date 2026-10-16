@@ -154,3 +154,24 @@ $has = fn (string $type, ?string $value = null) => $form && (bool) array_filter(
         <?php if ($canEdit): ?><button class="btn btn-primary btn-sm mt-3">Guardar automatizaciones</button><?php endif; ?>
     </fieldset>
 </form>
+
+<form class="card shadow-sm mt-3" method="post" action="<?= e(url('/panel/configuracion/notificaciones/ajustes')) ?>" id="turnos">
+    <?= csrf_field() ?>
+    <input type="hidden" name="section" value="turnos">
+    <?php $sh = $settings['shift']; ?>
+    <div class="card-header"><strong>Turnos de guardias</strong> <span class="small text-body-secondary">· inicio y fin, salidas del predio, ausencias</span></div>
+    <fieldset class="card-body" <?= $canEdit ? '' : 'disabled' ?>>
+        <p class="text-body-secondary small">La ubicación se usa solo mientras el guardia está en turno. Primero le avisa el celular al guardia; si sigue igual, se avisa a SyH y supervisores (reglas de arriba).</p>
+        <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" name="shift_automation" value="1" id="shift_automation" <?= $sh['activas'] ? 'checked' : '' ?>><label class="form-check-label" for="shift_automation">Activar avisos de turnos</label></div>
+        <div class="row g-2 small">
+            <div class="col-md-6"><label class="form-label">Tolerancia para empezar el turno</label><div class="input-group"><input class="form-control" type="number" name="shift_grace" min="1" max="120" value="<?= e($sh['gracia']) ?>"><span class="input-group-text">minutos</span></div><div class="form-text">Al doble sin empezar se avisa al supervisor; al terminar el turno queda "no vino".</div></div>
+            <div class="col-md-6"><label class="form-label">Margen alrededor del predio</label><div class="input-group"><input class="form-control" type="number" name="shift_tolerance" min="0" max="2000" value="<?= e($sh['tolerancia_m']) ?>"><span class="input-group-text">metros</span></div><div class="form-text">Se suma al radio de la planta (el GPS no es exacto).</div></div>
+            <div class="col-md-6"><label class="form-label">Preguntar el motivo si está fuera durante</label><div class="input-group"><input class="form-control" type="number" name="shift_out" min="1" max="60" value="<?= e($sh['minutos_fuera']) ?>"><span class="input-group-text">minutos</span></div></div>
+            <div class="col-md-6"><label class="form-label">Alarma si sigue fuera sin motivo</label><div class="input-group"><input class="form-control" type="number" name="shift_no_reason" min="1" max="240" value="<?= e($sh['sin_motivo']) ?>"><span class="input-group-text">minutos</span></div></div>
+            <div class="col-md-6"><label class="form-label">Sin contacto del celular en turno</label><div class="input-group"><input class="form-control" type="number" name="shift_silent" min="10" max="720" value="<?= e($sh['sin_contacto']) ?>"><span class="input-group-text">minutos</span></div></div>
+            <div class="col-md-6"><label class="form-label">Cerrar solo el turno no terminado</label><div class="input-group"><input class="form-control" type="number" name="shift_auto_end" min="15" max="720" value="<?= e($sh['cierre']) ?>"><span class="input-group-text">min después del fin</span></div></div>
+            <div class="col-md-6"><label class="form-label">Borrar las posiciones detalladas a los</label><div class="input-group"><input class="form-control" type="number" name="shift_days" min="7" max="3650" value="<?= e($sh['dias']) ?>"><span class="input-group-text">días</span></div><div class="form-text">Turnos y rondas. Horas, salidas y motivos se conservan.</div></div>
+        </div>
+        <?php if ($canEdit): ?><button class="btn btn-primary btn-sm mt-3">Guardar ajustes de turnos</button><?php endif; ?>
+    </fieldset>
+</form>

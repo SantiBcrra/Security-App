@@ -242,6 +242,24 @@ return static function (Router $r): void {
         $r->get('/rondas/puntos', [RoundsController::class, 'pointsList'], [$can('rondas', 'ver')]);
         $r->get('/rondas/metricas', [RoundsController::class, 'metrics'], [$can('rondas', 'ver')]);
         $r->get('/rondas/metricas/exportar', [RoundsController::class, 'metricsExport'], [$can('rondas', 'exportar')]);
+        $r->get('/rondas/turnos', [\App\Controllers\Web\Panel\ShiftsController::class, 'today'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/turno/{uuid}', [\App\Controllers\Web\Panel\ShiftsController::class, 'show'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/turnos/programacion', [\App\Controllers\Web\Panel\ShiftsController::class, 'schedules'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/turnos/programacion/nuevo', [\App\Controllers\Web\Panel\ShiftsController::class, 'form'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turnos/programacion', [\App\Controllers\Web\Panel\ShiftsController::class, 'store'], [$can('rondas', 'editar')]);
+        $r->get('/rondas/turnos/programacion/{uuid}', [\App\Controllers\Web\Panel\ShiftsController::class, 'form'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turnos/programacion/{uuid}', [\App\Controllers\Web\Panel\ShiftsController::class, 'store'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turnos/programacion/{uuid}/estado', [\App\Controllers\Web\Panel\ShiftsController::class, 'toggle'], [$can('rondas', 'editar')]);
+        $r->get('/rondas/turnos/predio/{uuid}', [\App\Controllers\Web\Panel\ShiftsController::class, 'site'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turnos/predio/{uuid}', [\App\Controllers\Web\Panel\ShiftsController::class, 'saveSite'], [$can('rondas', 'editar')]);
+        $r->get('/rondas/turnos/ausencias', [\App\Controllers\Web\Panel\ShiftsController::class, 'absences'], [$can('rondas', 'ver')]);
+        $r->post('/rondas/turnos/ausencias', [\App\Controllers\Web\Panel\ShiftsController::class, 'storeAbsence'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turnos/ausencias/{uuid}/decidir', [\App\Controllers\Web\Panel\ShiftsController::class, 'decide'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turnos/ausencias/{uuid}/cancelar', [\App\Controllers\Web\Panel\ShiftsController::class, 'cancelAbsence'], [$can('rondas', 'ver')]);
+        $r->post('/rondas/turnos/sin-servicio', [\App\Controllers\Web\Panel\ShiftsController::class, 'storeClosure'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turnos/sin-servicio/{uuid}/borrar', [\App\Controllers\Web\Panel\ShiftsController::class, 'deleteClosure'], [$can('rondas', 'editar')]);
+        $r->get('/rondas/turnos/horas', [\App\Controllers\Web\Panel\ShiftsController::class, 'hours'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/turnos/horas/exportar', [\App\Controllers\Web\Panel\ShiftsController::class, 'export'], [$can('rondas', 'exportar')]);
         $r->get('/rondas/programacion', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'index'], [$can('rondas', 'ver')]);
         $r->get('/rondas/programacion/nueva', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'form'], [$can('rondas', 'editar')]);
         $r->post('/rondas/programacion', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'store'], [$can('rondas', 'editar')]);
@@ -323,6 +341,8 @@ return static function (Router $r): void {
             $r->get('/consent', [ApiAppController::class, 'consent']);
             $r->post('/consent', [ApiAppController::class, 'accept']);
             $r->post('/panic', [ApiAppController::class, 'panic']);
+            $r->get('/shifts/mine', [ApiAppController::class, 'myShifts']);
+            $r->post('/absences/{uuid}/cancel', [ApiAppController::class, 'cancelAbsence']);
 
             // Sincronización offline (Etapa 5)
             $r->get('/sync/pull', [SyncController::class, 'pull']);
