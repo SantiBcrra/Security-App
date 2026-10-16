@@ -306,6 +306,43 @@ final class Patrols
     }
 
     /** Rondas recientes; con $userId solo las de ese usuario (alcance "propios"). */
+    /**
+     * Rondas realizadas con filtros (panel → Rondas realizadas). $f: from/to (UTC 'Y-m-d H:i:s', [from, to)), user_id, route_id
+     * (0 = rondas libres), status (completa | incompleta | en_curso | con_problemas = marcas fuera de lugar o alertas).
+     * @return array{rows: list<array>, total: int}
+     */
+    public static function searchRounds(array $f, int $limit = 200): array
+    {
+        $where = ['1=1'];
+        $params = [];
+        if (!empty($f['from'])) { $where[] = 'r.started_at >= ?'; $params[] = $f['from']; }
+        if (!empty($f['to'])) { $where[] = 'r.started_at < ?'; $params[] = $f['to']; }
+        if (!empty($f['user_id'])) { $where[] = 'r.user_id = ?'; $params[] = (int) $f['user_id']; }
+        if (isset($f['route_id']) && $f['route_id'] !== null) {
+            if ((int) $f['route_id'] === 0) $where[] = 'r.route_id IS NULL';
+            else { $where[] = 'r.route_id = ?'; $params[] = (int) $f['route_id']; }
+        }
+        if (in_array($f['status'] ?? '', ['completa', 'incompleta', 'en_curso'], true)) { $where[] = 'r.status = ?'; $params[] = $f['status']; }
+        if (($f['status'] ?? '') === 'con_problemas') {
+            $where[] = "(EXISTS (SELECT 1 FROM patrol_scans s WHERE s.round_id = r.id AND s.location_status IN ('lejos','simulada'))
+                OR EXISTS (SELECT 1 FROM patrol_round_alerts a WHERE a.round_id = r.id) OR EXISTS (SELECT 1 FROM panic_alerts pa WHERE pa.round_id = r.id))";
+        }
+        $w = implode(' AND ', $where);
+        $count = DB::tenant()->prepare("SELECT COUNT(*) FROM patrol_rounds r WHERE {$w}");
+        $count->execute($params);
+        $stmt = DB::tenant()->prepare("SELECT r.*, u.name AS user_name, pr.name AS route_name, pr.uuid AS route_uuid, pr.expected_minutes,
+            (SELECT COUNT(*) FROM patrol_scans s WHERE s.round_id = r.id) AS scans_count,
+            (SELECT COUNT(*) FROM patrol_scans s WHERE s.round_id = r.id AND s.location_status IN ('lejos','simulada')) AS outside_count,
+            (SELECT COUNT(*) FROM patrol_scans s WHERE s.round_id = r.id AND s.location_status IN ('impreciso','sin_gps')) AS doubtful_count,
+            (SELECT COUNT(*) FROM patrol_scans s WHERE s.round_id = r.id AND s.out_of_order = 1) AS out_of_order_count,
+            (SELECT COUNT(*) FROM patrol_round_alerts a WHERE a.round_id = r.id) + (SELECT COUNT(*) FROM panic_alerts pa WHERE pa.round_id = r.id) AS alerts_count,
+            (SELECT COUNT(*) FROM patrol_route_points rp WHERE rp.route_id = r.route_id) AS route_points
+            FROM patrol_rounds r JOIN users u ON u.id = r.user_id LEFT JOIN patrol_routes pr ON pr.id = r.route_id
+            WHERE {$w} ORDER BY r.started_at DESC LIMIT " . max(1, min(1000, $limit)));
+        $stmt->execute($params);
+        return ['rows' => $stmt->fetchAll(), 'total' => (int) $count->fetchColumn()];
+    }
+
     public static function rounds(int $limit = 100, ?int $userId = null): array
     {
         $stmt = DB::tenant()->prepare('SELECT r.*, u.name AS user_name, pr.name AS route_name,

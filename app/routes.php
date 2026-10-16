@@ -237,6 +237,9 @@ return static function (Router $r): void {
 
         $r->get('/rondas', [RoundsController::class, 'index'], [$can('rondas', 'ver')]);
         $r->get('/rondas/marcas-fuera', [RoundsController::class, 'outside'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/historial', [RoundsController::class, 'history'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/rutas', [RoundsController::class, 'routesList'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/puntos', [RoundsController::class, 'pointsList'], [$can('rondas', 'ver')]);
         $r->get('/rondas/metricas', [RoundsController::class, 'metrics'], [$can('rondas', 'ver')]);
         $r->get('/rondas/metricas/exportar', [RoundsController::class, 'metricsExport'], [$can('rondas', 'exportar')]);
         $r->get('/rondas/programacion', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'index'], [$can('rondas', 'ver')]);

@@ -17,14 +17,56 @@ use App\Services\UserAuth;
 
 final class RoundsController
 {
+    /** Pestaña "Hoy": lo que pasa ahora (en curso, programadas del día, alertas, celulares) y lo último hecho. */
     public function index(Request $request): Response
     {
+        $only = $this->onlyUser();
+        $tz = new \DateTimeZone(\App\Core\Tenant::timezone() ?: 'America/Argentina/Buenos_Aires');
+        $today = (new \DateTimeImmutable('now', $tz))->format('Y-m-d');
+        [$from, $to] = \App\Services\RoundMetrics::range($today, $today);
+        $todayRounds = Patrols::searchRounds(['from' => $from, 'to' => $to, 'user_id' => $only], 500)['rows'];
+        $inProgress = Patrols::searchRounds(['status' => 'en_curso', 'user_id' => $only], 50)['rows'];
+        \App\Services\PatrolPlanner::generate();
+        $slots = \App\Services\PatrolPlanner::day($today, $only);
+        $alerts = \App\Services\RoundMetrics::alerts($from, $to, ['user_id' => $only]);
         return Response::html(View::render('panel/rounds/index', [
-            'title' => 'Rondas de guardias', 'points' => Patrols::points(), 'routes' => Patrols::routes(), 'rounds' => Patrols::rounds(100, $this->onlyUser()),
-            'panics' => $this->onlyUser() === null ? \App\Services\GuardSafety::panics(20) : [],
-            'devices' => \App\Services\DeviceStatus::recent(24, $this->onlyUser()),
-            'canCreate' => UserAuth::can('rondas', 'crear'), 'canEdit' => UserAuth::can('rondas', 'editar'),
+            'title' => 'Rondas de guardias', 'today' => $today, 'todayRounds' => $todayRounds, 'inProgress' => $inProgress, 'slots' => $slots,
+            'alerts' => $alerts, 'devices' => \App\Services\DeviceStatus::recent(24, $only),
+            'last' => Patrols::searchRounds(['user_id' => $only], 8)['rows'],
         ], 'layouts/app'));
+    }
+
+    /** Pestaña "Rondas realizadas": historial con filtros (fechas locales, guardia, ruta, estado). */
+    public function history(Request $request): Response
+    {
+        $tz = new \DateTimeZone(\App\Core\Tenant::timezone() ?: 'America/Argentina/Buenos_Aires');
+        $now = new \DateTimeImmutable('now', $tz);
+        $date = fn (string $k, string $def) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $request->input($k, '')) ? (string) $request->input($k) : $def;
+        $f = ['desde' => $date('desde', $now->modify('-6 days')->format('Y-m-d')), 'hasta' => $date('hasta', $now->format('Y-m-d')),
+            'guardia' => (string) $request->input('guardia', ''), 'ruta' => (string) $request->input('ruta', ''), 'estado' => (string) $request->input('estado', '')];
+        if ($f['hasta'] < $f['desde']) [$f['desde'], $f['hasta']] = [$f['hasta'], $f['desde']];
+        [$from, $to] = \App\Services\RoundMetrics::range($f['desde'], $f['hasta']);
+        $guard = $f['guardia'] !== '' ? Users::findByUuid($f['guardia']) : null;
+        $route = $f['ruta'] !== '' && $f['ruta'] !== 'libre' ? Patrols::route($f['ruta']) : null;
+        $result = Patrols::searchRounds(['from' => $from, 'to' => $to, 'user_id' => $this->onlyUser() ?? ($guard ? (int) $guard['id'] : null),
+            'route_id' => $f['ruta'] === 'libre' ? 0 : ($route ? (int) $route['id'] : null), 'status' => $f['estado']], 300);
+        return Response::html(View::render('panel/rounds/history', ['title' => 'Rondas realizadas', 'rows' => $result['rows'], 'total' => $result['total'],
+            'filters' => $f, 'routes' => Patrols::routes(), 'users' => $this->onlyUser() === null ? array_filter(Users::all(), fn ($u) => (int) $u['is_active'] === 1) : []],
+            'layouts/app'));
+    }
+
+    /** Pestaña "Rutas". */
+    public function routesList(Request $request): Response
+    {
+        return Response::html(View::render('panel/rounds/routes', ['title' => 'Rutas de ronda', 'routes' => Patrols::routes(),
+            'canEdit' => UserAuth::can('rondas', 'editar')], 'layouts/app'));
+    }
+
+    /** Pestaña "Puntos": mapa satelital (doble clic = crear) y tabla. */
+    public function pointsList(Request $request): Response
+    {
+        return Response::html(View::render('panel/rounds/points', ['title' => 'Puntos de ronda', 'points' => Patrols::points(),
+            'canCreate' => UserAuth::can('rondas', 'crear'), 'canEdit' => UserAuth::can('rondas', 'editar')], 'layouts/app'));
     }
 
     /** Métricas de rondas (fase 6): período, ruta y guardia. Alcance "propios" = solo las suyas. */
@@ -129,11 +171,11 @@ final class RoundsController
     public function pointDelete(Request $request, string $uuid): Response
     {
         $point = Patrols::point($uuid);
-        if (!$point || $point['deleted_at'] !== null) return Response::redirect('/panel/rondas');
+        if (!$point || $point['deleted_at'] !== null) return Response::redirect('/panel/rondas/puntos');
         $routes = Patrols::deletePoint($point);
         Audit::tenant('patrol_point.delete', 'patrol_point', $uuid, ['code' => $point['code'], 'name' => $point['name'], 'lat' => (float) $point['lat'], 'lng' => (float) $point['lng']], null);
         Flash::add('success', "Punto {$point['code']} eliminado." . ($routes ? " Se sacó de {$routes} ruta(s)." : '') . ' Las rondas anteriores conservan sus marcas.');
-        return Response::redirect('/panel/rondas');
+        return Response::redirect('/panel/rondas/puntos');
     }
 
     /** Alta y edición de ruta: puntos en orden (arrastrar o ↑↓, también tocándolos en el mapa), modo de orden y guardias. */
@@ -220,7 +262,7 @@ final class RoundsController
                 + ['site' => $site['name'] ?? null, 'sector' => $sector['name'] ?? null]);
             Flash::add('success', 'Punto de ronda creado. Ya podés imprimir su QR.');
         } catch (\Throwable $e) { Flash::add('danger', str_contains($e->getMessage(), 'uq_patrol_points_code') ? 'Ese código ya existe.' : 'No se pudo crear el punto.'); }
-        return Response::redirect('/panel/rondas');
+        return Response::redirect('/panel/rondas/puntos');
     }
 
     public function qr(Request $request, string $uuid): Response

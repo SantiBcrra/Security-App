@@ -6,10 +6,8 @@ $q = http_build_query($filters);
 $pct = fn (int $a, int $b) => $b > 0 ? (int) round(100 * $a / $b) . ' %' : '—';
 $alertClass = ['panic' => 'danger', 'missed' => 'danger', 'off_site' => 'danger', 'abandoned' => 'secondary', 'gps_off' => 'warning', 'battery' => 'warning', 'late' => 'warning', 'no_progress' => 'warning'];
 ?>
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <h1 class="h4 m-0">Métricas de rondas</h1>
-    <a class="btn btn-outline-secondary" href="<?= e(url('/panel/rondas')) ?>">Volver a rondas</a>
-</div>
+<?= App\Core\View::render('panel/rounds/_nav', ['tab' => 'reportes', 'subtitle' => 'Reportes › Métricas: cumplimiento por guardia y por punto, e historial de alertas'], null) ?>
+
 <form method="get" class="card card-body mb-4">
     <div class="row g-2 align-items-end">
         <div class="col-6 col-md-2"><label class="form-label small">Desde</label><input type="date" name="desde" value="<?= e($filters['desde']) ?>" class="form-control"></div>

@@ -1,7 +1,7 @@
 <?php /** @var array $p alerta de pánico, @var list<array> $tracks recorrido de su ronda */ ?>
-<a class="btn btn-link px-0 mb-2" href="<?= e(url('/panel/rondas')) ?>">← Rondas</a>
+<?= App\Core\View::render('panel/rounds/_nav', ['tab' => 'hoy', 'subtitle' => 'Alerta de pánico'], null) ?>
 <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-    <h1 class="h4 m-0">Pánico · <?= e($p['user_name']) ?></h1>
+    <h2 class="h4 m-0">Pánico · <?= e($p['user_name']) ?></h2>
     <?= $p['acked_at'] === null ? '<span class="badge text-bg-danger">SIN ATENDER' . ((int) $p['level'] > 0 ? ' · nivel ' . e($p['level']) : '') . '</span>' : '<span class="badge text-bg-success">Atendida</span>' ?>
 </div>
 <p class="text-body-secondary">

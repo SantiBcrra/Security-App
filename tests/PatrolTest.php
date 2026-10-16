@@ -340,9 +340,19 @@ return [
         Tenant::activate($st['a']);
         UserAuth::setCurrent($st['hys']);
         $rounds = Patrols::rounds();
-        $html = \App\Core\View::render('panel/rounds/index', ['points' => Patrols::points(), 'routes' => Patrols::routes(), 'rounds' => $rounds], null);
+        $found = Patrols::searchRounds([]);
+        $html = \App\Core\View::render('panel/rounds/history', ['rows' => $found['rows'], 'total' => $found['total'], 'routes' => Patrols::routes(), 'users' => [],
+            'filters' => ['desde' => gmdate('Y-m-d'), 'hasta' => gmdate('Y-m-d'), 'guardia' => '', 'ruta' => '', 'estado' => '']], null);
         assert_true(str_contains($html, 'incompleta') && str_contains($html, '1 / 2'), 'estado y avance en el historial');
-        $withMap = \App\Core\View::render('panel/rounds/index', ['points' => Patrols::points(), 'routes' => [], 'rounds' => []], null);
+        assert_true(str_contains($html, 'Rondas realizadas') && str_contains($html, '/panel/rondas/ronda/'), 'pestañas y acceso al detalle');
+        $incomplete = Patrols::searchRounds(['status' => 'incompleta'])['rows'];
+        assert_true($incomplete && !array_filter($incomplete, fn ($r) => $r['status'] !== 'incompleta'), 'filtro por estado');
+        $free = Patrols::searchRounds(['route_id' => 0])['rows'];
+        assert_true(!array_filter($free, fn ($r) => $r['route_name'] !== null), 'filtro de rondas libres');
+        assert_same(0, Patrols::searchRounds(['from' => '2000-01-01 00:00:00', 'to' => '2000-01-02 00:00:00'])['total'], 'filtro por fecha');
+        $hoy = \App\Core\View::render('panel/rounds/index', ['today' => gmdate('Y-m-d'), 'todayRounds' => [], 'inProgress' => [], 'slots' => [], 'alerts' => [], 'last' => [], 'devices' => []], null);
+        assert_true(str_contains($hoy, 'En curso ahora') && str_contains($hoy, 'Reportes') && str_contains($hoy, '+ Nuevo'), 'pestaña Hoy con la barra del módulo');
+        $withMap = \App\Core\View::render('panel/rounds/points', ['points' => Patrols::points(), 'canCreate' => true, 'canEdit' => true], null);
         assert_true(str_contains($withMap, 'assets/js/maps.js') && !str_contains($withMap, 'src=\\"'), 'el mapa carga maps.js con una URL válida');
         $partial = array_values(array_filter($rounds, fn ($r) => $r['status'] === 'incompleta'))[0];
         $html = \App\Core\View::render('panel/rounds/round', ['round' => Patrols::roundDetail($partial['uuid']), 'tracks' => []], null);
@@ -491,7 +501,7 @@ return [
         assert_same(['Guardia1', 'Moto G'], [$recent[0]['user_name'], $recent[0]['device_name']]);
         \App\Services\ApiAuth::setDevice(null);
         assert_same('error', $status(['battery' => 50])['status'], 'sin dispositivo identificado no se guarda');
-        $html = \App\Core\View::render('panel/rounds/index', ['points' => [], 'routes' => [], 'rounds' => [], 'devices' => $recent], null);
+        $html = \App\Core\View::render('panel/rounds/index', ['today' => gmdate('Y-m-d'), 'todayRounds' => [], 'inProgress' => [], 'slots' => [], 'alerts' => [], 'last' => [], 'devices' => $recent], null);
         assert_true(str_contains($html, 'Celulares de los guardias') && str_contains($html, 'Batería 8 %'));
     },
 
@@ -679,7 +689,7 @@ return [
         $routes = array_values(array_filter((array) ($page['changes']->patrol_routes ?? []), fn ($r) => $r['uuid'] === $route));
         assert_true($routes && !in_array($uuid, $routes[0]['points'], true), 'y la ruta le llega sin el punto');
         assert_same('error', Push::run([$op('round.scan', ['uuid' => Uuid::v4(), 'round_uuid' => $round, 'point_uuid' => $uuid])])[0]['status'], 'ya no se puede marcar');
-        $html = \App\Core\View::render('panel/rounds/index', ['points' => Patrols::points(), 'routes' => [], 'rounds' => [], 'canCreate' => true, 'canEdit' => true], null);
+        $html = \App\Core\View::render('panel/rounds/points', ['points' => Patrols::points(), 'canCreate' => true, 'canEdit' => true], null);
         assert_true(str_contains($html, 'Doble clic en el mapa') && str_contains($html, '/eliminar'));
     },
 

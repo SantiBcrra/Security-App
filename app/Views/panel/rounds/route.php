@@ -5,7 +5,8 @@ $v = $old ?: [];
 $all = array_map(fn ($p) => ['uuid' => $p['uuid'], 'code' => $p['code'], 'name' => $p['name'], 'lat' => (float) $p['lat'], 'lng' => (float) $p['lng']], $points);
 $mode = $v['order_mode'] ?? ($route['order_mode'] ?? 'libre');
 ?>
-<h1 class="h4 mb-3"><?= $route ? 'Editar ruta' : 'Nueva ruta de ronda' ?></h1>
+<?= App\Core\View::render('panel/rounds/_nav', ['tab' => 'rutas', 'subtitle' => ''], null) ?>
+<h2 class="h4 mb-3"><?= $route ? 'Editar ruta' : 'Nueva ruta de ronda' ?></h2>
 <form method="post" action="<?= e(url('/panel/rondas/rutas' . ($route ? '/' . $route['uuid'] : ''))) ?>" x-data="routeForm()" x-init="init()" @submit="if (!order.length) { $event.preventDefault(); alert('Agregá al menos un punto a la ruta.'); }">
     <?= csrf_field() ?>
     <div class="row g-3">

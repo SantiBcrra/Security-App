@@ -12,9 +12,10 @@ $locBadge = function (?string $status, int $within, ?int $radius): string {
     return '<span class="badge text-bg-' . e($st['class']) . '"' . ($help ? ' title="' . e($help) . '"' : '') . '>' . e($label) . '</span>';
 };
 ?>
-<a class="btn btn-link px-0 mb-2" href="<?= e(url('/panel/rondas')) ?>">← Rondas</a>
+<?= App\Core\View::render('panel/rounds/_nav', ['tab' => 'rondas', 'subtitle' => 'Detalle de una ronda'], null) ?>
+<a class="small d-inline-block mb-2" href="<?= e(url('/panel/rondas/historial')) ?>">← Rondas realizadas</a>
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-    <h1 class="h4 m-0"><?= e($round['route_name'] ?: 'Ronda libre') ?></h1>
+    <h2 class="h4 m-0"><?= e($round['route_name'] ?: 'Ronda libre') ?></h2>
     <span class="badge text-bg-<?= $badge[$round['status']] ?? 'secondary' ?>"><?= e(str_replace('_', ' ', $round['status'])) ?></span>
 </div>
 <p class="text-body-secondary">

@@ -1,7 +1,5 @@
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h4 m-0">Marcas fuera de lugar</h1>
-    <a class="btn btn-outline-secondary" href="<?= e(url('/panel/rondas')) ?>">Volver a rondas</a>
-</div>
+<?= App\Core\View::render('panel/rounds/_nav', ['tab' => 'reportes', 'subtitle' => 'Reportes › Marcas fuera de lugar'], null) ?>
+
 <p class="text-body-secondary">Escaneos realizados fuera del radio del punto o con ubicación simulada.</p>
 <form method="get" class="card card-body mb-4">
     <div class="row g-3 align-items-end">

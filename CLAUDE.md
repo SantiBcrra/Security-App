@@ -152,7 +152,12 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 ## Rondas de guardias (Etapa 9 adelantada)
 - Puntos de ronda en `patrol_points`, con QR público, coordenadas, radio permitido y marca de punto crítico.
 - Rutas y orden de puntos en `patrol_routes` / `patrol_route_points`; ejecuciones y escaneos en `patrol_rounds` / `patrol_scans`.
-- Panel `/panel/rondas` para alta de puntos, impresión de QR e historial. El QR apunta a `/ronda/punto/{uuid}` y lo procesa la app Android.
+- Panel de rondas con barra fija (`app/Views/panel/rounds/_nav.php`, en TODAS sus pantallas; parámetro `tab`): pestañas Hoy
+  `/panel/rondas` (en curso, programadas y alertas del día, últimas rondas, celulares) · Rondas realizadas `/panel/rondas/historial`
+  (filtros fecha/guardia/ruta o "libres"/estado, `Patrols::searchRounds()`, tabla compartida `_rounds_table.php` con fila clickeable
+  al detalle) · Programación · Rutas `/panel/rondas/rutas` · Puntos `/panel/rondas/puntos` (mapa + QR + eliminar) · "Reportes ▾"
+  (Métricas, Marcas fuera de lugar) y a la derecha "+ Nuevo ▾" (punto, ruta, programación según permiso). Pánicos sin atender
+  como banner arriba. No agregar botones sueltos de navegación por pantalla: van en la barra. El QR apunta a `/ronda/punto/{uuid}` y lo procesa la app Android.
   Doble clic en el mapa (permiso `rondas.crear`) → "Crear punto acá" → `/panel/rondas/puntos/nuevo?lat=&lng=` precargado. "Eliminar"
   (`rondas.editar`, `Patrols::deletePoint`): baja lógica (`deleted_at`, baja por la sync), lo saca de las rutas (y toca su
   `updated_at`); las marcas viejas quedan.

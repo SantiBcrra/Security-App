@@ -1,4 +1,5 @@
-<?php $old = $old ?? []; ?><h1 class="h4 mb-3">Nuevo punto de ronda</h1><form method="post" action="<?= e(url('/panel/rondas/puntos')) ?>" class="card card-body" style="max-width:680px"><?= csrf_field() ?><div class="row g-3">
+<?php $old = $old ?? []; ?><?= App\Core\View::render('panel/rounds/_nav', ['tab' => 'puntos', 'subtitle' => ''], null) ?>
+<h2 class="h4 mb-3">Nuevo punto de ronda</h2><form method="post" action="<?= e(url('/panel/rondas/puntos')) ?>" class="card card-body" style="max-width:680px"><?= csrf_field() ?><div class="row g-3">
 <div class="col-md-8"><label class="form-label">Nombre</label><input class="form-control" name="name" required placeholder="Portón principal" value="<?= e($old['name'] ?? '') ?>"></div><div class="col-md-4"><label class="form-label">Código QR</label><input class="form-control" name="code" required placeholder="P-001" value="<?= e($old['code'] ?? '') ?>"></div>
 <div class="col-12"><label class="form-label">Ubicación</label>
 <div class="d-flex flex-wrap gap-2 align-items-center mb-2"><span class="small text-body-secondary">Hacé clic en el mapa donde va el punto (o arrastrá el pin).</span><button type="button" class="btn btn-sm btn-outline-secondary ms-auto" id="pt-here">Usar mi ubicación</button></div>

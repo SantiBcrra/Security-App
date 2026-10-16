@@ -8,9 +8,10 @@ $pts = array_map(fn ($p) => ['code' => $p['code'], 'name' => $p['name'], 'lat' =
     'color' => $p['is_critical'] ? '#dc3545' : '#353c4f'], $points);
 $badge = ['completa' => 'success', 'incompleta' => 'danger', 'en_curso' => 'warning'];
 ?>
-<a class="btn btn-link px-0 mb-2" href="<?= e(url('/panel/rondas')) ?>">← Rondas</a>
+<?= App\Core\View::render('panel/rounds/_nav', ['tab' => 'rutas', 'subtitle' => 'Detalle de una ruta'], null) ?>
+<a class="small d-inline-block mb-2" href="<?= e(url('/panel/rondas/rutas')) ?>">← Rutas</a>
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-    <h1 class="h4 m-0"><?= e($route['name']) ?> <?= (int) $route['is_active'] === 1 ? '' : '<span class="badge text-bg-secondary">Inactiva</span>' ?></h1>
+    <h2 class="h4 m-0"><?= e($route['name']) ?> <?= (int) $route['is_active'] === 1 ? '' : '<span class="badge text-bg-secondary">Inactiva</span>' ?></h2>
     <div class="d-flex gap-2">
         <?php if ($canEdit): ?>
             <a class="btn btn-outline-primary" href="<?= e(url('/panel/rondas/programacion/nueva')) ?>">Programar horarios</a>

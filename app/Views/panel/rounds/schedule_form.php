@@ -10,7 +10,8 @@ $days = array_map('intval', (array) ($v['days'] ?? explode(',', (string) ($s['da
 $except = $v['except_dates'] ?? implode(', ', array_map(fn ($d) => date('d/m/Y', strtotime($d)), json_decode((string) ($s['except_dates'] ?? ''), true) ?: []));
 $users = (array) ($v['users'] ?? $userUuids);
 ?>
-<h1 class="h4 mb-3"><?= $schedule ? 'Editar programación' : 'Nueva programación' ?></h1>
+<?= App\Core\View::render('panel/rounds/_nav', ['tab' => 'programacion', 'subtitle' => ''], null) ?>
+<h2 class="h4 mb-3"><?= $schedule ? 'Editar programación' : 'Nueva programación' ?></h2>
 <form method="post" action="<?= e(url('/panel/rondas/programacion' . ($schedule ? '/' . $schedule['uuid'] : ''))) ?>" class="card card-body" style="max-width: 820px"
       x-data="{ mode: <?= e(json_encode($mode)) ?>, route: <?= e(json_encode($route)) ?> }">
     <?= csrf_field() ?>

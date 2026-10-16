@@ -11,13 +11,8 @@ foreach ($slots as $s) {
 }
 $closed = $count['ok'] + $count['late'] + $count['missed'];
 ?>
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <h1 class="h4 m-0">Programación de rondas</h1>
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="<?= e(url('/panel/rondas')) ?>">Volver a rondas</a>
-        <?php if ($canEdit): ?><a class="btn btn-primary" href="<?= e(url('/panel/rondas/programacion/nueva')) ?>">+ Nueva programación</a><?php endif; ?>
-    </div>
-</div>
+<?= App\Core\View::render('panel/rounds/_nav', ['tab' => 'programacion', 'subtitle' => 'Horarios en que se tiene que hacer cada ruta, y si se cumplieron (a tiempo, tarde o no realizadas)'], null) ?>
+
 
 <div class="card shadow-sm mb-4">
     <div class="card-header d-flex flex-wrap align-items-center gap-2">
