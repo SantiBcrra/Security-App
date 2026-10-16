@@ -8,7 +8,7 @@
 <?php endforeach; ?>
 <div class="alert alert-info">Cada punto tiene un QR único. Imprimilo y colocálo en el lugar de control. La app Android registra hora, GPS y distancia.</div>
 <h2 class="h5">Puntos de ronda</h2>
-<?php if ($points): ?><link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>"><div id="round-map" style="height:420px" class="rounded border mb-3"></div><script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src=\"<?= e(asset('js/maps.js')) ?>\"></script><script>
+<?php if ($points): ?><link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>"><div id="round-map" style="height:420px" class="rounded border mb-3"></div><script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src="<?= e(asset('js/maps.js')) ?>"></script><script>
 const roundPoints=<?= json_encode(array_map(fn($p)=>['name'=>$p['name'],'code'=>$p['code'],'lat'=>(float)$p['lat'],'lng'=>(float)$p['lng'],'radius'=>(int)$p['radius_m'],'critical'=>(bool)$p['is_critical']],$points),JSON_UNESCAPED_UNICODE) ?>;
 const map=L.map('round-map'); SAMaps.base(map, 'satellite'); const bounds=[];
 roundPoints.forEach(p=>{const el=document.createElement('div');el.textContent=p.code+' · '+p.name+' (radio '+p.radius+' m)';

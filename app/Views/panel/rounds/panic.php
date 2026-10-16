@@ -17,7 +17,7 @@
             <div id="panic-map" style="height: 380px" class="rounded border mb-2"></div>
             <div class="small mb-3"><a target="_blank" rel="noopener" href="https://maps.google.com/?q=<?= e($p['lat']) ?>,<?= e($p['lng']) ?>">Abrir en Google Maps</a>
                 <?= $p['accuracy_m'] !== null ? ' · precisión ±' . e((int) $p['accuracy_m']) . ' m' : '' ?></div>
-            <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src=\"<?= e(asset('js/maps.js')) ?>\"></script>
+            <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src="<?= e(asset('js/maps.js')) ?>"></script>
             <script>
             (function () {
                 var at = [<?= (float) $p['lat'] ?>, <?= (float) $p['lng'] ?>];

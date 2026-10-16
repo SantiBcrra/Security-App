@@ -342,6 +342,8 @@ return [
         $rounds = Patrols::rounds();
         $html = \App\Core\View::render('panel/rounds/index', ['points' => Patrols::points(), 'routes' => Patrols::routes(), 'rounds' => $rounds], null);
         assert_true(str_contains($html, 'incompleta') && str_contains($html, '1 / 2'), 'estado y avance en el historial');
+        $withMap = \App\Core\View::render('panel/rounds/index', ['points' => Patrols::points(), 'routes' => [], 'rounds' => []], null);
+        assert_true(str_contains($withMap, 'assets/js/maps.js') && !str_contains($withMap, 'src=\\"'), 'el mapa carga maps.js con una URL válida');
         $partial = array_values(array_filter($rounds, fn ($r) => $r['status'] === 'incompleta'))[0];
         $html = \App\Core\View::render('panel/rounds/round', ['round' => Patrols::roundDetail($partial['uuid']), 'tracks' => []], null);
         assert_true(str_contains($html, 'Salteado') && str_contains($html, 'Se saltearon 1 punto'), 'marca el punto salteado');

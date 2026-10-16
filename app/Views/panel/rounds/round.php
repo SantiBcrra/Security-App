@@ -60,7 +60,7 @@ $mapScans = array_values(array_filter(array_merge($round['route_points'] ?? [], 
         <?= $tracks ? count($tracks) . ' posición(es) del recorrido' . ($round['last_track_at'] ?? null ? ' · última ' . e(fecha($round['last_track_at'], 'H:i')) : '') : 'Sin recorrido registrado (solo los escaneos).' ?>
         · Línea = recorrido del celular · círculos = escaneos (verde en el lugar, rojo fuera de radio).
     </div>
-    <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src=\"<?= e(asset('js/maps.js')) ?>\"></script>
+    <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src="<?= e(asset('js/maps.js')) ?>"></script>
     <script>
     (function () {
         var tracks = <?= json_encode(array_map(fn ($t) => [(float) $t['lat'], (float) $t['lng']], $tracks)) ?>;

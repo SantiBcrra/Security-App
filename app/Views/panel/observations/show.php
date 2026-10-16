@@ -83,7 +83,7 @@ $openAction = $old['action'] ?? null;
             </div>
             <?php if ($obs['lat'] !== null): ?>
                 <link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>">
-                <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src=\"<?= e(asset('js/maps.js')) ?>\"></script>
+                <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src="<?= e(asset('js/maps.js')) ?>"></script>
                 <div id="obs-map" style="height: 220px"></div>
                 <script>
                 (function () {

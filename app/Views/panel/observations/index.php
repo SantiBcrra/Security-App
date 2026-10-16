@@ -62,7 +62,7 @@ $query = fn (array $over) => '?' . http_build_query(array_filter(array_merge($fo
 
 <?php if ($map): ?>
     <link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>">
-    <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src=\"<?= e(asset('js/maps.js')) ?>\"></script>
+    <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src="<?= e(asset('js/maps.js')) ?>"></script>
     <div class="card shadow-sm">
         <?php if (!$rows): ?>
             <p class="text-body-secondary text-center py-5 mb-0">Ninguna observación con ubicación GPS para estos filtros.</p>
