@@ -105,7 +105,7 @@ internal fun TopBar(title: String, onBack: () -> Unit, trailing: @Composable () 
 
 /** Módulo Observaciones: lista (mías + visibles), alta offline y detalle. */
 @Composable
-fun ObservacionesScreen(onBack: () -> Unit, canCreate: Boolean, vm: ObservationsViewModel = viewModel()) {
+fun ObservacionesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = true, vm: ObservationsViewModel = viewModel()) {
     var page by remember { mutableStateOf<String?>(null) } // null = lista, "nueva", o uuid del detalle
     when (val p = page) {
         "nueva" -> { ObservationForm(vm, onBack = { page = null }); return }
@@ -114,7 +114,7 @@ fun ObservacionesScreen(onBack: () -> Unit, canCreate: Boolean, vm: Observations
     }
     BackHandler(onBack = onBack)
     val ui by vm.list.collectAsStateWithLifecycle()
-    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { TopBar("Observaciones", onBack) }, floatingActionButton = {
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { if (showTopBar) TopBar("Observaciones", onBack) }, floatingActionButton = {
         if (canCreate) ExtendedFloatingActionButton({ vm.newForm(); page = "nueva" }, containerColor = Accent, contentColor = BrandDark) {
             Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Reportar", fontWeight = FontWeight.Bold)
         }

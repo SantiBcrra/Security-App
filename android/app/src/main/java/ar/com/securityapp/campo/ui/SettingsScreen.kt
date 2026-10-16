@@ -44,12 +44,12 @@ import ar.com.securityapp.campo.ui.theme.Muted
 
 @Suppress("DEPRECATION")
 @Composable
-fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit) {
+fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit, showTopBar: Boolean = true) {
     BackHandler(onBack = onBack)
     var confirmLogout by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(vm.failedOps()) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Row(Modifier.fillMaxWidth().background(Brand).statusBarsPadding().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (showTopBar) Row(Modifier.fillMaxWidth().background(Brand).statusBarsPadding().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onBack) { Icon(Icons.Filled.ArrowBack, "Volver", tint = Color.White) }
             Text("Ajustes", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }

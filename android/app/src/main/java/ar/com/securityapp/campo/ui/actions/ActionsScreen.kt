@@ -121,7 +121,7 @@ class ActionsViewModel(app: Application) : AndroidViewModel(app) {
 
 /** Módulo Acciones: las mías primero (abiertas y en curso, ordenadas por vencimiento) y las demás que puedo ver. */
 @Composable
-fun AccionesScreen(onBack: () -> Unit, vm: ActionsViewModel = viewModel()) {
+fun AccionesScreen(onBack: () -> Unit, showTopBar: Boolean = true, vm: ActionsViewModel = viewModel()) {
     var open by remember { mutableStateOf<String?>(null) }
     open?.let { uuid ->
         ActionDetail(vm, uuid, onBack = { open = null; vm.reload() })
@@ -132,7 +132,7 @@ fun AccionesScreen(onBack: () -> Unit, vm: ActionsViewModel = viewModel()) {
     val mine = items.filter { it.mine }
     val others = items.filter { !it.mine }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar("Acciones", onBack)
+        if (showTopBar) TopBar("Acciones", onBack)
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item { Text("A mi cargo", style = MaterialTheme.typography.titleSmall, color = Muted) }
             if (mine.isEmpty()) item { Text("No tenés acciones a tu cargo.", color = Muted) }

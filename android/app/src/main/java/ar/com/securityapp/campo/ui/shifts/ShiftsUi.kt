@@ -329,12 +329,12 @@ private fun SitePicker(sites: List<Site>, onDismiss: () -> Unit, onPick: (Site) 
 
 /** "Mis turnos y ausencias": próximos, historial con horas (con señal) y pedidos de ausencia. */
 @Composable
-fun ShiftsScreen(onBack: () -> Unit, vm: ShiftsViewModel = viewModel()) {
+fun ShiftsScreen(onBack: () -> Unit, showTopBar: Boolean = true, vm: ShiftsViewModel = viewModel()) {
     BackHandler(onBack = onBack)
     val ui by vm.ui.collectAsStateWithLifecycle()
     var tab by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar("Mis turnos", onBack)
+        if (showTopBar) TopBar("Mis turnos", onBack)
         TabRow(tab) {
             listOf("Próximos", "Historial", "Ausencias").forEachIndexed { i, t -> Tab(tab == i, { tab = i; if (i == 1) vm.loadHistory() }, text = { Text(t) }) }
         }

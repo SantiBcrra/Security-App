@@ -65,7 +65,7 @@ private fun hour(iso: String?): String = iso?.let { runCatching { HOUR.format(In
 @Suppress("DEPRECATION")
 @Composable
 /** @param canManagePoints permiso rondas.editar: ubicar puntos con el GPS y grabar etiquetas NFC */
-fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialScan: Boolean = false, vm: RoundsViewModel = viewModel()) {
+fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialScan: Boolean = false, showTopBar: Boolean = true, vm: RoundsViewModel = viewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val scan by vm.scan.collectAsStateWithLifecycle()
     val autoRoutes by vm.autoRoutes.collectAsStateWithLifecycle()
@@ -106,7 +106,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
     BackHandler(onBack = onBack)
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Row(Modifier.fillMaxWidth().background(Brand).statusBarsPadding().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (showTopBar) Row(Modifier.fillMaxWidth().background(Brand).statusBarsPadding().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onBack) { Icon(Icons.Filled.ArrowBack, "Volver", tint = Color.White) }
             Text("Rondas", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (ui.pending > 0) Text("${ui.pending} sin enviar", color = Accent, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(end = 12.dp))

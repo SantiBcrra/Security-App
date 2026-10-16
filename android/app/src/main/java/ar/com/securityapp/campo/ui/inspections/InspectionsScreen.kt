@@ -74,7 +74,7 @@ private val SCOPES = mapOf("equipo" to "De equipos", "sector" to "De sectores", 
 
 /** Módulo Inspecciones: para hacer (programadas a mi cargo), nueva (QR del equipo o lista) y las que hice. */
 @Composable
-fun InspeccionesScreen(onBack: () -> Unit, canCreate: Boolean, vm: InspectionsViewModel = viewModel()) {
+fun InspeccionesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = true, vm: InspectionsViewModel = viewModel()) {
     val form by vm.form.collectAsStateWithLifecycle()
     var page by remember { mutableStateOf<String?>(null) } // "nueva", "qr", o uuid del detalle
     var picked by remember { mutableStateOf<Checklist?>(null) } // checklist elegido, falta el objetivo
@@ -114,7 +114,7 @@ fun InspeccionesScreen(onBack: () -> Unit, canCreate: Boolean, vm: InspectionsVi
         BackHandler(onBack = onBack)
         val ui by vm.list.collectAsStateWithLifecycle()
         Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            TopBar("Inspecciones", onBack)
+            if (showTopBar) TopBar("Inspecciones", onBack)
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (canCreate) item {
                     Button({ page = "nueva" }, Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {

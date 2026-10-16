@@ -88,12 +88,12 @@ class AvisosViewModel(app: Application) : AndroidViewModel(app) {
 }
 
 @Composable
-fun AvisosScreen(onBack: () -> Unit, vm: AvisosViewModel = viewModel()) {
+fun AvisosScreen(onBack: () -> Unit, showTopBar: Boolean = true, vm: AvisosViewModel = viewModel()) {
     BackHandler(onBack = onBack)
     val ui by vm.ui.collectAsStateWithLifecycle()
     var attending by remember { mutableStateOf<AppNotification?>(null) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar("Avisos", onBack) { TextButton({ vm.load() }) { Text("Actualizar", color = Color.White) } }
+        if (showTopBar) TopBar("Avisos", onBack) { TextButton({ vm.load() }) { Text("Actualizar", color = Color.White) } }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ui.error?.let { item { Text(it, color = Danger) } }
             if (ui.loading && ui.items.isEmpty()) item { CircularProgressIndicator() }

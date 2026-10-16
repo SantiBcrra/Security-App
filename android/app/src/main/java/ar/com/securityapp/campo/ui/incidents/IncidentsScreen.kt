@@ -169,7 +169,7 @@ private val WHEN = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(Zone
 
 /** Módulo Incidentes: mis reportes y alta sin señal. Los datos de salud y la investigación se manejan en la web. */
 @Composable
-fun IncidentesScreen(onBack: () -> Unit, canCreate: Boolean, vm: IncidentsViewModel = viewModel()) {
+fun IncidentesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = true, vm: IncidentsViewModel = viewModel()) {
     var page by remember { mutableStateOf<String?>(null) }
     var done by remember { mutableStateOf(false) }
     when (val p = page) {
@@ -179,7 +179,7 @@ fun IncidentesScreen(onBack: () -> Unit, canCreate: Boolean, vm: IncidentsViewMo
     }
     BackHandler(onBack = onBack)
     val items by vm.items.collectAsStateWithLifecycle()
-    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { TopBar("Incidentes", onBack) }, floatingActionButton = {
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { if (showTopBar) TopBar("Incidentes", onBack) }, floatingActionButton = {
         if (canCreate) ExtendedFloatingActionButton({ vm.newForm(); page = "nuevo" }, containerColor = Accent, contentColor = BrandDark) {
             Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Reportar", fontWeight = FontWeight.Bold)
         }

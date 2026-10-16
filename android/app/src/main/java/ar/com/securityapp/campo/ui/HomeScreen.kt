@@ -115,18 +115,18 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
         if (openShift) { openModule = null; showSettings = false; showShifts = false; vm.openShift.value = false }
     }
     if (showShifts) {
-        HomeWithNavigation(onHome = { showShifts = false }, onActivity = { showShifts = false; openModule = "rondas" },
+        HomeWithNavigation(vm, me, selected = "activity", onHome = { showShifts = false }, onActivity = { showShifts = false; openModule = "rondas" },
             onScan = { showShifts = false; openModule = "rondas"; openScanner = true },
             onNotices = { showShifts = false; vm.openAvisos.value = true }, onMore = { showShifts = false; showSettings = true }) {
-            ar.com.securityapp.campo.ui.shifts.ShiftsScreen(onBack = { showShifts = false })
+            ar.com.securityapp.campo.ui.shifts.ShiftsScreen(onBack = { showShifts = false }, showTopBar = false)
         }
         return
     }
     if (showSettings) {
-        HomeWithNavigation(onHome = { showSettings = false }, onActivity = { showSettings = false; openModule = "rondas" },
+        HomeWithNavigation(vm, me, selected = "more", onHome = { showSettings = false }, onActivity = { showSettings = false; openModule = "rondas" },
             onScan = { showSettings = false; openModule = "rondas"; openScanner = true },
             onNotices = { showSettings = false; vm.openAvisos.value = true }, onMore = { showSettings = false }) {
-            SettingsScreen(vm, me, onBack = { showSettings = false })
+            SettingsScreen(vm, me, onBack = { showSettings = false }, showTopBar = false)
         }
         return
     }
@@ -136,48 +136,48 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
         if (android.os.Build.VERSION.SDK_INT >= 33) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
     if (openAvisos) {
-        HomeWithNavigation(onHome = { vm.openAvisos.value = false }, onActivity = { vm.openAvisos.value = false; openModule = "rondas" },
+        HomeWithNavigation(vm, me, selected = "notices", onHome = { vm.openAvisos.value = false }, onActivity = { vm.openAvisos.value = false; openModule = "rondas" },
             onScan = { vm.openAvisos.value = false; openModule = "rondas"; openScanner = true },
             onNotices = { vm.openAvisos.value = false }, onMore = { vm.openAvisos.value = false; showSettings = true }) {
-            AvisosScreen(onBack = { vm.openAvisos.value = false; vm.refreshUnread() })
+            AvisosScreen(onBack = { vm.openAvisos.value = false; vm.refreshUnread() }, showTopBar = false)
         }
         return
     }
     when (openModule) {
         "rondas" -> {
-            HomeWithNavigation(onHome = { openModule = null; openScanner = false }, onActivity = { openScanner = false },
+            HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null; openScanner = false }, onActivity = { openScanner = false },
                 onScan = { openScanner = true }, onNotices = { openModule = null; openScanner = false; vm.openAvisos.value = true },
                 onMore = { openModule = null; openScanner = false; showSettings = true }) {
-                ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; openScanner = false; vm.refreshCounts() }, canManagePoints = me.can("rondas", "editar"), initialScan = openScanner)
+                ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; openScanner = false; vm.refreshCounts() }, canManagePoints = me.can("rondas", "editar"), initialScan = openScanner, showTopBar = false)
             }
             return
         }
-        "acciones" -> { HomeWithNavigation(onHome = { openModule = null }, onActivity = { openModule = "rondas" },
+        "acciones" -> { HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null }, onActivity = { openModule = "rondas" },
             onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
             onMore = { openModule = null; showSettings = true }) {
-                ar.com.securityapp.campo.ui.actions.AccionesScreen(onBack = { openModule = null; vm.refreshCounts() })
+                ar.com.securityapp.campo.ui.actions.AccionesScreen(onBack = { openModule = null; vm.refreshCounts() }, showTopBar = false)
             }; return }
         "inspecciones" -> {
-            HomeWithNavigation(onHome = { openModule = null }, onActivity = { openModule = "rondas" },
+            HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null }, onActivity = { openModule = "rondas" },
                 onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
                 onMore = { openModule = null; showSettings = true }) {
-                ar.com.securityapp.campo.ui.inspections.InspeccionesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("inspecciones", "crear"))
+                ar.com.securityapp.campo.ui.inspections.InspeccionesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("inspecciones", "crear"), showTopBar = false)
             }
             return
         }
         "incidentes" -> {
-            HomeWithNavigation(onHome = { openModule = null }, onActivity = { openModule = "rondas" },
+            HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null }, onActivity = { openModule = "rondas" },
                 onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
                 onMore = { openModule = null; showSettings = true }) {
-                ar.com.securityapp.campo.ui.incidents.IncidentesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("incidentes", "crear"))
+                ar.com.securityapp.campo.ui.incidents.IncidentesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("incidentes", "crear"), showTopBar = false)
             }
             return
         }
         "observaciones" -> {
-            HomeWithNavigation(onHome = { openModule = null }, onActivity = { openModule = "rondas" },
+            HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null }, onActivity = { openModule = "rondas" },
                 onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
                 onMore = { openModule = null; showSettings = true }) {
-                ar.com.securityapp.campo.ui.observations.ObservacionesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("observaciones", "crear"))
+                ar.com.securityapp.campo.ui.observations.ObservacionesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("observaciones", "crear"), showTopBar = false)
             }
             return
         }
@@ -186,7 +186,7 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     val modules = MODULES.filter { me.can(it.key) || (it.key == "acciones" && (sync.counts["actions"] ?: 0) > 0) }
     val panic by vm.panic.collectAsStateWithLifecycle()
     panic?.let { state ->
-        HomeWithNavigation(onHome = { vm.closePanic() }, onActivity = { vm.closePanic(); openModule = "rondas" },
+        HomeWithNavigation(vm, me, selected = "home", onHome = { vm.closePanic() }, onActivity = { vm.closePanic(); openModule = "rondas" },
             onScan = { vm.closePanic(); openModule = "rondas"; openScanner = true },
             onNotices = { vm.closePanic(); vm.openAvisos.value = true }, onMore = { vm.closePanic(); showSettings = true }) {
             ar.com.securityapp.campo.panic.PanicScreen((state as? SessionViewModel.PanicState.Done)?.result, onClose = { vm.closePanic() })
@@ -195,29 +195,10 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background, topBar = {
-        Row(
-            Modifier.fillMaxWidth().background(Brand).statusBarsPadding().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Image(painterResource(R.drawable.security_logo), "Logo de Security App", Modifier.size(38.dp).padding(end = 8.dp))
-            Column(Modifier.weight(1f)) {
-                Text(me.companyName, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${me.name} · ${me.role}", color = Color(0xFFB4BACB), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            IconButton({ vm.openAvisos.value = true }) {
-                androidx.compose.material3.BadgedBox(badge = {
-                    if (unread > 0) androidx.compose.material3.Badge(containerColor = Accent, contentColor = BrandDark) { Text(if (unread > 99) "99+" else "$unread") }
-                }) { Icon(Icons.Filled.Notifications, "Avisos", tint = Color.White) }
-            }
-            IconButton({ vm.syncNow() }) {
-                if (sync.running) CircularProgressIndicator(Modifier.size(20.dp), color = Accent, strokeWidth = 2.dp)
-                else Icon(Icons.Filled.Refresh, "Sincronizar", tint = Color.White)
-            }
-            IconButton({ showSettings = true }) { Icon(Icons.Filled.Settings, "Ajustes", tint = Color.White) }
-        }
+        HomeTopBar(vm, me, unread, sync.running, onNotices = { vm.openAvisos.value = true }, onSettings = { showSettings = true })
     }, bottomBar = {
         HomeBottomBar(
+            selected = "home",
             onHome = { openModule = null; showSettings = false },
             onActivity = { openModule = "rondas"; openScanner = false },
             onScan = { openModule = "rondas"; openScanner = true },
@@ -270,16 +251,34 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     }
 }
 
+@Composable
+private fun HomeTopBar(vm: SessionViewModel, me: Me, unread: Int, syncing: Boolean, onNotices: () -> Unit, onSettings: () -> Unit) {
+    Row(Modifier.fillMaxWidth().background(Brand).statusBarsPadding().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Image(painterResource(R.drawable.security_logo), "Logo de Security App", Modifier.size(38.dp).padding(end = 8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(me.companyName, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${me.name} · ${me.role}", color = Color(0xFFB4BACB), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        IconButton(onNotices) {
+            androidx.compose.material3.BadgedBox(badge = { if (unread > 0) androidx.compose.material3.Badge(containerColor = Accent, contentColor = BrandDark) { Text(if (unread > 99) "99+" else "$unread") } }) {
+                Icon(Icons.Filled.Notifications, "Avisos", tint = Color.White)
+            }
+        }
+        IconButton(vm::syncNow) { if (syncing) CircularProgressIndicator(Modifier.size(20.dp), color = Accent, strokeWidth = 2.dp) else Icon(Icons.Filled.Refresh, "Sincronizar", tint = Color.White) }
+        IconButton(onSettings) { Icon(Icons.Filled.Settings, "Ajustes", tint = Color.White) }
+    }
+}
+
 /** Navegación rápida inspirada en billeteras móviles: el QR queda siempre al alcance del pulgar. */
 @Composable
-private fun HomeBottomBar(onHome: () -> Unit, onActivity: () -> Unit, onScan: () -> Unit, onNotices: () -> Unit, onMore: () -> Unit) {
-    Box(Modifier.fillMaxWidth().height(94.dp).zIndex(10f)) {
+private fun HomeBottomBar(selected: String, onHome: () -> Unit, onActivity: () -> Unit, onScan: () -> Unit, onNotices: () -> Unit, onMore: () -> Unit) {
+    Box(Modifier.fillMaxWidth().padding(top = 10.dp).height(94.dp).zIndex(10f)) {
         NavigationBar(containerColor = Color.White, tonalElevation = 6.dp, modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)) {
-            NavigationBarItem(selected = true, onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { Text("Inicio") })
-            NavigationBarItem(selected = false, onClick = onActivity, icon = { Icon(Icons.Filled.CheckCircle, "Actividad") }, label = { Text("Actividad") })
+            NavigationBarItem(selected = selected == "home", onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { Text("Inicio") })
+            NavigationBarItem(selected = selected == "activity", onClick = onActivity, icon = { Icon(Icons.Filled.CheckCircle, "Actividad") }, label = { Text("Actividad") })
             Spacer(Modifier.weight(1f))
-            NavigationBarItem(selected = false, onClick = onNotices, icon = { Icon(Icons.Filled.Notifications, "Avisos") }, label = { Text("Avisos") })
-            NavigationBarItem(selected = false, onClick = onMore, icon = { Icon(Icons.Filled.Menu, "Más") }, label = { Text("Más") })
+            NavigationBarItem(selected = selected == "notices", onClick = onNotices, icon = { Icon(Icons.Filled.Notifications, "Avisos") }, label = { Text("Avisos") })
+            NavigationBarItem(selected = selected == "more", onClick = onMore, icon = { Icon(Icons.Filled.Menu, "Más") }, label = { Text("Más") })
         }
         Surface(
             modifier = Modifier.align(Alignment.TopCenter).size(70.dp),
@@ -297,6 +296,9 @@ private fun HomeBottomBar(onHome: () -> Unit, onActivity: () -> Unit, onScan: ()
 /** Contenedor común para que la navegación inferior siga visible al entrar a cualquier módulo. */
 @Composable
 private fun HomeWithNavigation(
+    vm: SessionViewModel,
+    me: Me,
+    selected: String,
     onHome: () -> Unit,
     onActivity: () -> Unit,
     onScan: () -> Unit,
@@ -306,7 +308,8 @@ private fun HomeWithNavigation(
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = { HomeBottomBar(onHome, onActivity, onScan, onNotices, onMore) },
+        topBar = { HomeTopBar(vm, me, vm.unread.collectAsStateWithLifecycle().value, vm.sync.collectAsStateWithLifecycle().value.running, onNotices, onMore) },
+        bottomBar = { HomeBottomBar(selected, onHome, onActivity, onScan, onNotices, onMore) },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) { content() }
     }
