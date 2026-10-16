@@ -152,6 +152,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 ### App Android — navegación y marca (versión 1.2)
 - La app usa una navegación inferior compacta y persistente, con Inicio, Actividad, Avisos y Más. Se monta en el contenedor común de todas las vistas autenticadas para que no desaparezca al entrar a un módulo, con margen inferior reservado y selección activa según la vista. El encabezado superior también es común (logo, usuario, avisos, sincronización y ajustes); las pantallas raíz no dibujan una flecha de retorno propia. El botón central amarillo abre directamente la cámara para leer un QR y entra a Rondas; si no hay ronda activa, se aplica el inicio automático por primer escaneo ya documentado.
 - El logo compartido por la marca se guarda en `android/app/src/main/res/drawable/security_logo.png` y se usa en el ícono adaptable, el ingreso y el encabezado. Se conserva la paleta `Brand`/`Accent` existente; no se agregan librerías ni servicios.
+- Los avisos de pánico que incluyen una URL de Google Maps muestran además el botón `Abrir ubicación`, que lanza la aplicación de mapas o el navegador mediante `ACTION_VIEW`; no hace falta copiar coordenadas manualmente.
 
 ## Rondas de guardias (Etapa 9 adelantada)
 - Puntos de ronda en `patrol_points`, con QR público, coordenadas, radio permitido y marca de punto crítico.

@@ -1,6 +1,8 @@
 package ar.com.securityapp.campo.ui
 
 import android.app.Application
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +22,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -118,6 +122,8 @@ fun AvisosScreen(onBack: () -> Unit, showTopBar: Boolean = true, vm: AvisosViewM
 
 @Composable
 private fun AvisoCard(n: AppNotification, acked: Boolean, busy: Boolean, onAck: () -> Unit) {
+    val context = LocalContext.current
+    val mapUrl = remember(n.body) { Regex("https?://maps\\.google\\.com/\\?q=[^\\s)]+", RegexOption.IGNORE_CASE).find(n.body)?.value?.trimEnd('.', ',', ')') }
     val bg = when {
         n.critical && !acked && (n.alertUuid != null || n.panicUuid != null) -> Color(0xFFFDE3E5)
         !n.read -> Color(0xFFFDF3CF)
@@ -130,6 +136,12 @@ private fun AvisoCard(n: AppNotification, acked: Boolean, busy: Boolean, onAck: 
                 Text(hour(n.at), style = MaterialTheme.typography.labelSmall, color = Muted)
             }
             if (n.body.isNotBlank()) Text(n.body, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
+            mapUrl?.let { url ->
+                OutlinedButton(
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                    modifier = Modifier.padding(top = 8.dp),
+                ) { Text("Abrir ubicación") }
+            }
             if (n.alertUuid != null || n.panicUuid != null) {
                 if (acked) Text((if (n.panicUuid != null) "Atendida" else "Recibido") + (n.alertAckedBy?.let { " por $it" } ?: ""), color = Ok,
                     fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
