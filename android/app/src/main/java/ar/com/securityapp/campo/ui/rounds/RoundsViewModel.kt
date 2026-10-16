@@ -46,6 +46,7 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
     val autoRoutes: StateFlow<List<PatrolRoute>> = _autoRoutes
     private var pendingRaw: String? = null
     private var pendingMethod = "qr"
+    fun isPreview(): Boolean = c.api.previewToken != null
 
     /** Lo que se graba en la etiqueta NFC de un punto: la misma dirección que su QR. */
     fun tagUrl(point: ar.com.securityapp.campo.data.PatrolPoint): String = c.prefs.serverUrl.trimEnd('/') + "/ronda/punto/" + point.uuid

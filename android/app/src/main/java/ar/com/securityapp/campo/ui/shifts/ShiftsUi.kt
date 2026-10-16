@@ -98,6 +98,7 @@ class ShiftsViewModel(app: Application) : AndroidViewModel(app) {
     val ui: StateFlow<ShiftsState> = _ui
     private val _history = MutableStateFlow<Pair<JsonObject?, String?>>(null to null)
     val history: StateFlow<Pair<JsonObject?, String?>> = _history
+    fun isPreview(): Boolean = c.api.previewToken != null
 
     init {
         reload()
@@ -201,6 +202,7 @@ fun ShiftCard(onOpen: () -> Unit, vm: ShiftsViewModel = viewModel()) {
     val next = ui.upcoming.firstOrNull { it.status == "programado" || it.status == "justificado" }
     var confirmEnd by remember { mutableStateOf(false) }
     var emergency by remember { mutableStateOf(false) }
+    var previewWarning by remember { mutableStateOf(false) }
     var pickSite by remember { mutableStateOf(false) }
     // Sin permiso de ubicación se pide primero; empiece o no, se registra (sin GPS se avisa).
     var pending by remember { mutableStateOf<Pair<GuardShift?, Site?>?>(null) }
@@ -209,6 +211,7 @@ fun ShiftCard(onOpen: () -> Unit, vm: ShiftsViewModel = viewModel()) {
     }
     val context = LocalContext.current
     fun begin(s: GuardShift?, site: Site?) {
+        if (vm.isPreview()) { previewWarning = true; return }
         if (ShiftTrackingService.hasLocation(context)) vm.prepareStart(s, site)
         else { pending = s to site; permission.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION)) }
     }
@@ -236,8 +239,8 @@ fun ShiftCard(onOpen: () -> Unit, vm: ShiftsViewModel = viewModel()) {
                             style = MaterialTheme.typography.bodySmall, color = Danger, modifier = Modifier.padding(top = 4.dp))
                     }
                     Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (ui.openExit == null) OutlinedButton({ emergency = true }, Modifier.weight(1f)) { Text("Salgo por una emergencia") }
-                        Button({ confirmEnd = true }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = BrandDark)) { Text("Terminar turno") }
+                        if (ui.openExit == null) OutlinedButton({ if (vm.isPreview()) previewWarning = true else emergency = true }, Modifier.weight(1f)) { Text("Salgo por una emergencia") }
+                        Button({ if (vm.isPreview()) previewWarning = true else confirmEnd = true }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = BrandDark)) { Text("Terminar turno") }
                     }
                 }
                 next != null -> {
@@ -260,6 +263,9 @@ fun ShiftCard(onOpen: () -> Unit, vm: ShiftsViewModel = viewModel()) {
             ui.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 6.dp)) }
         }
     }
+    if (previewWarning) AlertDialog(onDismissRequest = { previewWarning = false }, title = { Text("Vista previa: solo lectura") },
+        text = { Text("Estás viendo la app como otro usuario. Empezar, terminar o informar un turno no se guarda ni se envía. Salí de la vista previa e ingresá con la cuenta real para probarlo.") },
+        confirmButton = { TextButton({ previewWarning = false }) { Text("Entendido") } })
     if (confirmEnd && current != null) {
         val left = java.time.Duration.between(Instant.now(), current.endAt).toMinutes()
         AlertDialog(onDismissRequest = { confirmEnd = false }, title = { Text("¿Terminar el turno?") },

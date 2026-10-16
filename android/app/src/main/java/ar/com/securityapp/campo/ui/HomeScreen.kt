@@ -305,7 +305,10 @@ private fun HomeWithNavigation(
         topBar = { HomeTopBar(vm, me, vm.unread.collectAsStateWithLifecycle().value, vm.sync.collectAsStateWithLifecycle().value.running, onNotices, onMore) },
         bottomBar = { HomeBottomBar(selected, onHome, onActivity, onScan, onNotices, onMore) },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) { content() }
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            if (me.isPreview) PreviewBanner(me) { vm.exitPreview() }
+            Box(Modifier.fillMaxSize().weight(1f)) { content() }
+        }
     }
 }
 
@@ -316,7 +319,7 @@ private fun PreviewBanner(me: Me, onExit: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text("VISTA PREVIA · ${me.name}", color = BrandDark, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Rol ${me.role}. Podés probar todo: no se guarda ni se envía nada.", color = BrandDark,
+            Text("Rol ${me.role}. Solo lectura: las acciones que guardan datos están bloqueadas.", color = BrandDark,
                 style = MaterialTheme.typography.bodySmall)
         }
         androidx.compose.material3.Button(onExit, colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = BrandDark)) { Text("Salir") }

@@ -71,12 +71,14 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
     val autoRoutes by vm.autoRoutes.collectAsStateWithLifecycle()
     var scanning by remember { mutableStateOf(false) }
     var confirmFinish by remember { mutableStateOf(false) }
+    var previewWarning by remember { mutableStateOf(false) }
     var simulate by remember { mutableStateOf(false) } // solo en la versión de prueba (emulador sin cámara apuntable)
     var startRoute by remember { mutableStateOf<Any?>(null) } // ruta elegida (o "libre") esperando la revisión de permisos
     var startSlot by remember { mutableStateOf<ar.com.securityapp.campo.data.PatrolSlot?>(null) } // ronda programada que se cumple
     val context = androidx.compose.ui.platform.LocalContext.current
     fun begin(route: ar.com.securityapp.campo.data.PatrolRoute?, slot: ar.com.securityapp.campo.data.PatrolSlot? = null) {
         startSlot = slot
+        if (vm.isPreview()) { previewWarning = true; return }
         if (Readiness.allGood(context, vm.needsSms())) vm.start(route, slot) else startRoute = route ?: "libre"
     }
 
@@ -95,12 +97,12 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
             ScanFeedback.play(context, ScanFeedback.Kind.ERROR)
             nfcMessage = "La etiqueta está vacía o no se pudo leer. Mantené el celular quieto sobre ella o escaneá el QR."
         }
-        else vm.onQr(raw, method = "nfc")
+        else if (vm.isPreview()) previewWarning = true else vm.onQr(raw, method = "nfc")
     }
     // Cada resultado de escaneo (QR o NFC) suena y vibra distinto: registrado, ronda completa, ya marcado o error.
     androidx.compose.runtime.LaunchedEffect(scan) { scan?.let { ScanFeedback.play(context, ScanFeedback.forResult(it)) } }
     if (scanning) {
-        QrScanner("Apuntá al QR del punto de control", onResult = { scanning = false; vm.onQr(it) }, onClose = { scanning = false })
+        QrScanner("Apuntá al QR del punto de control", onResult = { scanning = false; if (vm.isPreview()) previewWarning = true else vm.onQr(it) }, onClose = { scanning = false })
         return
     }
     BackHandler(onBack = onBack)
@@ -119,7 +121,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
             }
             val active = ui.active
             if (active != null) {
-                item { ActiveRoundCard(ui, active, onScan = { scanning = true }, onFinish = { confirmFinish = true }) }
+                item { ActiveRoundCard(ui, active, onScan = { if (vm.isPreview()) previewWarning = true else scanning = true }, onFinish = { if (vm.isPreview()) previewWarning = true else confirmFinish = true }) }
                 ui.progress.firstOrNull { it.next }?.point?.let { next -> if (ui.guidance && next.lat != null && next.lng != null) item { NextPointGuide(vm, next) } }
                 if (ar.com.securityapp.campo.BuildConfig.DEBUG) item {
                     TextButton({ simulate = true }) { Text("Simular escaneo (solo versión de prueba)", color = Muted) }
@@ -132,7 +134,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
                 }
             } else {
                 item {
-                    OutlinedButton({ scanning = true }, Modifier.fillMaxWidth(), enabled = !ui.busy) { Text("Escanear primer punto (inicia la ronda)") }
+                    OutlinedButton({ if (vm.isPreview()) previewWarning = true else scanning = true }, Modifier.fillMaxWidth(), enabled = !ui.busy) { Text("Escanear primer punto (inicia la ronda)") }
                     Text("Si el punto pertenece a una sola ruta asignada, se inicia esa ruta. Si no, se crea una ronda libre.", style = MaterialTheme.typography.bodySmall, color = Muted)
                 }
                 if (ui.slots.isNotEmpty()) {
@@ -185,6 +187,9 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
         }
     }
 
+    if (previewWarning) AlertDialog(onDismissRequest = { previewWarning = false }, title = { Text("Vista previa: solo lectura") },
+        text = { Text("Estás viendo la app como otro usuario. Iniciar o registrar una ronda no se guarda ni se envía. Salí de la vista previa e ingresá con la cuenta real para probarlo.") },
+        confirmButton = { TextButton({ previewWarning = false }) { Text("Entendido") } })
     startRoute?.let { pending ->
         ReadyCheckDialog(needSms = vm.needsSms(), onStart = {
             startRoute = null
