@@ -53,6 +53,11 @@
             </intent-filter>
         </activity>
 
+        <!-- Google Maps: la clave se inyecta desde android/secrets.properties y nunca se versiona. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
+
         <service
             android:name=".tracking.ShiftTrackingService"
             android:exported="false"

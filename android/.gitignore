@@ -19,3 +19,5 @@ local.properties
 *.jks
 *.keystore
 keystore.properties
+# Clave de Google Maps: solo local, nunca al repo.
+secrets.properties

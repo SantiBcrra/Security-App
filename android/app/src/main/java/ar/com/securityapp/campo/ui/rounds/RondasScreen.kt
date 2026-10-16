@@ -75,6 +75,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
     var simulate by remember { mutableStateOf(false) } // solo en la versión de prueba (emulador sin cámara apuntable)
     var startRoute by remember { mutableStateOf<Any?>(null) } // ruta elegida (o "libre") esperando la revisión de permisos
     var startSlot by remember { mutableStateOf<ar.com.securityapp.campo.data.PatrolSlot?>(null) } // ronda programada que se cumple
+    var mapRoute by remember { mutableStateOf<ar.com.securityapp.campo.data.PatrolRoute?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     fun begin(route: ar.com.securityapp.campo.data.PatrolRoute?, slot: ar.com.securityapp.campo.data.PatrolSlot? = null) {
         startSlot = slot
@@ -119,6 +120,12 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
                     Text("${ui.failed} envío(s) rechazado(s) por el servidor. Revisalos en Ajustes.", Modifier.padding(14.dp), color = Danger)
                 }
             }
+            (ui.activeRoute ?: mapRoute)?.let { route ->
+                item {
+                    RouteMapCard(route, ui.points)
+                    if (ui.activeRoute == null) TextButton({ mapRoute = null }, Modifier.fillMaxWidth()) { Text("Ocultar mapa") }
+                }
+            }
             val active = ui.active
             if (active != null) {
                 item { ActiveRoundCard(ui, active, onScan = { if (vm.isPreview()) previewWarning = true else scanning = true }, onFinish = { if (vm.isPreview()) previewWarning = true else confirmFinish = true }) }
@@ -157,7 +164,10 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
                                     mapOf("secuencial" to "en orden", "azar" to "orden al azar")[route.orderMode]).joinToString(" · "),
                                     style = MaterialTheme.typography.bodySmall, color = Muted)
                             }
-                            Button({ begin(route) }, enabled = !ui.busy, colors = ButtonDefaults.buttonColors(containerColor = Brand)) { Text("Iniciar") }
+                            Column(horizontalAlignment = Alignment.End) {
+                                TextButton({ mapRoute = if (mapRoute?.uuid == route.uuid) null else route }) { Text(if (mapRoute?.uuid == route.uuid) "Ocultar mapa" else "Ver mapa") }
+                                Button({ begin(route) }, enabled = !ui.busy, colors = ButtonDefaults.buttonColors(containerColor = Brand)) { Text("Iniciar") }
+                            }
                         }
                     }
                 }
