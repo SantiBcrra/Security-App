@@ -65,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -272,9 +273,9 @@ private fun HomeTopBar(vm: SessionViewModel, me: Me, unread: Int, syncing: Boole
 /** Navegación rápida inspirada en billeteras móviles: el QR queda siempre al alcance del pulgar. */
 @Composable
 private fun HomeBottomBar(selected: String, onHome: () -> Unit, onActivity: () -> Unit, onScan: () -> Unit, onNotices: () -> Unit, onMore: () -> Unit) {
-    Box(Modifier.fillMaxWidth().height(80.dp).background(Color.White).zIndex(10f)) {
+    Box(Modifier.fillMaxWidth().background(Color.Black).navigationBarsPadding().zIndex(10f)) {
         NavigationBar(containerColor = Color.White, tonalElevation = 6.dp, windowInsets = WindowInsets(0, 0, 0, 0),
-            modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).zIndex(1f)) {
+            modifier = Modifier.fillMaxWidth().height(80.dp).align(Alignment.BottomCenter).zIndex(1f)) {
             NavigationBarItem(selected = selected == "home", onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { Text("Inicio") })
             NavigationBarItem(selected = selected == "activity", onClick = onActivity, icon = { Icon(Icons.Filled.CheckCircle, "Actividad") }, label = { Text("Actividad") })
             Spacer(Modifier.weight(1f))
