@@ -13,6 +13,9 @@ plugins {
 val releaseProps = Properties().apply {
     rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
+val mapsProps = Properties().apply {
+    rootProject.file("secrets.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
 
 android {
     namespace = "ar.com.securityapp.campo"
@@ -31,6 +34,7 @@ android {
         versionCode = 13
         versionName = "1.2.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["MAPS_API_KEY"] = mapsProps.getProperty("MAPS_API_KEY", "")
     }
 
     signingConfigs {
@@ -93,6 +97,7 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.barcode.scanning)
     implementation(libs.play.services.location)
+    implementation(libs.play.services.maps)
     implementation(libs.firebase.messaging)
     implementation(libs.androidx.exifinterface)
     testImplementation(libs.junit)

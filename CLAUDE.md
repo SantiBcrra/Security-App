@@ -176,7 +176,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   punteado + recorrido real), en métricas y en el resumen diario. La app avisa al guardia "fuera de orden: tocaba X".
 - Cada escaneo guarda hora del dispositivo, hora de recepción, GPS, precisión, distancia calculada y si quedó dentro del radio. No se duplica un punto dentro de la misma ronda.
 - La app Android guarda rondas y escaneos sin conexión y los envía con `round.start`, `round.scan` y `round.finish`; las operaciones son idempotentes por `op_id`.
-- El mapa operativo usa Leaflet/OpenStreetMap ya incluido; no se agrega dependencia de Google Maps.
+- El panel web conserva Leaflet/OpenStreetMap. La app Android usa Google Maps SDK para Android: `RouteMapCard` dibuja los puntos sincronizados y la línea de la ruta, con vista de calles o satélite. La clave se lee de `android/secrets.properties` (ignorado por Git) mediante `MAPS_API_KEY`; no se incluye ninguna clave en el APK versionado. La restricción de Google para debug usa el paquete `ar.com.securityapp.campo.debug` y su SHA-1; release usa `ar.com.securityapp.campo` y la SHA-1 de la firma release.
 - Rutas: al celular llegan solo las asignadas (`patrol_route_assignments`; alcance "todo" ve todas), con `points` = UUIDs en
   orden; las no asignadas viajan como baja. **Cambiar asignaciones o puntos de una ruta debe tocar `patrol_routes.updated_at`.**
   Iniciar una ruta no asignada se rechaza. Al finalizar: `completa` o `incompleta` (puntos salteados).

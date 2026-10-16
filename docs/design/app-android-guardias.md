@@ -60,6 +60,7 @@ se actualiza sola desde el sistema.
 | QR | CameraX + ML Kit Barcode Scanning (funciona sin internet) |
 | NFC | API NFC de Android (NfcAdapter, lectura del UID del tag) |
 | GPS | Fused Location Provider (Google Play Services) en un foreground service tipo `location` |
+| Mapa de rondas | Google Maps SDK para Android; muestra los puntos sincronizados y la línea de la ruta, con calles/satélite. La clave se inyecta desde `android/secrets.properties` y se restringe por paquete + SHA-1. |
 | Notificaciones | Firebase Cloud Messaging (FCM) |
 | Seguridad | Android Keystore / EncryptedSharedPreferences para los tokens; HTTPS obligatorio en producción |
 | Actualizaciones | Propias (sin Play): descarga del APK desde el servidor, verificación SHA-256 + `PackageInstaller` |
