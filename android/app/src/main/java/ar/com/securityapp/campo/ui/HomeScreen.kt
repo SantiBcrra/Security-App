@@ -46,8 +46,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -67,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ar.com.securityapp.campo.data.Me
@@ -274,7 +273,7 @@ private fun HomeTopBar(vm: SessionViewModel, me: Me, unread: Int, syncing: Boole
 @Composable
 private fun HomeBottomBar(selected: String, onHome: () -> Unit, onActivity: () -> Unit, onScan: () -> Unit, onNotices: () -> Unit, onMore: () -> Unit) {
     Box(Modifier.fillMaxWidth().height(80.dp).background(Color.White).zIndex(10f)) {
-        NavigationBar(containerColor = Color.White, tonalElevation = 6.dp,
+        NavigationBar(containerColor = Color.White, tonalElevation = 6.dp, windowInsets = WindowInsets(0, 0, 0, 0),
             modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).zIndex(1f)) {
             NavigationBarItem(selected = selected == "home", onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { Text("Inicio") })
             NavigationBarItem(selected = selected == "activity", onClick = onActivity, icon = { Icon(Icons.Filled.CheckCircle, "Actividad") }, label = { Text("Actividad") })
@@ -282,15 +281,8 @@ private fun HomeBottomBar(selected: String, onHome: () -> Unit, onActivity: () -
             NavigationBarItem(selected = selected == "notices", onClick = onNotices, icon = { Icon(Icons.Filled.Notifications, "Avisos") }, label = { Text("Avisos") })
             NavigationBarItem(selected = selected == "more", onClick = onMore, icon = { Icon(Icons.Filled.Menu, "Más") }, label = { Text("Más") })
         }
-        Surface(
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = (-18).dp).size(72.dp).zIndex(2f),
-            shape = androidx.compose.foundation.shape.CircleShape,
-            color = Color.White,
-            shadowElevation = 5.dp,
-        ) {
-            FloatingActionButton(onClick = onScan, containerColor = Accent, contentColor = BrandDark, modifier = Modifier.padding(6.dp)) {
-                Icon(painterResource(R.drawable.ic_qr), "Escanear QR", Modifier.size(32.dp))
-            }
+        IconButton(onClick = onScan, modifier = Modifier.align(Alignment.TopCenter).offset(y = 8.dp).size(64.dp).zIndex(2f)) {
+            Icon(painterResource(R.drawable.ic_qr), "Escanear QR", Modifier.size(32.dp), tint = BrandDark)
         }
     }
 }
