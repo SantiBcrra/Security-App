@@ -319,7 +319,7 @@ private fun PreviewBanner(me: Me, onExit: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text("VISTA PREVIA · ${me.name}", color = BrandDark, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Rol ${me.role}. Solo lectura: las acciones que guardan datos están bloqueadas.", color = BrandDark,
+            Text("Rol ${me.role}. Solo lectura: las acciones de turnos y rondas están bloqueadas.", color = BrandDark,
                 style = MaterialTheme.typography.bodySmall)
         }
         androidx.compose.material3.Button(onExit, colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = BrandDark)) { Text("Salir") }
