@@ -136,30 +136,64 @@ final class RoundsController
         return Response::redirect('/panel/rondas');
     }
 
-    public function routeForm(Request $request): Response
+    /** Alta y edición de ruta: puntos en orden (arrastrar o ↑↓, también tocándolos en el mapa), modo de orden y guardias. */
+    public function routeForm(Request $request, ?string $uuid = null): Response
     {
-        return Response::html(View::render('panel/rounds/route', ['title' => 'Nueva ruta de ronda', 'points' => Patrols::points(), 'users' => array_filter(Users::all(), fn ($u) => (int) $u['is_active'] === 1)], 'layouts/app'));
+        $route = $uuid ? Patrols::route($uuid) : null;
+        if ($uuid && (!$route || $route['deleted_at'] !== null)) return new Response('', 404);
+        [$old] = Flash::pullInput();
+        $selected = $route ? array_column(Patrols::routePoints((int) $route['id']), 'uuid') : [];
+        $assigned = $route ? array_column(Patrols::assignments((int) $route['id']), 'uuid') : [];
+        return Response::html(View::render('panel/rounds/route', ['title' => $route ? 'Editar ruta' : 'Nueva ruta de ronda', 'route' => $route,
+            'points' => Patrols::points(), 'users' => array_filter(Users::all(), fn ($u) => (int) $u['is_active'] === 1),
+            'selected' => $old['points'] ?? $selected, 'assigned' => $old['users'] ?? $assigned, 'old' => $old], 'layouts/app'));
     }
 
-    public function routeStore(Request $request): Response
+    public function routeStore(Request $request, ?string $uuid = null): Response
     {
+        $route = $uuid ? Patrols::route($uuid) : null;
+        if ($uuid && (!$route || $route['deleted_at'] !== null)) return new Response('', 404);
         $p = $request->post;
+        $back = $route ? '/panel/rondas/rutas/' . $route['uuid'] . '/editar' : '/panel/rondas/rutas/nueva';
         $name = trim((string) ($p['name'] ?? ''));
-        $points = Patrols::pointIdsByUuid((array) ($p['points'] ?? []));
-        if ($name === '' || !$points) { Flash::add('danger', 'La ruta necesita un nombre y al menos un punto.'); return Response::redirect('/panel/rondas/rutas/nueva'); }
-        $users = [];
-        foreach ((array) ($p['users'] ?? []) as $uuid) {
-            $u = Users::findByUuid((string) $uuid);
-            if ($u && (int) $u['is_active'] === 1) $users[] = (int) $u['id'];
+        $points = Patrols::pointIdsByUuid((array) ($p['points'] ?? [])); // en el orden en que llegan
+        if ($name === '' || !$points) {
+            Flash::add('danger', 'La ruta necesita un nombre y al menos un punto.');
+            Flash::withInput(array_diff_key($p, ['csrf_token' => 1]));
+            return Response::redirect($back);
         }
-        $frequency = in_array($p['frequency'] ?? '', ['manual', 'diaria', 'semanal', 'mensual'], true) ? $p['frequency'] : 'manual';
-        $data = ['uuid' => Uuid::v4(), 'name' => $name, 'description' => trim((string) ($p['description'] ?? '')), 'frequency' => $frequency,
-            'expected_minutes' => max(0, (int) ($p['expected_minutes'] ?? 0)), 'point_ids' => $points, 'user_ids' => $users];
+        $users = [];
+        foreach ((array) ($p['users'] ?? []) as $u) {
+            $user = Users::findByUuid((string) $u);
+            if ($user && (int) $user['is_active'] === 1) $users[] = (int) $user['id'];
+        }
+        $mode = isset(Patrols::ORDER_MODES[$p['order_mode'] ?? '']) ? $p['order_mode'] : 'libre';
+        $data = ['name' => mb_substr($name, 0, 120), 'description' => trim((string) ($p['description'] ?? '')), 'expected_minutes' => max(0, (int) ($p['expected_minutes'] ?? 0)),
+            'order_mode' => $mode, 'point_ids' => $points, 'user_ids' => $users];
+        if ($route) {
+            Patrols::updateRoute((int) $route['id'], $data);
+            Audit::tenant('patrol_route.update', 'patrol_route', $route['uuid'], ['name' => $route['name'], 'order_mode' => $route['order_mode'] ?? 'libre',
+                'points' => array_column(Patrols::routePoints((int) $route['id']), 'code')], ['name' => $data['name'], 'order_mode' => $mode, 'points' => count($points), 'users' => count($users)]);
+            Flash::add('success', 'Ruta actualizada. Los celulares la reciben en la próxima sincronización.');
+            return Response::redirect('/panel/rondas/rutas/' . $route['uuid']);
+        }
+        $data += ['uuid' => Uuid::v4(), 'frequency' => 'manual'];
         Patrols::createRoute($data);
-        Audit::tenant('patrol_route.create', 'patrol_route', $data['uuid'], null, ['name' => $name, 'frequency' => $frequency,
-            'points' => count($points), 'users' => count($users)]);
+        Audit::tenant('patrol_route.create', 'patrol_route', $data['uuid'], null, ['name' => $data['name'], 'order_mode' => $mode, 'points' => count($points), 'users' => count($users)]);
         Flash::add('success', 'Ruta creada y asignada.');
-        return Response::redirect('/panel/rondas');
+        return Response::redirect('/panel/rondas/rutas/' . $data['uuid']);
+    }
+
+    /** Detalle: mapa con el recorrido planificado (puntos numerados, línea punteada con flechas), guardias, programación y rondas. */
+    public function routeShow(Request $request, string $uuid): Response
+    {
+        $route = Patrols::route($uuid);
+        if (!$route || $route['deleted_at'] !== null) return new Response('', 404);
+        $schedules = array_values(array_filter(\App\Services\PatrolPlanner::all(), fn ($s) => $s['route_uuid'] === $uuid));
+        $rounds = array_values(array_filter(Patrols::rounds(200, $this->onlyUser()), fn ($r) => (int) ($r['route_id'] ?? 0) === (int) $route['id']));
+        return Response::html(View::render('panel/rounds/route_show', ['title' => 'Ruta ' . $route['name'], 'route' => $route,
+            'points' => Patrols::routePoints((int) $route['id']), 'guards' => Patrols::assignments((int) $route['id']), 'schedules' => $schedules,
+            'rounds' => array_slice($rounds, 0, 15), 'canEdit' => UserAuth::can('rondas', 'editar')], 'layouts/app'));
     }
 
     public function pointStore(Request $request): Response

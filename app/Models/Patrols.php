@@ -27,6 +27,13 @@ final class Patrols
         return $stmt->fetch() ?: null;
     }
 
+    /** Modos de orden de una ruta. En secuencial y azar una marca fuera de orden se registra, no se rechaza. */
+    public const ORDER_MODES = [
+        'libre' => 'Libre: cualquier orden, solo importa pasar por todos',
+        'secuencial' => 'Secuencial: en el orden de la ruta',
+        'azar' => 'Al azar: la app arma un orden distinto en cada ronda',
+    ];
+
     /** Precisión mínima del GPS para fijar la ubicación de un punto desde el celular (metros). */
     public const LOCATE_MAX_ACCURACY_M = 30;
 
@@ -147,8 +154,8 @@ final class Patrols
         if (!$round) return null;
         $round['route_points'] = [];
         if ($round['route_id'] !== null) {
-            $s = DB::tenant()->prepare('SELECT p.uuid, p.code, p.name, p.is_critical, p.radius_m, rp.sort_order,
-                    sc.scanned_at_device, sc.method, sc.distance_m, sc.within_radius, sc.location_status, sc.accuracy_m, sc.lat, sc.lng
+            $s = DB::tenant()->prepare('SELECT p.uuid, p.code, p.name, p.is_critical, p.radius_m, rp.sort_order, p.lat AS point_lat, p.lng AS point_lng,
+                    sc.scanned_at_device, sc.method, sc.out_of_order, sc.distance_m, sc.within_radius, sc.location_status, sc.accuracy_m, sc.lat, sc.lng
                 FROM patrol_route_points rp JOIN patrol_points p ON p.id=rp.point_id
                 LEFT JOIN patrol_scans sc ON sc.round_id=? AND sc.point_id=rp.point_id
                 WHERE rp.route_id=? ORDER BY rp.sort_order, rp.id');
@@ -189,13 +196,49 @@ final class Patrols
         return $route;
     }
 
+    /** Edición: datos, puntos en el nuevo orden y guardias. Toca updated_at para que la ruta vuelva a bajar a los celulares. */
+    public static function updateRoute(int $id, array $data): void
+    {
+        $db = DB::tenant();
+        $db->beginTransaction();
+        try {
+            $db->prepare('UPDATE patrol_routes SET name = ?, description = ?, expected_minutes = ?, order_mode = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?')
+                ->execute([$data['name'], $data['description'] ?: null, $data['expected_minutes'] ?: null,
+                    isset(self::ORDER_MODES[$data['order_mode'] ?? '']) ? $data['order_mode'] : 'libre', $id]);
+            $db->prepare('DELETE FROM patrol_route_points WHERE route_id = ?')->execute([$id]);
+            foreach ((array) ($data['point_ids'] ?? []) as $i => $pointId) {
+                $db->prepare('INSERT INTO patrol_route_points (route_id,point_id,sort_order) VALUES (?,?,?)')->execute([$id, (int) $pointId, $i + 1]);
+            }
+            $keep = array_map('intval', (array) ($data['user_ids'] ?? []));
+            $db->prepare('UPDATE patrol_route_assignments SET is_active = 0, updated_at = UTC_TIMESTAMP() WHERE route_id = ?' . ($keep ? ' AND user_id NOT IN (' . implode(',', $keep) . ')' : ''))->execute([$id]);
+            foreach ($keep as $userId) {
+                $db->prepare('INSERT INTO patrol_route_assignments (route_id,user_id,created_at,updated_at) VALUES (?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())
+                    ON DUPLICATE KEY UPDATE is_active = 1, updated_at = UTC_TIMESTAMP()')->execute([$id, $userId]);
+            }
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /** Puntos de una ruta en orden, con coordenadas (detalle y mapa). */
+    public static function routePoints(int $routeId): array
+    {
+        $s = DB::tenant()->prepare('SELECT p.*, rp.sort_order FROM patrol_route_points rp JOIN patrol_points p ON p.id = rp.point_id
+            WHERE rp.route_id = ? ORDER BY rp.sort_order, rp.id');
+        $s->execute([$routeId]);
+        return $s->fetchAll();
+    }
+
     public static function createRoute(array $data): int
     {
         DB::tenant()->beginTransaction();
         try {
             $uuid = $data['uuid'] ?? Uuid::v4();
-            DB::tenant()->prepare('INSERT INTO patrol_routes (uuid,name,description,frequency,expected_minutes,is_active,created_at,updated_at) VALUES (?,?,?,?,?,1,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
-                ->execute([$uuid, $data['name'], $data['description'] ?: null, $data['frequency'] ?: 'manual', $data['expected_minutes'] ?: null]);
+            DB::tenant()->prepare('INSERT INTO patrol_routes (uuid,name,description,frequency,expected_minutes,order_mode,is_active,created_at,updated_at) VALUES (?,?,?,?,?,?,1,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
+                ->execute([$uuid, $data['name'], $data['description'] ?: null, $data['frequency'] ?? 'manual', $data['expected_minutes'] ?: null,
+                    isset(self::ORDER_MODES[$data['order_mode'] ?? '']) ? $data['order_mode'] : 'libre']);
             $id = (int) DB::tenant()->lastInsertId();
             foreach ((array) ($data['point_ids'] ?? []) as $i => $pointId) {
                 DB::tenant()->prepare('INSERT INTO patrol_route_points (route_id,point_id,sort_order) VALUES (?,?,?)')->execute([$id, (int) $pointId, $i + 1]);
@@ -212,7 +255,22 @@ final class Patrols
     }
 
     /** @param ?string $startedAt hora del celular (ISO 8601): la ronda pudo empezar sin señal y llegar después */
-    public static function start(?string $routeUuid, ?float $lat, ?float $lng, ?string $roundUuid = null, ?string $startedAt = null): array
+    /** Orden que le toca a una ronda: el de la ruta (secuencial), el que armó el celular o uno al azar (azar); libre = null. */
+    private static function roundOrder(int $routeId, string $mode, ?array $fromDevice): ?string
+    {
+        if ($mode === 'libre') return null;
+        $route = self::routePointUuids($routeId);
+        if ($mode === 'azar') {
+            $device = array_values(array_map('strval', (array) $fromDevice));
+            $sorted = $device; sort($sorted); $want = $route; sort($want);
+            if ($sorted === $want) return json_encode($device); // permutación válida de los puntos de la ruta
+            shuffle($route);
+        }
+        return json_encode($route);
+    }
+
+    /** @param ?array $pointOrder orden armado por el celular (rutas "al azar") */
+    public static function start(?string $routeUuid, ?float $lat, ?float $lng, ?string $roundUuid = null, ?string $startedAt = null, ?array $pointOrder = null): array
     {
         $routeId = null;
         if ($routeUuid !== null && $routeUuid !== '') {
@@ -228,8 +286,9 @@ final class Patrols
             if ((int) $existing['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('La ronda no está disponible.');
             return $existing;
         }
-        DB::tenant()->prepare('INSERT INTO patrol_rounds (uuid,route_id,user_id,status,started_at,started_lat,started_lng,created_at,updated_at) VALUES (?,?,?,\'en_curso\',?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
-            ->execute([$uuid, $routeId, (int) UserAuth::user()['id'], self::deviceTime($startedAt), $lat, $lng]);
+        DB::tenant()->prepare('INSERT INTO patrol_rounds (uuid,route_id,point_order,user_id,status,started_at,started_lat,started_lng,created_at,updated_at) VALUES (?,?,?,?,\'en_curso\',?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
+            ->execute([$uuid, $routeId, $routeId !== null ? self::roundOrder($routeId, $r['order_mode'] ?? 'libre', $pointOrder) : null,
+                (int) UserAuth::user()['id'], self::deviceTime($startedAt), $lat, $lng]);
         return self::round($uuid) ?? [];
     }
 
@@ -284,8 +343,9 @@ final class Patrols
         if (!Uuid::isValid($uuid)) throw new UserError('Identificador de escaneo inválido.');
         $accuracy = isset($data['accuracy_m']) && is_numeric($data['accuracy_m']) ? min(max((float) $data['accuracy_m'], 0.0), 999999999.0) : null;
         $method = in_array($data['method'] ?? null, ['qr', 'nfc'], true) ? $data['method'] : null; // cómo se marcó el punto
-        DB::tenant()->prepare('INSERT INTO patrol_scans (uuid,round_id,point_id,method,user_id,scanned_at_device,received_at,lat,lng,accuracy_m,distance_m,within_radius,location_status,is_mock,note,created_at,updated_at) VALUES (?,?,?,?,?,?,UTC_TIMESTAMP(),?,?,?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
-            ->execute([$uuid, (int) $round['id'], (int) $point['id'], $method, (int) UserAuth::user()['id'], $at, $lat, $lng, $accuracy, $distance, $inside ? 1 : 0, $status, $mock ? 1 : 0, $data['note'] ?? null]);
+        $outOfOrder = self::outOfOrder($round, $point['uuid'], $at);
+        DB::tenant()->prepare('INSERT INTO patrol_scans (uuid,round_id,point_id,method,out_of_order,user_id,scanned_at_device,received_at,lat,lng,accuracy_m,distance_m,within_radius,location_status,is_mock,note,created_at,updated_at) VALUES (?,?,?,?,?,?,?,UTC_TIMESTAMP(),?,?,?,?,?,?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
+            ->execute([$uuid, (int) $round['id'], (int) $point['id'], $method, $outOfOrder, (int) UserAuth::user()['id'], $at, $lat, $lng, $accuracy, $distance, $inside ? 1 : 0, $status, $mock ? 1 : 0, $data['note'] ?? null]);
         if (in_array($status, ['lejos', 'simulada'], true)) {
             self::warnOffSite($round, $point, $status, $distance, $at);
         }
@@ -317,6 +377,24 @@ final class Patrols
             $accuracy !== null && $distance - $accuracy <= $radius => 'impreciso',
             default => 'lejos',
         };
+    }
+
+    /**
+     * Rondas con orden (secuencial / azar): la marca es fuera de orden si no es el primer punto del orden que faltaba marcar
+     * a esa hora (se cuenta con la hora del celular, así no importa en qué orden llegan sin señal). Libre o punto fuera de la
+     * ruta = null.
+     */
+    private static function outOfOrder(array $round, string $pointUuid, string $at): ?int
+    {
+        $order = json_decode((string) ($round['point_order'] ?? ''), true);
+        if (!is_array($order) || !in_array($pointUuid, $order, true)) return null;
+        $q = DB::tenant()->prepare('SELECT p.uuid FROM patrol_scans s JOIN patrol_points p ON p.id = s.point_id WHERE s.round_id = ? AND s.scanned_at_device <= ?');
+        $q->execute([(int) $round['id'], $at]);
+        $done = $q->fetchAll(\PDO::FETCH_COLUMN);
+        foreach ($order as $uuid) {
+            if (!in_array($uuid, $done, true)) return $uuid === $pointUuid ? 0 : 1;
+        }
+        return 0;
     }
 
     /** Aviso a SyH y supervisores: una vez por ronda y por tipo (lejos / simulada), no por cada punto. */

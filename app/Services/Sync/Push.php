@@ -141,7 +141,7 @@ final class Push
     {
         if (!UserAuth::can('rondas', 'crear')) return self::error('Tu rol no puede iniciar rondas.');
         $r = Patrols::start(!empty($data['route_uuid']) ? (string) $data['route_uuid'] : null, isset($data['lat']) ? (float) $data['lat'] : null, isset($data['lng']) ? (float) $data['lng'] : null, (string) ($data['uuid'] ?? ''),
-            isset($data['started_at_device']) ? (string) $data['started_at_device'] : null);
+            isset($data['started_at_device']) ? (string) $data['started_at_device'] : null, is_array($data['point_order'] ?? null) ? $data['point_order'] : null);
         \App\Services\PatrolPlanner::attach($r, !empty($data['slot_uuid']) ? (string) $data['slot_uuid'] : null); // ronda programada que cumple
         return ['status' => 'ok', 'data' => ['uuid' => $r['uuid'], 'status' => $r['status']]];
     }

@@ -56,20 +56,22 @@ final class RoundMetrics
         $q->execute($params);
         $guards = [];
         foreach ($q->fetchAll() as $g) {
-            $guards[(int) $g['user_id']] = array_map(fn ($v) => is_numeric($v) ? (int) $v : $v, $g) + ['marcas' => 0, 'fuera' => 0, 'dudosas' => 0, 'nfc' => 0,
+            $guards[(int) $g['user_id']] = array_map(fn ($v) => is_numeric($v) ? (int) $v : $v, $g) + ['marcas' => 0, 'fuera' => 0, 'dudosas' => 0, 'nfc' => 0, 'fuera_orden' => 0,
                 'prog_total' => 0, 'prog_tiempo' => 0, 'prog_tarde' => 0, 'prog_no' => 0];
         }
 
         // Marcas: método y ubicación (por guardia y totales)
         $q = $db->prepare("SELECT r.user_id, COUNT(*) AS n, SUM(s.location_status IN ('lejos','simulada')) AS fuera,
-                SUM(s.location_status IN ('impreciso','sin_gps')) AS dudosas, SUM(s.method = 'nfc') AS nfc, SUM(s.location_status = 'ok') AS ok
+                SUM(s.location_status IN ('impreciso','sin_gps')) AS dudosas, SUM(s.method = 'nfc') AS nfc, SUM(s.location_status = 'ok') AS ok,
+                SUM(s.out_of_order = 1) AS fuera_orden
             FROM patrol_scans s JOIN patrol_rounds r ON r.id = s.round_id WHERE {$w} GROUP BY r.user_id");
         $q->execute($params);
-        $scans = ['total' => 0, 'ok' => 0, 'fuera' => 0, 'dudosas' => 0, 'nfc' => 0];
+        $scans = ['total' => 0, 'ok' => 0, 'fuera' => 0, 'dudosas' => 0, 'nfc' => 0, 'fuera_orden' => 0];
         foreach ($q->fetchAll() as $m) {
-            foreach (['total' => 'n', 'ok' => 'ok', 'fuera' => 'fuera', 'dudosas' => 'dudosas', 'nfc' => 'nfc'] as $k => $col) $scans[$k] += (int) $m[$col];
+            foreach (['total' => 'n', 'ok' => 'ok', 'fuera' => 'fuera', 'dudosas' => 'dudosas', 'nfc' => 'nfc', 'fuera_orden' => 'fuera_orden'] as $k => $col) $scans[$k] += (int) $m[$col];
             if (isset($guards[(int) $m['user_id']])) {
-                $guards[(int) $m['user_id']] = ['marcas' => (int) $m['n'], 'fuera' => (int) $m['fuera'], 'dudosas' => (int) $m['dudosas'], 'nfc' => (int) $m['nfc']] + $guards[(int) $m['user_id']];
+                $guards[(int) $m['user_id']] = ['marcas' => (int) $m['n'], 'fuera' => (int) $m['fuera'], 'dudosas' => (int) $m['dudosas'], 'nfc' => (int) $m['nfc'],
+                    'fuera_orden' => (int) $m['fuera_orden']] + $guards[(int) $m['user_id']];
             }
         }
 
@@ -95,7 +97,7 @@ final class RoundMetrics
                     $u = \App\Models\Users::findById($uid);
                     if (!$u) continue;
                     $guards[$uid] = ['user_id' => $uid, 'user_name' => $u['name'], 'rounds' => 0, 'completas' => 0, 'incompletas' => 0, 'en_curso' => 0, 'atrasadas' => 0,
-                        'abandonadas' => 0, 'alertas' => 0, 'duracion_media' => null, 'ultima' => null, 'marcas' => 0, 'fuera' => 0, 'dudosas' => 0, 'nfc' => 0,
+                        'abandonadas' => 0, 'alertas' => 0, 'duracion_media' => null, 'ultima' => null, 'marcas' => 0, 'fuera' => 0, 'dudosas' => 0, 'nfc' => 0, 'fuera_orden' => 0,
                         'prog_total' => 0, 'prog_tiempo' => 0, 'prog_tarde' => 0, 'prog_no' => 0];
                 }
                 $guards[$uid]['prog_total']++;
@@ -211,10 +213,10 @@ final class RoundMetrics
             foreach ($report['alerts'] as $a) $put([fecha($a['at']), self::ALERT_LABELS[$a['type']] ?? $a['type'], $a['user'], $a['route'], $a['detail'], $a['resolution']]);
         } else {
             $put(['Guardia', 'Rondas', 'Completas', 'Incompletas', 'Atrasadas', 'Abandonadas', 'Duración media (min)', 'Marcas', 'Fuera de lugar', 'Dudosas',
-                'Programadas', 'A tiempo', 'Tarde', 'No realizadas', 'Alertas', 'Última ronda']);
+                'Programadas', 'A tiempo', 'Tarde', 'No realizadas', 'Alertas', 'Última ronda', 'Fuera de orden']);
             foreach ($report['guards'] as $g) $put([$g['user_name'], $g['rounds'], $g['completas'], $g['incompletas'], $g['atrasadas'], $g['abandonadas'], $g['duracion_media'] ?? '',
-                $g['marcas'], $g['fuera'], $g['dudosas'], $g['prog_total'], $g['prog_tiempo'], $g['prog_tarde'], $g['prog_no'], $g['alertas'], $g['ultima'] ? fecha($g['ultima']) : '']);
-            foreach ($report['idle'] as $i) $put([$i['name'], 0, '', '', '', '', '', '', '', '', '', '', '', '', '', $i['ultima'] ? fecha($i['ultima']) : 'nunca']);
+                $g['marcas'], $g['fuera'], $g['dudosas'], $g['prog_total'], $g['prog_tiempo'], $g['prog_tarde'], $g['prog_no'], $g['alertas'], $g['ultima'] ? fecha($g['ultima']) : '', $g['fuera_orden'] ?? 0]);
+            foreach ($report['idle'] as $i) $put([$i['name'], 0, '', '', '', '', '', '', '', '', '', '', '', '', '', $i['ultima'] ? fecha($i['ultima']) : 'nunca', '']);
         }
         rewind($out);
         return "\xEF\xBB\xBF" . stream_get_contents($out);

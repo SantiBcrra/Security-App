@@ -37,7 +37,11 @@ object ScanFeedback {
     }
 
     fun forResult(result: ar.com.securityapp.campo.data.RoundsRepository.ScanResult): Kind = when (result) {
-        is ar.com.securityapp.campo.data.RoundsRepository.ScanResult.Ok -> if (result.remaining == 0) Kind.ROUND_DONE else Kind.OK // ruta completa
+        is ar.com.securityapp.campo.data.RoundsRepository.ScanResult.Ok -> when {
+            result.expected != null -> Kind.WARNING // registrado, pero fuera de orden
+            result.remaining == 0 -> Kind.ROUND_DONE // ruta completa
+            else -> Kind.OK
+        }
         is ar.com.securityapp.campo.data.RoundsRepository.ScanResult.AlreadyScanned -> Kind.WARNING
         else -> Kind.ERROR
     }

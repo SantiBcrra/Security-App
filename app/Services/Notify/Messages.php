@@ -119,7 +119,8 @@ final class Messages
                 $lines[] = "Programadas: {$sl['total']} — {$sl['tiempo']} a tiempo, {$sl['tarde']} tarde, {$sl['no']} no realizadas"
                     . ($sl['cumplimiento'] !== null ? " ({$sl['cumplimiento']} % a tiempo)" : '') . '.';
             }
-            $lines[] = "Marcas: {$m['scans']['total']}" . ($m['scans']['fuera'] ? ", {$m['scans']['fuera']} fuera de lugar" : '') . ($m['scans']['dudosas'] ? ", {$m['scans']['dudosas']} dudosas" : '') . '.';
+            $lines[] = "Marcas: {$m['scans']['total']}" . ($m['scans']['fuera'] ? ", {$m['scans']['fuera']} fuera de lugar" : '') . ($m['scans']['dudosas'] ? ", {$m['scans']['dudosas']} dudosas" : '')
+                . (!empty($m['scans']['fuera_orden']) ? ", {$m['scans']['fuera_orden']} fuera de orden" : '') . '.';
             if ($r['panics']) $lines[] = "Pánicos: {$r['panics']}.";
             if ($m['idle']) $lines[] = 'Sin actividad: ' . implode(', ', array_column(array_slice($m['idle'], 0, 8), 'name')) . (count($m['idle']) > 8 ? '…' : '') . '.';
             $top = array_values(array_filter($m['points'], fn ($p) => $p['problemas'] > 0));

@@ -151,6 +151,14 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   Doble clic en el mapa (permiso `rondas.crear`) → "Crear punto acá" → `/panel/rondas/puntos/nuevo?lat=&lng=` precargado. "Eliminar"
   (`rondas.editar`, `Patrols::deletePoint`): baja lógica (`deleted_at`, baja por la sync), lo saca de las rutas (y toca su
   `updated_at`); las marcas viejas quedan.
+- Rutas: `/panel/rondas/rutas/{uuid}` (detalle: mapa satelital con el recorrido planificado = puntos numerados + línea punteada
+  con flechas `SAMaps.route()`, guardias, programación, últimas rondas) y `/rutas/nueva` | `/rutas/{uuid}/editar` (orden de los
+  puntos arrastrando o ↑↓, agregar tocando el punto en el mapa, recorrido en vivo; `Patrols::updateRoute` reemplaza puntos y
+  asignaciones y toca `updated_at`). Modo de orden `patrol_routes.order_mode` (tenant 0071): libre (por defecto) | secuencial |
+  azar (la app arma el orden de cada ronda y lo manda en `round.start.point_order`; el servidor valida que sea una permutación).
+  `patrol_rounds.point_order` guarda el orden de la ronda; `patrol_scans.out_of_order` = no era el primero pendiente según la hora
+  del celular (solo se registra; decisión del usuario: sin aviso inmediato). Se ve en el detalle de la ronda (planificado
+  punteado + recorrido real), en métricas y en el resumen diario. La app avisa al guardia "fuera de orden: tocaba X".
 - Cada escaneo guarda hora del dispositivo, hora de recepción, GPS, precisión, distancia calculada y si quedó dentro del radio. No se duplica un punto dentro de la misma ronda.
 - La app Android guarda rondas y escaneos sin conexión y los envía con `round.start`, `round.scan` y `round.finish`; las operaciones son idempotentes por `op_id`.
 - El mapa operativo usa Leaflet/OpenStreetMap ya incluido; no se agrega dependencia de Google Maps.

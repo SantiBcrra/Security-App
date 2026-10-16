@@ -15,10 +15,14 @@ data class PatrolPoint(val uuid: String, val name: String, val code: String, val
 
 /** Ruta asignada: puntos en orden. */
 data class PatrolRoute(val uuid: String, val name: String, val description: String?, val frequency: String?, val expectedMinutes: Int?,
-                       val points: List<String>)
+                       val points: List<String>, val orderMode: String = "libre") {
+    /** Secuencial o al azar: el orden importa (marcar fuera de orden se registra, no se rechaza). */
+    val ordered get() = orderMode == "secuencial" || orderMode == "azar"
+}
 
+/** @param pointOrder orden que le toca a esta ronda (secuencial / al azar); null = libre */
 data class PatrolRound(val uuid: String, val routeUuid: String?, val mine: Boolean, val status: String, val startedAt: String, val finishedAt: String?,
-                       val local: Boolean)
+                       val local: Boolean, val pointOrder: List<String>? = null)
 
 /** Ronda programada pendiente a cargo del guardia (la genera el servidor según la programación de la ruta). */
 data class PatrolSlot(val uuid: String, val routeUuid: String, val schedule: String?, val dueAt: java.time.Instant, val graceMinutes: Int,
@@ -42,7 +46,7 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
 
     sealed interface ScanResult {
         /** @param remaining puntos de la ruta que faltan (null = ronda libre, sin ruta) */
-        data class Ok(val point: PatrolPoint, val hasGps: Boolean, val remaining: Int?) : ScanResult
+        data class Ok(val point: PatrolPoint, val hasGps: Boolean, val remaining: Int?, val expected: PatrolPoint? = null) : ScanResult
         data class AlreadyScanned(val point: PatrolPoint) : ScanResult
         data class NotInRoute(val point: PatrolPoint) : ScanResult
         data object UnknownQr : ScanResult
@@ -89,14 +93,19 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
         active()?.let { return it }
         val uuid = UUID.randomUUID().toString()
         val now = Instant.now().toString()
+        val route = route(routeUuid)
+        // Orden de esta ronda: al azar lo arma el celular (así funciona sin señal); secuencial = el de la ruta.
+        val order = when (route?.orderMode) { "azar" -> route.points.shuffled(); "secuencial" -> route.points; else -> null }
         val row = buildJsonObject {
             put("uuid", uuid); put("route_uuid", routeUuid); put("mine", true); put("status", "en_curso"); put("started_at", now); put("local", true)
+            order?.let { o -> put("point_order", kotlinx.serialization.json.buildJsonArray { o.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }) }
         }
         db.upsert("patrol_rounds", listOf(uuid to row.toString()))
         outbox.enqueue("round.start", buildJsonObject {
             put("uuid", uuid); put("route_uuid", routeUuid); put("started_at_device", now)
             fix?.let { put("lat", it.lat); put("lng", it.lng) }
             slotUuid?.let { put("slot_uuid", it) }
+            if (route?.orderMode == "azar" && order != null) put("point_order", kotlinx.serialization.json.buildJsonArray { order.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
         })
         // La ronda programada ya no está "por hacer" (el servidor la marca realizada al recibir el inicio).
         val done = slotUuid?.let { listOf(it) } ?: slots().filter { it.routeUuid == routeUuid && it.canStart() }.take(1).map { it.uuid }
@@ -125,7 +134,10 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
         }.toString()))
         outbox.enqueue("round.scan", data)
         val remaining = route?.points?.count { p -> p != pointUuid && done.none { it.pointUuid == p } } ?: 0
-        return ScanResult.Ok(point, fix != null, if (route == null) null else remaining)
+        // Con orden: si no era el que tocaba, queda registrado igual pero se le dice cuál era (el servidor lo marca "fuera de orden").
+        val expectedUuid = round.pointOrder?.firstOrNull { p -> done.none { it.pointUuid == p } }
+        val expected = expectedUuid?.takeIf { it != pointUuid && pointUuid in round.pointOrder }?.let { points()[it] }
+        return ScanResult.Ok(point, fix != null, if (route == null) null else remaining, expected)
     }
 
     /** Los puntos de la ruta que faltan quedan como salteados (el servidor marca la ronda "incompleta"). */
@@ -151,10 +163,11 @@ class RoundsRepository(private val db: LocalDb, private val outbox: Outbox, priv
         o.strOrNull("lat")?.toDoubleOrNull(), o.strOrNull("lng")?.toDoubleOrNull(), o.int("radius_m"), o.bool("critical"))
 
     private fun route(o: JsonObject) = PatrolRoute(o.str("uuid"), o.str("name"), o.strOrNull("description"), o.strOrNull("frequency"),
-        o.int("expected_minutes").takeIf { it > 0 }, (o["points"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty())
+        o.int("expected_minutes").takeIf { it > 0 }, (o["points"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty(),
+        o.strOrNull("order_mode") ?: "libre")
 
     private fun round(o: JsonObject) = PatrolRound(o.str("uuid"), o.strOrNull("route_uuid"), o.bool("mine"), o.str("status"), o.str("started_at"),
-        o.strOrNull("finished_at"), o.bool("local"))
+        o.strOrNull("finished_at"), o.bool("local"), (o["point_order"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content })
 
     private fun scan(o: JsonObject) = PatrolScan(o.str("uuid"), o.str("round_uuid"), o.str("point_uuid"), o.str("scanned_at_device"),
         (o["within_radius"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull(), o.bool("local"))

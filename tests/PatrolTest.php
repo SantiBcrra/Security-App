@@ -683,6 +683,79 @@ return [
         assert_true(str_contains($html, 'Doble clic en el mapa') && str_contains($html, '/eliminar'));
     },
 
+    'rutas: editar el orden, modo libre / secuencial / al azar, fuera de orden y vistas' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $mk = fn (string $code, float $lat) => Patrols::createPoint(['name' => 'Orden ' . $code, 'code' => $code, 'description' => '', 'site_id' => null,
+            'sector_id' => null, 'lat' => $lat, 'lng' => -58.38, 'radius_m' => 40, 'is_critical' => 0]);
+        [$a, $b, $c] = [$mk('OA', -34.600), $mk('OB', -34.601), $mk('OC', -34.602)];
+        $u = fn (int $id) => ($st['uuid'])($id);
+        $route = Uuid::v4();
+        $rid = Patrols::createRoute(['uuid' => $route, 'name' => 'Orden', 'description' => '', 'expected_minutes' => 15, 'order_mode' => 'secuencial',
+            'point_ids' => [$a, $b, $c], 'user_ids' => [(int) $st['g1']['id']]]);
+        // Editar: nuevo orden C, A, B y sumar un guardia
+        Patrols::updateRoute($rid, ['name' => 'Orden', 'description' => 'x', 'expected_minutes' => 15, 'order_mode' => 'secuencial',
+            'point_ids' => [$c, $a, $b], 'user_ids' => [(int) $st['g1']['id'], (int) $st['g2']['id']]]);
+        assert_same([$u($c), $u($a), $u($b)], Patrols::routePointUuids($rid));
+        assert_same(2, count(Patrols::assignments($rid)));
+        Patrols::updateRoute($rid, ['name' => 'Orden', 'description' => 'x', 'expected_minutes' => 15, 'order_mode' => 'secuencial',
+            'point_ids' => [$c, $a, $b], 'user_ids' => [(int) $st['g1']['id']]]);
+        assert_same(1, count(Patrols::assignments($rid)), 'sacar un guardia lo desasigna');
+        // Secuencial: el orden es C, A, B. Marcar B antes que A = fuera de orden (se registra, no se rechaza)
+        UserAuth::setCurrent($st['g1']);
+        $round = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $round, 'route_uuid' => $route, 'started_at_device' => gmdate('Y-m-d\TH:i:s\Z', time() - 600)])]);
+        $scan = function (string $round, int $point, int $ago) use ($op, $u) {
+            $pt = Patrols::point($u($point));
+            return Push::run([$op('round.scan', ['uuid' => Uuid::v4(), 'round_uuid' => $round, 'point_uuid' => $u($point), 'lat' => (float) $pt['lat'],
+                'lng' => (float) $pt['lng'], 'accuracy_m' => 5, 'scanned_at_device' => gmdate('Y-m-d\TH:i:s\Z', time() - $ago)])])[0];
+        };
+        assert_same('ok', $scan($round, $c, 500)['status']);
+        assert_same('ok', $scan($round, $b, 400)['status'], 'fuera de orden no se rechaza');
+        $scan($round, $a, 300);
+        $flags = DB::tenant()->query("SELECT p.code, s.out_of_order FROM patrol_scans s JOIN patrol_points p ON p.id = s.point_id
+            JOIN patrol_rounds r ON r.id = s.round_id WHERE r.uuid = '{$round}' ORDER BY s.scanned_at_device")->fetchAll(PDO::FETCH_KEY_PAIR);
+        assert_same(['OC' => 0, 'OB' => 1, 'OA' => 0], array_map('intval', $flags), 'C bien, B fuera de orden (tocaba A), A bien');
+        // Al azar: vale el orden que armó el celular; uno inválido se reemplaza por uno del servidor
+        UserAuth::setCurrent($st['hys']);
+        Patrols::updateRoute($rid, ['name' => 'Orden', 'description' => '', 'expected_minutes' => 15, 'order_mode' => 'azar', 'point_ids' => [$a, $b, $c],
+            'user_ids' => [(int) $st['g1']['id']]]);
+        UserAuth::setCurrent($st['g1']);
+        $r2 = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $r2, 'route_uuid' => $route, 'point_order' => [$u($b), $u($c), $u($a)]])]);
+        assert_same([$u($b), $u($c), $u($a)], json_decode(Patrols::round($r2)['point_order'], true));
+        $r3 = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $r3, 'route_uuid' => $route, 'point_order' => [$u($a), 'basura']])]);
+        $o3 = json_decode(Patrols::round($r3)['point_order'], true);
+        sort($o3);
+        $all = [$u($a), $u($b), $u($c)]; sort($all);
+        assert_same($all, $o3, 'orden inválido del celular → uno válido del servidor');
+        // Libre: sin orden ni marca
+        UserAuth::setCurrent($st['hys']);
+        Patrols::updateRoute($rid, ['name' => 'Orden', 'description' => '', 'expected_minutes' => 15, 'order_mode' => 'libre', 'point_ids' => [$a, $b, $c],
+            'user_ids' => [(int) $st['g1']['id']]]);
+        UserAuth::setCurrent($st['g1']);
+        $r4 = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $r4, 'route_uuid' => $route])]);
+        assert_same(null, Patrols::round($r4)['point_order']);
+        $scan($r4, $c, 60);
+        assert_same(null, DB::tenant()->query("SELECT s.out_of_order FROM patrol_scans s JOIN patrol_rounds r ON r.id = s.round_id WHERE r.uuid = '{$r4}'")->fetchColumn());
+        // Lo que baja al celular
+        $routes = array_values(array_filter((array) (Pull::run(null, 1000)['changes']->patrol_routes ?? []), fn ($r) => $r['uuid'] === $route));
+        assert_same('libre', $routes[0]['order_mode']);
+        // Vistas
+        UserAuth::setCurrent($st['hys']);
+        $show = \App\Core\View::render('panel/rounds/route_show', ['route' => Patrols::route($route), 'points' => Patrols::routePoints($rid), 'guards' => Patrols::assignments($rid),
+            'schedules' => [], 'rounds' => [], 'canEdit' => true], null);
+        assert_true(str_contains($show, 'SAMaps.route') && str_contains($show, 'Editar ruta'));
+        $form = \App\Core\View::render('panel/rounds/route', ['route' => Patrols::route($route), 'points' => Patrols::points(), 'users' => [],
+            'selected' => Patrols::routePointUuids($rid), 'assigned' => [], 'old' => []], null);
+        assert_true(str_contains($form, 'Puntos de la ruta, en orden') && str_contains($form, 'Al azar'));
+        $detail = \App\Core\View::render('panel/rounds/round', ['round' => Patrols::roundDetail($round), 'tracks' => [], 'alerts' => []], null);
+        assert_true(str_contains($detail, 'Fuera de orden') && str_contains($detail, 'SAMaps.route'));
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

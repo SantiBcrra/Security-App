@@ -28,7 +28,7 @@ $alertClass = ['panic' => 'danger', 'missed' => 'danger', 'off_site' => 'danger'
     <div class="col-6 col-lg-3"><div class="card card-body h-100"><div class="small text-body-secondary">Programadas a tiempo</div><div class="fs-3 fw-bold"><?= $sl['cumplimiento'] !== null ? $sl['cumplimiento'] . ' %' : '—' ?></div>
         <div class="small"><?= $sl['tiempo'] ?> a tiempo · <?= $sl['tarde'] ?> tarde · <span class="text-danger"><?= $sl['no'] ?> no realizadas</span></div></div></div>
     <div class="col-6 col-lg-3"><div class="card card-body h-100"><div class="small text-body-secondary">Marcas en el lugar</div><div class="fs-3 fw-bold"><?= $pct($sc['ok'], $sc['total']) ?></div>
-        <div class="small"><?= $sc['total'] ?> marcas · <span class="text-danger"><?= $sc['fuera'] ?> fuera</span> · <?= $sc['dudosas'] ?> dudosas · <?= $pct($sc['nfc'], $sc['total']) ?> NFC</div></div></div>
+        <div class="small"><?= $sc['total'] ?> marcas · <span class="text-danger"><?= $sc['fuera'] ?> fuera</span> · <?= $sc['dudosas'] ?> dudosas · <?= $pct($sc['nfc'], $sc['total']) ?> NFC<?= $sc['fuera_orden'] ? ' · ' . $sc['fuera_orden'] . ' fuera de orden' : '' ?></div></div></div>
     <div class="col-6 col-lg-3"><div class="card card-body h-100"><div class="small text-body-secondary">Problemas</div><div class="fs-3 fw-bold"><?= $ro['atrasadas'] ?> <span class="fs-6 fw-normal">atrasadas</span></div>
         <div class="small"><?= $ro['abandonadas'] ?> abandonadas · <?= count(array_filter($r['alerts'], fn ($a) => $a['type'] === 'panic')) ?> pánicos · <?= count($r['idle']) ?> sin actividad</div></div></div>
 </div>
@@ -43,7 +43,7 @@ $alertClass = ['panic' => 'danger', 'missed' => 'danger', 'off_site' => 'danger'
             <td><?= $g['atrasadas'] ?></td><td><?= $g['duracion_media'] !== null ? $g['duracion_media'] . ' min' : '—' ?></td>
             <td><?= $closed ? $pct($g['prog_tiempo'], $closed) . ' <span class="small text-body-secondary">(' . $g['prog_tiempo'] . '/' . $closed . ')</span>' : '—' ?></td>
             <td class="<?= $g['prog_no'] ? 'text-danger fw-semibold' : '' ?>"><?= $g['prog_no'] ?></td>
-            <td class="<?= $g['fuera'] ? 'text-danger fw-semibold' : '' ?>"><?= $g['fuera'] ?><?= $g['dudosas'] ? ' <span class="small text-body-secondary">+' . $g['dudosas'] . ' dudosas</span>' : '' ?></td>
+            <td class="<?= $g['fuera'] ? 'text-danger fw-semibold' : '' ?>"><?= $g['fuera'] ?><?= $g['dudosas'] ? ' <span class="small text-body-secondary">+' . $g['dudosas'] . ' dudosas</span>' : '' ?><?= !empty($g['fuera_orden']) ? ' <span class="badge text-bg-warning">' . $g['fuera_orden'] . ' fuera de orden</span>' : '' ?></td>
             <td><?= $g['alertas'] ?></td><td class="small"><?= $g['ultima'] ? e(fecha($g['ultima'], 'd/m H:i')) : '—' ?></td></tr>
     <?php endforeach; ?>
     <?php foreach ($r['idle'] as $i): ?>

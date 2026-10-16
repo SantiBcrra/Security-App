@@ -144,7 +144,8 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: Round
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(route.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                Text(listOfNotNull("${route.points.size} puntos", route.expectedMinutes?.let { "≈ $it min" }, route.frequency).joinToString(" · "),
+                                Text(listOfNotNull("${route.points.size} puntos", route.expectedMinutes?.let { "≈ $it min" },
+                                    mapOf("secuencial" to "en orden", "azar" to "orden al azar")[route.orderMode]).joinToString(" · "),
                                     style = MaterialTheme.typography.bodySmall, color = Muted)
                             }
                             Button({ begin(route) }, enabled = !ui.busy, colors = ButtonDefaults.buttonColors(containerColor = Brand)) { Text("Iniciar") }
@@ -280,6 +281,7 @@ private fun ScanDialog(result: ScanResult, onConfirmOutside: () -> Unit, onDismi
     val (title, text) = when (result) {
         is ScanResult.Ok -> "✓ Registrado: ${result.point.name}" to buildString {
             append(if (result.hasGps) "Punto registrado con ubicación." else "Punto registrado SIN ubicación (activá el GPS).")
+            result.expected?.let { append("\n⚠ Fuera de orden: tocaba ${it.code} · ${it.name}. Queda registrado así; seguí el orden de la lista.") }
             when (result.remaining) {
                 null -> {}
                 0 -> append("\nNo quedan puntos de la ruta: ya podés finalizar la ronda.")
@@ -293,7 +295,7 @@ private fun ScanDialog(result: ScanResult, onConfirmOutside: () -> Unit, onDismi
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title, color = if (result is ScanResult.Ok) Ok else if (result is ScanResult.AlreadyScanned) MaterialTheme.colorScheme.onSurface else Danger,
+        title = { Text(title, color = if (result is ScanResult.Ok && result.expected != null) BrandDark else if (result is ScanResult.Ok) Ok else if (result is ScanResult.AlreadyScanned) MaterialTheme.colorScheme.onSurface else Danger,
             fontWeight = FontWeight.Bold) },
         text = { Text(text) },
         confirmButton = {

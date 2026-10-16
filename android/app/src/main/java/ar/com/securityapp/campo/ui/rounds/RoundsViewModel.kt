@@ -65,7 +65,8 @@ class RoundsViewModel(app: Application) : AndroidViewModel(app) {
         val scans = active?.let { r.scans(it.uuid) }.orEmpty()
         val done = scans.map { it.pointUuid }.toSet()
         var nextMarked = false
-        val progress = route?.points?.mapIndexed { i, uuid ->
+        // El orden de esta ronda (secuencial / al azar) o el de la ruta.
+        val progress = (active?.pointOrder ?: route?.points)?.mapIndexed { i, uuid ->
             val isDone = uuid in done
             val next = !isDone && !nextMarked
             if (next) nextMarked = true

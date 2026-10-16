@@ -250,6 +250,9 @@ return static function (Router $r): void {
         $r->get('/rondas/panico/{uuid}', [RoundsController::class, 'panic'], [$can('rondas', 'ver')]);
         $r->post('/rondas/panico/{uuid}/atendido', [RoundsController::class, 'ackPanic'], [$can('rondas', 'ver')]);
         $r->post('/rondas/rutas', [RoundsController::class, 'routeStore'], [$can('rondas', 'crear')]);
+        $r->get('/rondas/rutas/{uuid}', [RoundsController::class, 'routeShow'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/rutas/{uuid}/editar', [RoundsController::class, 'routeForm'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/rutas/{uuid}', [RoundsController::class, 'routeStore'], [$can('rondas', 'editar')]);
         $r->get('/rondas/puntos/nuevo', [RoundsController::class, 'pointForm'], [$can('rondas', 'crear')]);
         $r->post('/rondas/puntos', [RoundsController::class, 'pointStore'], [$can('rondas', 'crear')]);
         $r->get('/rondas/puntos/{uuid}/qr', [RoundsController::class, 'qr'], [$can('rondas', 'ver')]);

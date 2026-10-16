@@ -53,12 +53,20 @@ $locBadge = function (?string $status, int $within, ?int $radius): string {
 <?php
 $mapScans = array_values(array_filter(array_merge($round['route_points'] ?? [], $round['extra_scans'] ?? []), fn ($s) => ($s['lat'] ?? null) !== null && ($s['scanned_at_device'] ?? null) !== null));
 ?>
-<?php if ($tracks || $mapScans): ?>
+<?php
+// Recorrido planificado: en el orden que le tocaba a esta ronda (secuencial / al azar) o el de la ruta.
+$planned = [];
+foreach ($round['route_points'] ?? [] as $rp) $planned[$rp['uuid']] = ['code' => $rp['code'], 'name' => $rp['name'], 'lat' => (float) $rp['point_lat'], 'lng' => (float) $rp['point_lng']];
+$order = json_decode((string) ($round['point_order'] ?? ''), true);
+if (is_array($order)) $planned = array_merge(array_flip(array_values(array_filter($order, fn ($u) => isset($planned[$u])))), $planned);
+$planned = array_values(array_filter($planned, 'is_array'));
+?>
+<?php if ($tracks || $mapScans || $planned): ?>
     <link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>">
-    <div id="track-map" style="height: 340px" class="rounded border mb-2"></div>
+    <div id="track-map" style="height: 420px" class="rounded border mb-2"></div>
     <div class="small text-body-secondary mb-4">
         <?= $tracks ? count($tracks) . ' posición(es) del recorrido' . ($round['last_track_at'] ?? null ? ' · última ' . e(fecha($round['last_track_at'], 'H:i')) : '') : 'Sin recorrido registrado (solo los escaneos).' ?>
-        · Línea = recorrido del celular · círculos = escaneos (verde en el lugar, rojo fuera de radio).
+        · Línea punteada con números = recorrido planificado · línea continua = recorrido real del celular · círculos = escaneos (verde en el lugar, rojo fuera de radio).
     </div>
     <script src="<?= e(asset('vendor/leaflet/leaflet.js')) ?>"></script><script src="<?= e(asset('js/maps.js')) ?>"></script>
     <script>
@@ -66,9 +74,12 @@ $mapScans = array_values(array_filter(array_merge($round['route_points'] ?? [], 
         var tracks = <?= json_encode(array_map(fn ($t) => [(float) $t['lat'], (float) $t['lng']], $tracks)) ?>;
         var scans = <?= json_encode(array_map(fn ($s) => ['lat' => (float) $s['lat'], 'lng' => (float) $s['lng'], 'ok' => (int) ($s['within_radius'] ?? 0) === 1,
             'label' => ($s['code'] ?? $s['point_code'] ?? '') . ' · ' . ($s['name'] ?? $s['point_name'] ?? '')], $mapScans), JSON_UNESCAPED_UNICODE) ?>;
+        var planned = <?= json_encode($planned, JSON_UNESCAPED_UNICODE) ?>;
         var map = L.map('track-map', { scrollWheelZoom: false });
         SAMaps.base(map, 'satellite');
-        var bounds = [];
+        var bounds = planned.map(function (p) { return [p.lat, p.lng]; });
+        if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 18 });
+        if (planned.length) SAMaps.route(map, planned, { color: '#f2c014' });
         if (tracks.length) { L.polyline(tracks, { color: '#353c4f', weight: 4, opacity: .8 }).addTo(map); bounds = bounds.concat(tracks);
             L.circleMarker(tracks[tracks.length - 1], { radius: 7, color: '#f2c014', fillOpacity: 1 }).addTo(map).bindTooltip('Última posición'); }
         scans.forEach(function (s) { var el = document.createElement('div'); el.textContent = s.label;
@@ -94,7 +105,7 @@ $mapScans = array_values(array_filter(array_merge($round['route_points'] ?? [], 
                 <?php if ($p['scanned_at_device'] === null): ?>
                     <td colspan="3"><?= $round['status'] === 'en_curso' ? 'Pendiente' : '<strong>Salteado</strong>' ?></td>
                 <?php else: ?>
-                    <td><?= e(fecha($p['scanned_at_device'])) ?><?= $p['method'] ? ' <span class="badge text-bg-light">' . e(strtoupper($p['method'])) . '</span>' : '' ?></td>
+                    <td><?= e(fecha($p['scanned_at_device'])) ?><?= $p['method'] ? ' <span class="badge text-bg-light">' . e(strtoupper($p['method'])) . '</span>' : '' ?><?= (int) ($p['out_of_order'] ?? 0) === 1 ? ' <span class="badge text-bg-warning" title="No lo marcó en el orden que le tocaba">Fuera de orden</span>' : '' ?></td>
                     <td><?= e($dist($p['distance_m'])) ?><?= $p['accuracy_m'] !== null ? ' <span class="small text-body-secondary">(±' . e((int) $p['accuracy_m']) . ' m)</span>' : '' ?></td>
                     <td><?= $locBadge($p['location_status'] ?? null, (int) $p['within_radius'], (int) $p['radius_m']) ?></td>
                 <?php endif; ?>
