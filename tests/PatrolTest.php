@@ -651,6 +651,38 @@ return [
         assert_true(is_string($body) && str_contains($body, 'Rondas:') && str_contains($body, 'fuera de lugar'), (string) $body);
     },
 
+    'puntos: eliminar lo saca de la lista, de las rutas y del celular, y conserva las marcas viejas' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $pid = Patrols::createPoint(['name' => 'Para borrar', 'code' => 'DEL1', 'description' => '', 'site_id' => null, 'sector_id' => null,
+            'lat' => -34.61, 'lng' => -58.38, 'radius_m' => 40, 'is_critical' => 0]);
+        $uuid = ($st['uuid'])($pid);
+        $route = Uuid::v4();
+        Patrols::createRoute(['uuid' => $route, 'name' => 'Con punto a borrar', 'description' => '', 'frequency' => 'manual', 'expected_minutes' => 10,
+            'point_ids' => [$st['p1'], $pid], 'user_ids' => [(int) $st['g1']['id']]]);
+        UserAuth::setCurrent($st['g1']);
+        $round = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $round, 'route_uuid' => $route])]);
+        Push::run([$op('round.scan', ['uuid' => Uuid::v4(), 'round_uuid' => $round, 'point_uuid' => $uuid, 'lat' => -34.61, 'lng' => -58.38, 'accuracy_m' => 5])]);
+        $cursor = Pull::run(null, 1000)['cursor'];
+        UserAuth::setCurrent($st['hys']);
+        DB::tenant()->exec("UPDATE patrol_routes SET updated_at = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE uuid = '{$route}'");
+        assert_same(1, Patrols::deletePoint(Patrols::point($uuid)), 'se sacó de una ruta');
+        assert_true(!in_array($uuid, array_column(Patrols::points(), 'uuid'), true), 'no aparece en la lista');
+        assert_same([($st['uuid'])($st['p1'])], Patrols::routePointUuids((int) Patrols::route($route)['id']), 'la ruta queda sin ese punto');
+        assert_same(1, (int) DB::tenant()->query('SELECT COUNT(*) FROM patrol_scans s JOIN patrol_points p ON p.id = s.point_id WHERE p.uuid = ' . DB::tenant()->quote($uuid))->fetchColumn(), 'la marca vieja queda');
+        UserAuth::setCurrent($st['g1']);
+        sleep(1);
+        $page = Pull::run($cursor, 1000);
+        assert_true(in_array($uuid, (array) ($page['deleted']->patrol_points ?? []), true), 'al celular le llega como baja');
+        $routes = array_values(array_filter((array) ($page['changes']->patrol_routes ?? []), fn ($r) => $r['uuid'] === $route));
+        assert_true($routes && !in_array($uuid, $routes[0]['points'], true), 'y la ruta le llega sin el punto');
+        assert_same('error', Push::run([$op('round.scan', ['uuid' => Uuid::v4(), 'round_uuid' => $round, 'point_uuid' => $uuid])])[0]['status'], 'ya no se puede marcar');
+        $html = \App\Core\View::render('panel/rounds/index', ['points' => Patrols::points(), 'routes' => [], 'rounds' => [], 'canCreate' => true, 'canEdit' => true], null);
+        assert_true(str_contains($html, 'Doble clic en el mapa') && str_contains($html, '/eliminar'));
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

@@ -23,6 +23,7 @@ final class RoundsController
             'title' => 'Rondas de guardias', 'points' => Patrols::points(), 'routes' => Patrols::routes(), 'rounds' => Patrols::rounds(100, $this->onlyUser()),
             'panics' => $this->onlyUser() === null ? \App\Services\GuardSafety::panics(20) : [],
             'devices' => \App\Services\DeviceStatus::recent(24, $this->onlyUser()),
+            'canCreate' => UserAuth::can('rondas', 'crear'), 'canEdit' => UserAuth::can('rondas', 'editar'),
         ], 'layouts/app'));
     }
 
@@ -117,8 +118,22 @@ final class RoundsController
     public function pointForm(Request $request): Response
     {
         [$old, $errors] = Flash::pullInput();
+        // Doble clic en el mapa de rondas: llega con las coordenadas ya elegidas.
+        foreach (['lat', 'lng'] as $k) {
+            if (!isset($old[$k]) && is_numeric($request->input($k))) $old[$k] = (string) round((float) $request->input($k), 7);
+        }
         return Response::html(View::render('panel/rounds/point', ['title' => 'Nuevo punto de ronda', 'sites' => Sites::options(), 'sectors' => Sectors::options(), 'old' => $old, 'errors' => $errors,
             'points' => Patrols::points()], 'layouts/app'));
+    }
+
+    public function pointDelete(Request $request, string $uuid): Response
+    {
+        $point = Patrols::point($uuid);
+        if (!$point || $point['deleted_at'] !== null) return Response::redirect('/panel/rondas');
+        $routes = Patrols::deletePoint($point);
+        Audit::tenant('patrol_point.delete', 'patrol_point', $uuid, ['code' => $point['code'], 'name' => $point['name'], 'lat' => (float) $point['lat'], 'lng' => (float) $point['lng']], null);
+        Flash::add('success', "Punto {$point['code']} eliminado." . ($routes ? " Se sacó de {$routes} ruta(s)." : '') . ' Las rondas anteriores conservan sus marcas.');
+        return Response::redirect('/panel/rondas');
     }
 
     public function routeForm(Request $request): Response

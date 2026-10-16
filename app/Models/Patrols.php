@@ -65,6 +65,29 @@ final class Patrols
         $q->execute($params); return $q->fetchAll();
     }
 
+    /**
+     * "Eliminar" un punto: deja de verse y de bajar a los celulares (baja por la sync), y se saca de las rutas que lo
+     * tenían. No se borra: las rondas viejas conservan sus marcas. @return int rutas de las que se sacó
+     */
+    public static function deletePoint(array $point): int
+    {
+        $db = DB::tenant();
+        $db->beginTransaction();
+        try {
+            $routes = $db->prepare('SELECT DISTINCT route_id FROM patrol_route_points WHERE point_id = ?');
+            $routes->execute([(int) $point['id']]);
+            $routeIds = array_map('intval', $routes->fetchAll(\PDO::FETCH_COLUMN));
+            $db->prepare('UPDATE patrol_points SET is_active = 0, deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([(int) $point['id']]);
+            $db->prepare('DELETE FROM patrol_route_points WHERE point_id = ?')->execute([(int) $point['id']]);
+            if ($routeIds) $db->exec('UPDATE patrol_routes SET updated_at = UTC_TIMESTAMP() WHERE id IN (' . implode(',', $routeIds) . ')'); // la ruta baja de nuevo al celular
+            $db->commit();
+            return count($routeIds);
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+    }
+
     public static function createPoint(array $data): int
     {
         $data += ['uuid' => Uuid::v4(), 'is_active' => 1, 'is_critical' => 0, 'radius_m' => 50];
