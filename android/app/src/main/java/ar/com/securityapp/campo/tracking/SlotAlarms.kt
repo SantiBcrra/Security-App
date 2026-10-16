@@ -44,6 +44,7 @@ object SlotAlarms {
             am.cancel(pending(context, uuid, kind))
         }
         sp.edit().putStringSet("set", wanted).apply()
+        runCatching { ShiftAlarms.schedule(context, c, now) } // y los del turno de trabajo
     }
 
     private fun pending(context: Context, slot: String, kind: String): PendingIntent =
@@ -73,6 +74,7 @@ class SlotAlarmReceiver : BroadcastReceiver() {
         val c = (context.applicationContext as CampoApp).container
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> SlotAlarms.schedule(context, c)
+            ShiftAlarms.ACTION -> runCatching { ShiftAlarms.fire(context, c, intent.getStringExtra("shift") ?: return, intent.getStringExtra("kind") ?: "due") }
             else -> runCatching { SlotAlarms.fire(context, c, intent.getStringExtra("slot") ?: return, intent.getStringExtra("kind") ?: "due") }
         }
     }

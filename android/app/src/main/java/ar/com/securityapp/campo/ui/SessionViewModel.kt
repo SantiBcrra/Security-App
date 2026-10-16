@@ -43,6 +43,8 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
     val unread: StateFlow<Int> = _unread
     /** Se abrió la app tocando una notificación: mostrar Avisos. */
     val openAvisos = MutableStateFlow(false)
+    /** Se tocó una notificación del turno (salida del predio, recordatorio): volver al inicio, donde está "Mi turno". */
+    val openShift = MutableStateFlow(false)
 
     init {
         viewModelScope.launch { c.sessionLost.collect { _screen.value = Screen.Login(error = "Tu sesión venció o fue cerrada. Ingresá de nuevo.") } }
@@ -189,6 +191,7 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
         if (c.api.previewToken == null && !c.prefs.previewActive) return@launch
         val who = _preview.value.userUuid
         ar.com.securityapp.campo.tracking.RoundTrackingService.stop(getApplication())
+        ar.com.securityapp.campo.tracking.ShiftTrackingService.stop(getApplication())
         androidx.work.WorkManager.getInstance(getApplication()).cancelAllWork()
         c.discardPreviewData()
         runCatching { ar.com.securityapp.campo.tracking.SlotAlarms.schedule(getApplication(), c) } // sin datos: cancela los recordatorios del otro
@@ -236,6 +239,8 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
     fun pendingCount(): Int = c.outbox.pendingCount()
 
     fun logout() = viewModelScope.launch {
+        ar.com.securityapp.campo.tracking.ShiftTrackingService.stop(getApplication())
+        ar.com.securityapp.campo.tracking.RoundTrackingService.stop(getApplication())
         c.auth.logout()
         _sync.value = SyncState()
         _screen.value = Screen.Login()

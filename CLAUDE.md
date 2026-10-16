@@ -471,9 +471,19 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   lejos/simulada → aviso `guard.off_site` a SyH + supervisores, una vez por ronda y tipo (`NotificationMarks`). Lista de rondas:
   "N fuera" (lejos + simulada) y "N dudosas" (impreciso + sin GPS). La app solo usa la última ubicación conocida si tiene < 2 min.
   Ícono propio (adaptable, escudo amarillo sobre pizarra + monocromo) e `ic_notification` para los avisos.
-  Versión final: `versionCode 10` / `1.0.0`; firma y `serverUrl` desde `android/keystore.properties` (gitignored, ver
+  Versión final: `versionCode 10` / `1.0.0` (turnos: 11 / 1.1.0); firma y `serverUrl` desde `android/keystore.properties` (gitignored, ver
   `.example`); sin eso `assembleRelease` se corta. **Sin R8** (con la optimización de AGP 9 se cerraba al abrir). Pasos para
   crear la clave y publicar: `docs/design/app-android-guardias.md` → "Firma de la versión final".
+- Turnos (versión 1.1.0, `versionCode 11`): tarjeta "Mi turno" en el inicio (quien tiene `rondas.crear`): Empezar turno (pide
+  permiso de ubicación; si el GPS dice que está fuera del predio o es falso pide confirmación y se registra igual), "Salgo por una
+  emergencia" (motivo antes de salir) y Terminar turno; "Mis turnos y ausencias" (`ui/shifts/ShiftsUi.kt`: próximos, historial
+  con horas de `GET /shifts/mine`, pedir/cancelar ausencia). `ShiftsRepository` (local + cola `shift.*` / `absence.request`;
+  salidas en la entidad local `shift_exits_local`; área del predio de `sites`). `tracking/ShiftTrackingService` (primer plano
+  "En turno", SOLO durante el turno): ubicación cada 60 s con precisión equilibrada, una lectura afuera se confirma con GPS
+  preciso; fuera > `minutos_fuera` → `shift.exit` + notificación "Saliste del predio: ¿por qué?" (se repite cada 3 min, abre la
+  app con `abrir=turno`) y posiciones `shift.track` mientras está afuera; al volver `shift.return`; recordatorio al terminar el
+  horario. `tracking/ShiftAlarms` (alarmas del sistema a la hora de entrada y al vencer la tolerancia; se reprograman junto con
+  las de rondas en `SlotAlarms.schedule`). Salir de "Ver como" o cerrar sesión detiene el servicio.
 - **Permisos de trabajo y EPP desactivados en la app** (decisión del usuario, 09/10/2026): comentados en `MODULES` de
   `HomeScreen.kt`; el servidor los sigue soportando. No activarlos hasta que el usuario lo pida.
 - **Roles en la app**: el menú, los botones y lo que baja la sync dependen del rol (`/me.permisos` + alcance en `Sync\Pull`);

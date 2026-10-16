@@ -32,7 +32,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: android.content.Intent?) {
-        if (intent?.getStringExtra(ar.com.securityapp.campo.push.Notifs.EXTRA_OPEN) == "avisos") vm.openAvisos.value = true
+        when (intent?.getStringExtra(ar.com.securityapp.campo.push.Notifs.EXTRA_OPEN)) {
+            "avisos" -> vm.openAvisos.value = true
+            "turno" -> vm.openShift.value = true
+        }
     }
 
     override fun onResume() {

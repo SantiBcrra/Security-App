@@ -54,6 +54,11 @@
         </activity>
 
         <service
+            android:name=".tracking.ShiftTrackingService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <service
             android:name=".tracking.RoundTrackingService"
             android:exported="false"
             android:foregroundServiceType="location" />

@@ -94,6 +94,15 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     val update by vm.update.collectAsStateWithLifecycle()
     var showSettings by remember(me.isPreview) { mutableStateOf(false) } // al entrar o salir de "Ver como" se vuelve al inicio
     var openModule by remember(me.isPreview) { mutableStateOf<String?>(null) }
+    var showShifts by remember(me.isPreview) { mutableStateOf(false) }
+    val openShift by vm.openShift.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(openShift) {
+        if (openShift) { openModule = null; showSettings = false; showShifts = false; vm.openShift.value = false }
+    }
+    if (showShifts) {
+        ar.com.securityapp.campo.ui.shifts.ShiftsScreen(onBack = { showShifts = false })
+        return
+    }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     if (showSettings) {
@@ -184,6 +193,7 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
                 item(span = { GridItemSpan(2) }) { UpdateCard(release.versionName, update, onInstall = { vm.installUpdate(openIntent) }) }
             }
             if (me.can("rondas", "crear")) {
+                item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.ui.shifts.ShiftCard(onOpen = { showShifts = true }) }
                 item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.panic.PanicButton(onTrigger = { vm.triggerPanic() }) }
             }
             item(span = { GridItemSpan(2) }) { SyncCard(sync) }

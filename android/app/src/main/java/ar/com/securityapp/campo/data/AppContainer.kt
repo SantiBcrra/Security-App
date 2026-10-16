@@ -22,6 +22,7 @@ class AppContainer(context: Context) {
     val incidents = IncidentsRepository(db, outbox, uploads, api)
     val sync = SyncRepository(appContext, api, prefs, db, outbox, uploads, inspections)
     val rounds = RoundsRepository(db, outbox, api)
+    val shifts = ShiftsRepository(db, outbox, api, prefs)
     /** Se emite después de cada sincronización (la UI vuelve a leer la base local). */
     val dataChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     val updates = UpdateManager(appContext, api)

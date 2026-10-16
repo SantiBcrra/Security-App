@@ -43,10 +43,11 @@ object Notifs {
     }
 
     /** @param openAvisos al tocarla abre Avisos (false = abre la app donde estaba, p. ej. la ronda en curso) */
-    fun show(context: Context, key: String, title: String, body: String, critical: Boolean, openAvisos: Boolean = true) {
+    /** @param open qué abrir al tocarla ("turno" = Mi turno / motivo de la salida); si es null, Avisos según `openAvisos` */
+    fun show(context: Context, key: String, title: String, body: String, critical: Boolean, openAvisos: Boolean = true, open: String? = null) {
         ensureChannels(context)
         val open = PendingIntent.getActivity(context, key.hashCode(),
-            Intent(context, MainActivity::class.java).apply { if (openAvisos) putExtra(EXTRA_OPEN, "avisos") }.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            Intent(context, MainActivity::class.java).apply { (open ?: if (openAvisos) "avisos" else null)?.let { putExtra(EXTRA_OPEN, it) } }.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(context, if (critical) CRITICAL else NORMAL)
             .setSmallIcon(R.drawable.ic_notification)
@@ -59,5 +60,9 @@ object Notifs {
             .setContentIntent(open)
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(key.hashCode(), n) } // sin permiso de notificaciones: no se muestra
+    }
+
+    fun cancel(context: Context, key: String) {
+        runCatching { NotificationManagerCompat.from(context).cancel(key.hashCode()) }
     }
 }

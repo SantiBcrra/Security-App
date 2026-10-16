@@ -28,8 +28,8 @@ android {
         // en 10.0.2.2 o por Wi-Fi) y la app no llega al servidor de desarrollo. Sin Google Play no hay exigencia de subirlo.
         targetSdk = 35
         // Subir los dos en cada versión publicada en /admin/app-android (versionCode siempre crece).
-        versionCode = 10
-        versionName = "1.0.0"
+        versionCode = 11
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
