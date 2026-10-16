@@ -26,6 +26,7 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
 - [x] Etapa 14 entrega 1 — EPP: catálogo, matriz por puesto, entregas firmadas, constancia SRT 299/11
 - [x] Automatizaciones de rondas — Fase 1: configuración por empresa y parámetros para Android
 - [x] Rediseño visual: menú lateral, paleta #353c4f / #f2c014, inicio como tablero, logo configurable
+- [x] App Android 1.2: navegación inferior con botón QR central, acceso directo a la cámara y nuevo logo de Security App
 
 ### Decisión sobre el cliente móvil
 

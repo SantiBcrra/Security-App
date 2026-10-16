@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -64,7 +65,7 @@ private fun hour(iso: String?): String = iso?.let { runCatching { HOUR.format(In
 @Suppress("DEPRECATION")
 @Composable
 /** @param canManagePoints permiso rondas.editar: ubicar puntos con el GPS y grabar etiquetas NFC */
-fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: RoundsViewModel = viewModel()) {
+fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialScan: Boolean = false, vm: RoundsViewModel = viewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val scan by vm.scan.collectAsStateWithLifecycle()
     val autoRoutes by vm.autoRoutes.collectAsStateWithLifecycle()
@@ -82,6 +83,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, vm: Round
     var writingTags by remember { mutableStateOf(false) }
     var nfcMessage by remember { mutableStateOf<String?>(null) }
     var locatingPoint by remember { mutableStateOf<ar.com.securityapp.campo.data.PatrolPoint?>(null) }
+    LaunchedEffect(initialScan) { if (initialScan) scanning = true }
     if (writingTags) {
         NfcWriterScreen(ui.points.values.sortedBy { it.code }, vm::tagUrl, onBack = { writingTags = false })
         return

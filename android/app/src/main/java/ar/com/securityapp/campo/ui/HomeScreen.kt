@@ -3,6 +3,7 @@ package ar.com.securityapp.campo.ui
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -41,6 +44,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -55,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,6 +73,7 @@ import ar.com.securityapp.campo.ui.theme.Brand
 import ar.com.securityapp.campo.ui.theme.BrandDark
 import ar.com.securityapp.campo.ui.theme.Danger
 import ar.com.securityapp.campo.ui.theme.Muted
+import ar.com.securityapp.campo.R
 import kotlinx.coroutines.launch
 
 /** Módulo del menú: se muestra solo si el rol tiene el permiso `ver`. Se habilitan de a uno en las próximas entregas. */
@@ -94,6 +103,7 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     val update by vm.update.collectAsStateWithLifecycle()
     var showSettings by remember(me.isPreview) { mutableStateOf(false) } // al entrar o salir de "Ver como" se vuelve al inicio
     var openModule by remember(me.isPreview) { mutableStateOf<String?>(null) }
+    var openScanner by remember(me.isPreview) { mutableStateOf(false) }
     var showShifts by remember(me.isPreview) { mutableStateOf(false) }
     val openShift by vm.openShift.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(openShift) {
@@ -122,7 +132,7 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     }
     when (openModule) {
         "rondas" -> {
-            ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; vm.refreshCounts() }, canManagePoints = me.can("rondas", "editar"))
+            ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; openScanner = false; vm.refreshCounts() }, canManagePoints = me.can("rondas", "editar"), initialScan = openScanner)
             return
         }
         "acciones" -> { ar.com.securityapp.campo.ui.actions.AccionesScreen(onBack = { openModule = null; vm.refreshCounts() }); return }
@@ -154,6 +164,7 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
             Modifier.fillMaxWidth().background(Brand).statusBarsPadding().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Image(painterResource(R.drawable.security_logo), "Logo de Security App", Modifier.size(38.dp).padding(end = 8.dp))
             Column(Modifier.weight(1f)) {
                 Text(me.companyName, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -170,6 +181,14 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
             }
             IconButton({ showSettings = true }) { Icon(Icons.Filled.Settings, "Ajustes", tint = Color.White) }
         }
+    }, bottomBar = {
+        HomeBottomBar(
+            onHome = { openModule = null; showSettings = false },
+            onActivity = { openModule = "rondas"; openScanner = false },
+            onScan = { openModule = "rondas"; openScanner = true },
+            onNotices = { vm.openAvisos.value = true },
+            onMore = { showSettings = true },
+        )
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
         if (me.isPreview) PreviewBanner(me) { vm.exitPreview() }
@@ -212,6 +231,30 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
                 }
             }
         }
+        }
+    }
+}
+
+/** Navegación rápida inspirada en billeteras móviles: el QR queda siempre al alcance del pulgar. */
+@Composable
+private fun HomeBottomBar(onHome: () -> Unit, onActivity: () -> Unit, onScan: () -> Unit, onNotices: () -> Unit, onMore: () -> Unit) {
+    Box(Modifier.fillMaxWidth().height(78.dp)) {
+        NavigationBar(containerColor = Color.White, tonalElevation = 6.dp, modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter)) {
+            NavigationBarItem(selected = true, onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { Text("Inicio") })
+            NavigationBarItem(selected = false, onClick = onActivity, icon = { Icon(Icons.Filled.CheckCircle, "Actividad") }, label = { Text("Actividad") })
+            Spacer(Modifier.weight(1f))
+            NavigationBarItem(selected = false, onClick = onNotices, icon = { Icon(Icons.Filled.Notifications, "Avisos") }, label = { Text("Avisos") })
+            NavigationBarItem(selected = false, onClick = onMore, icon = { Icon(Icons.Filled.Menu, "Más") }, label = { Text("Más") })
+        }
+        Surface(
+            modifier = Modifier.align(Alignment.TopCenter).size(70.dp),
+            shape = androidx.compose.foundation.shape.CircleShape,
+            color = Color.White,
+            shadowElevation = 5.dp,
+        ) {
+            FloatingActionButton(onClick = onScan, containerColor = Accent, contentColor = BrandDark, modifier = Modifier.padding(6.dp)) {
+                Icon(painterResource(R.drawable.ic_qr), "Escanear QR", Modifier.size(32.dp))
+            }
         }
     }
 }

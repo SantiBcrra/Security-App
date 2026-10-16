@@ -1,6 +1,7 @@
 package ar.com.securityapp.campo.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -44,6 +46,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import ar.com.securityapp.campo.BuildConfig
+import ar.com.securityapp.campo.R
 import ar.com.securityapp.campo.ui.theme.Accent
 import ar.com.securityapp.campo.ui.theme.Brand
 import ar.com.securityapp.campo.ui.theme.BrandDark
@@ -63,8 +66,8 @@ fun LoginScreen(vm: SessionViewModel, state: Screen.Login) {
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(Modifier.size(64.dp).background(Accent, RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Lock, contentDescription = null, tint = BrandDark, modifier = Modifier.size(32.dp))
+            Box(Modifier.size(76.dp).background(Accent, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) {
+                Image(painterResource(R.drawable.security_logo), contentDescription = "Logo de Security App", modifier = Modifier.size(52.dp))
             }
             Spacer(Modifier.height(14.dp))
             Text("Security App", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)

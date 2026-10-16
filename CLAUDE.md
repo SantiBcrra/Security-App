@@ -149,6 +149,10 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   envía a suscripciones web (`push_subscriptions`, destino `web:{id}`) y a tokens Expo futuros.
 - Prueba de estrés: `php tools/sync-stress.php http://localhost/securityapp {empresa} {usuario} {clave} 500 10`.
 
+### App Android — navegación y marca (versión 1.2)
+- El inicio usa una navegación inferior compacta, con Inicio, Actividad, Avisos y Más. El botón central amarillo abre directamente la cámara para leer un QR y entra a Rondas; si no hay ronda activa, se aplica el inicio automático por primer escaneo ya documentado.
+- El logo compartido por la marca se guarda en `android/app/src/main/res/drawable/security_logo.png` y se usa en el ícono adaptable, el ingreso y el encabezado. Se conserva la paleta `Brand`/`Accent` existente; no se agregan librerías ni servicios.
+
 ## Rondas de guardias (Etapa 9 adelantada)
 - Puntos de ronda en `patrol_points`, con QR público, coordenadas, radio permitido y marca de punto crítico.
 - Rutas y orden de puntos en `patrol_routes` / `patrol_route_points`; ejecuciones y escaneos en `patrol_rounds` / `patrol_scans`.
