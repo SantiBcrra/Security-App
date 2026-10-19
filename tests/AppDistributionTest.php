@@ -89,7 +89,7 @@ return [
         assert_same([], AppDistribution::upload(['version_code' => '2', 'version_name' => '1.1.0', 'min_version_code' => '2'], $fakeApk(), null)['errors']);
         $m = AppDistribution::manifest();
         assert_same([2, '1.1.0', 2], [$m['version_code'], $m['version_name'], $m['min_version_code']]);
-        assert_true(str_ends_with($m['url'], '/descargas/android/2.apk'));
+        assert_true(str_ends_with($m['url'], '/api/v1/app/android/apk'));
         // Retirar la última: vuelve a ofrecer la anterior, pero la mínima obligatoria activa se recalcula
         AppReleases::setActive((int) AppReleases::latest()['id'], false);
         $m = AppDistribution::manifest();
@@ -132,19 +132,34 @@ return [
         foreach (AppReleases::all() as $row) if ((int) $row['version_code'] >= $code) AppReleases::setActive((int) $row['id'], false); // el test siguiente espera la 1.1.0
     },
 
-    'HTTP: página de descarga, APK, versión para la app (sin sesión) y admin' => function () use ($setup) {
+    'HTTP: la descarga pide sesión (usuario de la empresa o super-admin); la app se actualiza con su token' => function () use ($setup, &$st) {
         $setup();
         $router = new \App\Core\Router();
         (require BASE_PATH . '/app/routes.php')($router);
         $_SESSION = [];
+        UserAuth::setCurrent(null);
+        $page = $router->dispatch(new \App\Core\Request('GET', '/descargas/android'));
+        assert_same([302, '/descargas/android'], [$page->status, $_SESSION['intended'] ?? null], 'sin sesión: al login y vuelve');
+        assert_same(302, $router->dispatch(new \App\Core\Request('GET', '/descargas/android/2.apk'))->status, 'el APK tampoco se baja sin sesión');
+        // Con sesión de un usuario de la empresa
+        $_SESSION = [\App\Services\Impersonation::TENANT_KEY => $st['a']['uuid'], UserAuth::USER_KEY => $st['user']['uuid']];
         $page = $router->dispatch(new \App\Core\Request('GET', '/descargas/android'));
         assert_true($page->status === 200 && str_contains($page->body, 'Versión 1.1.0') && str_contains($page->body, 'Instalar de todas formas'));
         $apk = $router->dispatch(new \App\Core\Request('GET', '/descargas/android/2.apk'));
         assert_same([200, 'application/vnd.android.package-archive'], [$apk->status, $apk->headers['Content-Type'] ?? null]);
         assert_same(AppReleases::latest()['sha256'], hash('sha256', $apk->body));
         assert_same(404, $router->dispatch(new \App\Core\Request('GET', '/descargas/android/9.apk'))->status);
+        $_SESSION = [];
+        // La consulta de versión sigue sin sesión (pantalla de ingreso), pero el APK se baja por la API con token.
         $api = json_decode($router->dispatch(new \App\Core\Request('GET', '/api/v1/app/android'))->body, true);
         assert_same([true, 2], [$api['ok'], $api['data']['version_code']]);
+        assert_true(str_ends_with($api['data']['url'], '/api/v1/app/android/apk'));
+        assert_same(401, $router->dispatch(new \App\Core\Request('GET', '/api/v1/app/android/apk'))->status);
+        Tenant::activate($st['a']);
+        $tokens = \App\Services\ApiAuth::login('apk-a', 'g@apk.test', 'clave-larga-123', \App\Core\Uuid::v4(), 'Moto', null, '10.0.0.1');
+        Tenant::deactivate();
+        $res = $router->dispatch(new \App\Core\Request('GET', '/api/v1/app/android/apk', [], [], ['authorization' => 'Bearer ' . $tokens['access_token']]));
+        assert_same([200, AppReleases::latest()['sha256']], [$res->status, hash('sha256', $res->body)]);
         $admin = $router->dispatch(new \App\Core\Request('GET', '/admin/app-android'));
         assert_true($admin->status === 302, 'el admin requiere super-admin');
     },

@@ -19,6 +19,12 @@ final class AppController
         return $m === null ? Response::jsonError('Todavía no hay una versión publicada.', 404, 'no_release') : Response::json($m);
     }
 
+    /** El APK de la última versión, para la actualización desde la app (con su token: sin cuenta no se baja). */
+    public function apk(Request $request): Response
+    {
+        return \App\Controllers\Web\DownloadsController::send('latest');
+    }
+
     /** "Mis turnos": historial de los últimos 30 días con horas reales y salidas del predio (el guardia ve lo suyo). */
     public function myShifts(Request $request): Response
     {

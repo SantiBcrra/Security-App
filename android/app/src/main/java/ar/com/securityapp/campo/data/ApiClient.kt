@@ -43,6 +43,9 @@ class ApiClient(private val prefs: Prefs, private val tokens: TokenStore, privat
      * Lo que no es GET se corta acá mismo (el servidor también lo rechaza). `/preview/...` usa siempre la sesión propia.
      */
     @Volatile var previewToken: String? = null
+
+    /** Token vigente para descargas que no pasan por call() (APK de la actualización). */
+    fun accessToken(): String? = previewToken ?: tokens.access
     /** El servidor dio por terminada la vista previa (venció o le sacaron el permiso). */
     var onPreviewLost: () -> Unit = {}
 

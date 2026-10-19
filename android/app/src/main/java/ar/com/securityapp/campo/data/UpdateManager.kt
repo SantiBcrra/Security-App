@@ -41,8 +41,12 @@ class UpdateManager(private val context: Context, private val api: ApiClient) {
         dir.listFiles()?.forEach { it.delete() }
         val file = File(dir, "securityapp-${release.versionCode}.apk")
         val digest = MessageDigest.getInstance("SHA-256")
+        // El APK solo se baja con cuenta (token de la app): se pide /me antes para renovar el token si venció.
+        runCatching { api.get("/me") }
+        val token = api.accessToken() ?: throw ApiException(401, "auth", "Ingresá con tu usuario para descargar la actualización.")
         try {
-            api.http.newCall(Request.Builder().url(release.url).build()).execute().use { res ->
+            api.http.newCall(Request.Builder().url(release.url).header("Authorization", "Bearer $token").build()).execute().use { res ->
+                if (res.code == 401) throw ApiException(401, "auth", "Ingresá con tu usuario para descargar la actualización.")
                 if (!res.isSuccessful) throw IOException("El servidor respondió ${res.code}.")
                 val body = res.body ?: throw IOException("Descarga vacía.")
                 val total = body.contentLength().takeIf { it > 0 } ?: release.sizeBytes

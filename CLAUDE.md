@@ -418,7 +418,9 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - App: `ApiClient` (OkHttp, `{ok,data,error}`, renueva el JWT con un mutex), `TokenStore` (Keystore AES-GCM), `LocalDb`
   (SQLite: `records` entidad+uuid+JSON del pull y `outbox`), `SyncRepository` (pull por cursor), `UpdateManager`.
 - Distribución sin Google Play: tabla maestra `app_releases` (migración master 0007), `/admin/app-android` (subir APK,
-  versión mínima obligatoria), `/descargas/android` (QR + guía), `GET /api/v1/app/android` (sin sesión). La app baja el
+  versión mínima obligatoria), `/descargas/android` (QR + guía; **requiere sesión**: usuario de una empresa o super-admin,
+  decisión del usuario 19/10/2026 — lo baja un admin y lo pasa por WhatsApp), `GET /api/v1/app/android` (sin sesión: solo
+  versión y huella; `url` = `GET /api/v1/app/android/apk`, que exige el token de la app; desde la 1.2.2 `UpdateManager` lo manda). La app baja el
   APK, verifica SHA-256 y abre el instalador. **La clave de firma de release no va al repo: respaldarla.**
   Subida del APK **por partes** (hostings con `post_max_size` chico o internet lento: si el POST supera el límite PHP vacía el
   formulario y falla el CSRF): el navegador calcula el SHA-256, `POST /admin/app-android/partes` (inicia o retoma, id =

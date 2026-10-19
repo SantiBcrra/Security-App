@@ -190,7 +190,7 @@ final class AppDistribution
         }
         return ['version_code' => (int) $r['version_code'], 'version_name' => $r['version_name'], 'min_version_code' => $min,
             'sha256' => $r['sha256'], 'size_bytes' => (int) $r['size_bytes'], 'notes' => $r['notes'],
-            'url' => absolute_url('/descargas/android/' . $r['version_code'] . '.apk'), 'published_at' => str_replace(' ', 'T', $r['created_at']) . 'Z'];
+            'url' => absolute_url('/api/v1/app/android/apk'), 'published_at' => str_replace(' ', 'T', $r['created_at']) . 'Z'];
     }
 
     public static function filePath(array $r): ?string

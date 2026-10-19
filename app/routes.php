@@ -344,6 +344,7 @@ return static function (Router $r): void {
             $r->post('/consent', [ApiAppController::class, 'accept']);
             $r->post('/panic', [ApiAppController::class, 'panic']);
             $r->get('/shifts/mine', [ApiAppController::class, 'myShifts']);
+            $r->get('/app/android/apk', [ApiAppController::class, 'apk']);
             $r->post('/absences/{uuid}/cancel', [ApiAppController::class, 'cancelAbsence']);
 
             // Sincronización offline (Etapa 5)
@@ -380,7 +381,7 @@ return static function (Router $r): void {
     // Tareas programadas por URL (cron del hosting o cron-job.org), protegidas con clave.
     $r->get('/cron/run', [CronController::class, 'run']);
 
-    // Descarga pública de la app Android (distribución propia, sin Google Play)
+    // Descarga de la app Android (distribución propia, sin Google Play): requiere sesión (DownloadsController::guard)
     $r->get('/descargas/android', [DownloadsController::class, 'android']);
     $r->get('/descargas/android/{code}.apk', [DownloadsController::class, 'apk']);
 
