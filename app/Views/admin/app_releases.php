@@ -34,11 +34,24 @@ $err = fn (string $k) => isset($errors[$k]) ? '<div class="text-danger small">' 
         </div>
     </div>
     <div class="col-xl-5">
-        <form class="card shadow-sm" method="post" action="<?= e(url('/admin/app-android')) ?>" enctype="multipart/form-data">
+        <form class="card shadow-sm" method="post" action="<?= e(url('/admin/app-android')) ?>" id="release-form">
             <?= csrf_field() ?>
+            <input type="hidden" name="upload_id" id="upload-id">
             <div class="card-header"><strong>Publicar una versión</strong></div>
             <div class="card-body">
-                <div class="mb-2"><label class="form-label small mb-0">APK firmado (release)</label><input class="form-control form-control-sm" type="file" name="apk" accept=".apk" required><?= $err('apk') ?></div>
+                <label class="form-label small mb-0">APK firmado (release)</label>
+                <?php if ($inbox): ?>
+                    <select class="form-select form-select-sm mb-1" name="inbox" id="inbox">
+                        <option value="">Subir desde esta computadora…</option>
+                        <?php foreach ($inbox as $f): ?><option value="<?= e($f['name']) ?>"><?= e($f['name']) ?> · <?= e(number_format($f['size'] / 1048576, 1, ',', '.')) ?> MB (subido por FTP)</option><?php endforeach; ?>
+                    </select>
+                <?php endif; ?>
+                <div id="file-box"><input class="form-control form-control-sm" type="file" id="apk" accept=".apk"></div>
+                <?= $err('apk') ?>
+                <div class="form-text">Se sube por partes de <?= (int) ($chunk / 1048576) ?> MB: funciona con internet lento y si se corta retoma solo.
+                    Alternativa: subilo por FTP o el administrador de archivos del hosting a <code><?= e($inboxDir) ?></code> y elegilo acá.</div>
+                <div class="progress my-2 d-none" id="up-progress" style="height: 18px"><div class="progress-bar" id="up-bar" style="width: 0%">0 %</div></div>
+                <div class="small mb-2" id="up-status"></div>
                 <div class="row g-2 mb-2">
                     <div class="col-6"><label class="form-label small mb-0">Nombre de versión</label><input class="form-control form-control-sm" name="version_name" value="<?= e($v('version_name')) ?>" placeholder="1.0.0" required><?= $err('version_name') ?></div>
                     <div class="col-6"><label class="form-label small mb-0">Código (versionCode)</label><input class="form-control form-control-sm" name="version_code" inputmode="numeric" value="<?= e($v('version_code', $next)) ?>" required><?= $err('version_code') ?></div>
@@ -48,8 +61,57 @@ $err = fn (string $k) => isset($errors[$k]) ? '<div class="text-danger small">' 
                     <div class="form-text">Las apps con un código menor no dejan seguir hasta actualizar (para cambios incompatibles o de seguridad).</div></div>
                 <div class="mb-2"><label class="form-label small mb-0">Novedades</label><textarea class="form-control form-control-sm" name="notes" rows="3"><?= e($v('notes')) ?></textarea></div>
                 <div class="form-text mb-2">El código y el nombre tienen que coincidir con los de <code>android/app/build.gradle.kts</code>. Android solo acepta la actualización si el APK está firmado con la misma clave.</div>
-                <button class="btn btn-primary btn-sm">Publicar</button>
+                <button class="btn btn-primary btn-sm" id="publish">Publicar</button>
             </div>
         </form>
+        <script>
+        (function () {
+            var form = document.getElementById('release-form'), input = document.getElementById('apk'), inbox = document.getElementById('inbox');
+            var bar = document.getElementById('up-bar'), box = document.getElementById('up-progress'), status = document.getElementById('up-status'), btn = document.getElementById('publish');
+            var base = <?= json_encode(url('/admin/app-android/partes')) ?>, token = form.querySelector('[name=csrf_token]').value;
+            if (inbox) inbox.addEventListener('change', function () { document.getElementById('file-box').classList.toggle('d-none', inbox.value !== ''); });
+            function say(t, cls) { status.className = 'small mb-2 ' + (cls || ''); status.textContent = t; }
+            function show(done, total) { var p = Math.floor(100 * done / total); box.classList.remove('d-none'); bar.style.width = p + '%'; bar.textContent = p + ' %'; }
+            function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+            function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+            function post(url, body, type) {
+                return fetch(url, { method: 'POST', credentials: 'same-origin', body: body,
+                    headers: { 'Content-Type': type, 'X-CSRF-Token': token, 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(function (r) { return r.json().then(function (j) { if (!j.ok) throw new Error(j.error && j.error.message || 'Error del servidor'); return j.data; }); });
+            }
+            form.addEventListener('submit', async function (ev) {
+                if (inbox && inbox.value !== '') return; // APK subido por FTP: se manda el formulario tal cual
+                ev.preventDefault();
+                var file = input.files[0];
+                if (!file) { say('Elegí el archivo .apk.', 'text-danger'); return; }
+                btn.disabled = true;
+                try {
+                    say('Preparando el archivo…');
+                    var sha = hex(await crypto.subtle.digest('SHA-256', await file.arrayBuffer()));
+                    var up = await post(base, JSON.stringify({ name: file.name, size: file.size, sha256: sha }), 'application/json');
+                    var at = up.received, fails = 0;
+                    while (at < file.size) {
+                        show(at, file.size);
+                        say('Subiendo… ' + (at / 1048576).toFixed(1) + ' de ' + (file.size / 1048576).toFixed(1) + ' MB. No cierres esta página.');
+                        try {
+                            var r = await post(base + '/' + up.id + '?offset=' + at, file.slice(at, Math.min(at + up.chunk, file.size)), 'application/octet-stream');
+                            at = r.received; fails = 0;
+                        } catch (e) {
+                            if (++fails > 30) throw e;
+                            say('Se cortó la conexión: reintentando en ' + Math.min(30, fails * 3) + ' s… (' + e.message + ')', 'text-warning');
+                            await wait(Math.min(30, fails * 3) * 1000);
+                        }
+                    }
+                    show(1, 1);
+                    say('Archivo completo. Publicando…', 'text-success');
+                    document.getElementById('upload-id').value = up.id;
+                    form.submit();
+                } catch (e) {
+                    say('No se pudo subir: ' + e.message + '. Volvé a tocar Publicar: retoma desde donde quedó.', 'text-danger');
+                    btn.disabled = false;
+                }
+            });
+        })();
+        </script>
     </div>
 </div>

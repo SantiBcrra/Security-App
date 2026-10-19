@@ -25,12 +25,23 @@ final class AppReleasesController
             'old'      => $old,
             'errors'   => $errors,
             'download' => absolute_url('/descargas/android'),
+            'inbox'    => AppDistribution::inbox(),
+            'inboxDir' => 'storage/' . AppDistribution::INBOX,
+            'chunk'    => AppDistribution::CHUNK_BYTES,
         ], 'layouts/admin'));
     }
 
     public function store(Request $request): Response
     {
         $file = $request->files['apk'] ?? null;
+        try {
+            // Subida por partes (la arma el navegador) o un APK dejado por FTP en la bandeja.
+            if (($id = (string) $request->input('upload_id', '')) !== '') $file = AppDistribution::chunkFile($id);
+            elseif (($name = (string) $request->input('inbox', '')) !== '') $file = AppDistribution::inboxFile($name);
+        } catch (\App\Core\UserError $e) {
+            Flash::add('danger', $e->getMessage());
+            return Response::redirect('/admin/app-android');
+        }
         $r = AppDistribution::upload($request->post, is_array($file) ? $file : null, (int) (AdminAuth::user()['id'] ?? 0) ?: null);
         if ($r['release'] === null) {
             Flash::add('danger', 'Revisá la versión: ' . implode(' ', $r['errors']));
@@ -39,6 +50,27 @@ final class AppReleasesController
             Flash::add('success', 'Versión ' . $r['release']['version_name'] . ' publicada: los celulares la van a ofrecer al abrir la app.');
         }
         return Response::redirect('/admin/app-android');
+    }
+
+    /** Subida por partes: iniciar (o retomar) → {id, received, chunk}. */
+    public function chunkStart(Request $request): Response
+    {
+        try {
+            return Response::json(AppDistribution::chunkStart((string) $request->input('name', ''), (int) $request->input('size', 0),
+                strtolower((string) $request->input('sha256', ''))) + ['chunk' => AppDistribution::CHUNK_BYTES]);
+        } catch (\App\Core\UserError $e) {
+            return Response::jsonError($e->getMessage(), 422);
+        }
+    }
+
+    /** Una parte (cuerpo crudo) en `offset` → {received}. */
+    public function chunkAppend(Request $request, string $id): Response
+    {
+        try {
+            return Response::json(['received' => AppDistribution::chunkAppend($id, (int) $request->input('offset', -1), $request->rawBody())]);
+        } catch (\App\Core\UserError $e) {
+            return Response::jsonError($e->getMessage(), 422);
+        }
     }
 
     public function toggle(Request $request, string $uuid): Response

@@ -97,6 +97,41 @@ return [
         AppReleases::setActive((int) AppReleases::all()[0]['id'], true);
     },
 
+    'publicar APK por partes (internet lento / límite del hosting), retomar, archivo dañado y bandeja FTP' => function () use ($setup, $fakeApk) {
+        $setup();
+        $apk = $fakeApk();
+        $bytes = (string) file_get_contents($apk['tmp_name']);
+        $sha = hash('sha256', $bytes);
+        $start = AppDistribution::chunkStart('app-release.apk', strlen($bytes), $sha);
+        assert_same(0, $start['received']);
+        $half = intdiv(strlen($bytes), 2);
+        assert_same($half, AppDistribution::chunkAppend($start['id'], 0, substr($bytes, 0, $half)));
+        assert_same($half, AppDistribution::chunkAppend($start['id'], 0, substr($bytes, 0, $half)), 'parte repetida (reintento): no se duplica');
+        assert_same($half, AppDistribution::chunkStart('app-release.apk', strlen($bytes), $sha)['received'], 'retoma desde lo recibido');
+        assert_same(AppDistribution::chunkFile($start['id'])['error'], UPLOAD_ERR_PARTIAL, 'incompleto no se publica');
+        assert_same(strlen($bytes), AppDistribution::chunkAppend($start['id'], $half, substr($bytes, $half)));
+        $code = AppReleases::maxCode() + 1;
+        $r = AppDistribution::upload(['version_code' => (string) $code, 'version_name' => '1.5.0'], AppDistribution::chunkFile($start['id']), null);
+        assert_same([], $r['errors']);
+        assert_same($sha, $r['release']['sha256']);
+        assert_true(!is_file(App\Core\Storage::path('apps/android/partes/' . $start['id'] . '.part')), 'se borra la parte temporal');
+        // Dañado: la huella no coincide
+        $bad = AppDistribution::chunkStart('otra.apk', 10, str_repeat('a', 64));
+        AppDistribution::chunkAppend($bad['id'], 0, '0123456789');
+        try { AppDistribution::chunkFile($bad['id']); assert_true(false, 'tenía que rechazarlo'); } catch (App\Core\UserError $e) { assert_true(str_contains($e->getMessage(), 'dañado')); }
+        try { AppDistribution::chunkStart('virus.exe', 10, $sha); assert_true(false); } catch (App\Core\UserError) {}
+        // Bandeja FTP
+        $inbox = App\Core\Storage::path(AppDistribution::INBOX);
+        @mkdir($inbox, 0777, true);
+        copy($fakeApk()['tmp_name'], $inbox . '/SecurityApp-1.6.apk');
+        assert_same(['SecurityApp-1.6.apk'], array_column(AppDistribution::inbox(), 'name'));
+        assert_same(null, AppDistribution::inboxFile('../../config/config.php'), 'no sale de la carpeta');
+        $r = AppDistribution::upload(['version_code' => (string) ($code + 1), 'version_name' => '1.6.0'], AppDistribution::inboxFile('SecurityApp-1.6.apk'), null);
+        assert_same([], $r['errors']);
+        assert_same([], AppDistribution::inbox(), 'se mueve a las versiones publicadas');
+        foreach (AppReleases::all() as $row) if ((int) $row['version_code'] >= $code) AppReleases::setActive((int) $row['id'], false); // el test siguiente espera la 1.1.0
+    },
+
     'HTTP: página de descarga, APK, versión para la app (sin sesión) y admin' => function () use ($setup) {
         $setup();
         $router = new \App\Core\Router();

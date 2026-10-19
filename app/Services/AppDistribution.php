@@ -55,7 +55,9 @@ final class AppDistribution
         }
         $relative = 'apps/android/securityapp-' . $code . '-' . bin2hex(random_bytes(4)) . '.apk';
         $target = Storage::path($relative);
-        $ok = ($file['upload'] ?? true) ? move_uploaded_file($file['tmp_name'], $target) : copy($file['tmp_name'], $target);
+        $ok = ($file['upload'] ?? true) ? move_uploaded_file($file['tmp_name'], $target)
+            : (!empty($file['move']) || !empty($file['cleanup']) ? rename($file['tmp_name'], $target) : copy($file['tmp_name'], $target));
+        if ($ok && !empty($file['cleanup'])) self::chunkCleanup((string) $file['cleanup']);
         if (!$ok) {
             throw new \RuntimeException('No se pudo guardar el APK.');
         }
@@ -65,6 +67,100 @@ final class AppDistribution
         $release = AppReleases::findByUuid($uuid);
         Audit::platform('app.release', 'app_release', $uuid, null, ['version' => $name, 'codigo' => $code, 'minima' => $min]);
         return ['release' => $release, 'errors' => []];
+    }
+
+    // ── subida por partes (hostings con post_max_size chico o internet lento) ──────────
+    // El navegador corta el APK en partes de 1 MB; si se corta, retoma desde el tamaño que ya llegó. Al final se arma el
+    // archivo, se verifica su SHA-256 y se publica con upload() (como si se hubiera subido entero).
+
+    public const CHUNK_BYTES = 1024 * 1024;
+    /** Carpeta para subir el APK por FTP / administrador de archivos (alternativa manual). */
+    public const INBOX = 'apps/android/subir';
+
+    private static function partPath(string $id): string
+    {
+        if (!preg_match('/^[a-f0-9]{32}$/', $id)) throw new \App\Core\UserError('Subida inválida.');
+        return Storage::path('apps/android/partes/' . $id . '.part');
+    }
+
+    /** @return array{id: string, received: int} */
+    public static function chunkStart(string $name, int $size, string $sha256): array
+    {
+        if (!str_ends_with(strtolower($name), '.apk')) throw new \App\Core\UserError('El archivo tiene que ser .apk.');
+        if ($size < 1 || $size > self::MAX_BYTES) throw new \App\Core\UserError('El APK pesa más de 150 MB.');
+        if (!preg_match('/^[a-f0-9]{64}$/', $sha256)) throw new \App\Core\UserError('Falta la huella del archivo.');
+        $dir = Storage::path('apps/android/partes');
+        if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) throw new \RuntimeException('No se pudo crear la carpeta temporal.');
+        foreach (glob($dir . '/*') ?: [] as $old) { // restos de subidas abandonadas hace más de 2 días
+            if (filemtime($old) < time() - 2 * 86400) @unlink($old);
+        }
+        // Mismo archivo (misma huella y tamaño): se retoma la subida anterior.
+        $id = substr(hash('sha256', $sha256 . ':' . $size), 0, 32);
+        file_put_contents(Storage::path('apps/android/partes/' . $id . '.json'), json_encode(['name' => $name, 'size' => $size, 'sha256' => $sha256]));
+        $part = self::partPath($id);
+        return ['id' => $id, 'received' => is_file($part) ? (int) filesize($part) : 0];
+    }
+
+    /** Agrega una parte en el lugar `offset` (si no coincide con lo recibido, responde lo recibido para retomar). */
+    public static function chunkAppend(string $id, int $offset, string $bytes): int
+    {
+        $part = self::partPath($id);
+        $meta = json_decode((string) @file_get_contents(Storage::path('apps/android/partes/' . $id . '.json')), true);
+        if (!$meta) throw new \App\Core\UserError('La subida no existe o venció: empezá de nuevo.');
+        clearstatcache(true, $part);
+        $have = is_file($part) ? (int) filesize($part) : 0;
+        if ($offset !== $have || $bytes === '') return $have;
+        if ($have + strlen($bytes) > (int) $meta['size'] || strlen($bytes) > self::CHUNK_BYTES * 2) throw new \App\Core\UserError('La parte no corresponde al archivo.');
+        $fh = fopen($part, 'ab');
+        if ($fh === false || !flock($fh, LOCK_EX)) throw new \RuntimeException('No se pudo escribir la parte.');
+        clearstatcache(true, $part);
+        if ((int) filesize($part) === $offset) fwrite($fh, $bytes);
+        flock($fh, LOCK_UN);
+        fclose($fh);
+        clearstatcache(true, $part);
+        return (int) filesize($part);
+    }
+
+    /** Archivo armado listo para upload() (verifica tamaño y SHA-256). */
+    public static function chunkFile(string $id): array
+    {
+        $part = self::partPath($id);
+        $meta = json_decode((string) @file_get_contents(Storage::path('apps/android/partes/' . $id . '.json')), true);
+        clearstatcache(true, $part);
+        if (!$meta || !is_file($part) || (int) filesize($part) !== (int) $meta['size']) {
+            return ['error' => UPLOAD_ERR_PARTIAL, 'name' => (string) ($meta['name'] ?? ''), 'tmp_name' => '', 'size' => 0];
+        }
+        if (!hash_equals((string) $meta['sha256'], hash_file('sha256', $part))) {
+            @unlink($part);
+            throw new \App\Core\UserError('El archivo llegó dañado (la huella no coincide): volvé a subirlo.');
+        }
+        return ['error' => UPLOAD_ERR_OK, 'name' => $meta['name'], 'tmp_name' => $part, 'size' => (int) $meta['size'], 'upload' => false, 'cleanup' => $id];
+    }
+
+    public static function chunkCleanup(string $id): void
+    {
+        @unlink(self::partPath($id));
+        @unlink(Storage::path('apps/android/partes/' . $id . '.json'));
+    }
+
+    /** APKs subidos a mano a storage/apps/android/subir (FTP o administrador de archivos del hosting). @return list<array{name: string, size: int}> */
+    public static function inbox(): array
+    {
+        $dir = Storage::path(self::INBOX);
+        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        $out = [];
+        foreach (glob($dir . '/*.apk') ?: [] as $f) {
+            $out[] = ['name' => basename($f), 'size' => (int) filesize($f), 'at' => (int) filemtime($f)];
+        }
+        return $out;
+    }
+
+    public static function inboxFile(string $name): ?array
+    {
+        $name = basename($name);
+        $path = Storage::path(self::INBOX . '/' . $name);
+        if (!str_ends_with(strtolower($name), '.apk') || !is_file($path)) return null;
+        return ['error' => UPLOAD_ERR_OK, 'name' => $name, 'tmp_name' => $path, 'size' => (int) filesize($path), 'upload' => false, 'move' => true];
     }
 
     /** Un APK es un ZIP con AndroidManifest.xml adentro. */

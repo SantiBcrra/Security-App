@@ -84,6 +84,8 @@ return static function (Router $r): void {
         $r->get('/app-android', [AppReleasesController::class, 'index']);
         $r->post('/app-android', [AppReleasesController::class, 'store']);
         $r->post('/app-android/{uuid}/estado', [AppReleasesController::class, 'toggle']);
+        $r->post('/app-android/partes', [AppReleasesController::class, 'chunkStart']);
+        $r->post('/app-android/partes/{id}', [AppReleasesController::class, 'chunkAppend']);
         $r->post('/migraciones', [MigrationsController::class, 'run']);
 
         $r->get('/empresas', [TenantsController::class, 'index']);

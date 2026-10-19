@@ -420,6 +420,11 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Distribución sin Google Play: tabla maestra `app_releases` (migración master 0007), `/admin/app-android` (subir APK,
   versión mínima obligatoria), `/descargas/android` (QR + guía), `GET /api/v1/app/android` (sin sesión). La app baja el
   APK, verifica SHA-256 y abre el instalador. **La clave de firma de release no va al repo: respaldarla.**
+  Subida del APK **por partes** (hostings con `post_max_size` chico o internet lento: si el POST supera el límite PHP vacía el
+  formulario y falla el CSRF): el navegador calcula el SHA-256, `POST /admin/app-android/partes` (inicia o retoma, id =
+  hash de huella + tamaño) y manda partes de 1 MB a `/partes/{id}?offset=` con reintentos; al completar publica con
+  `upload_id` (`AppDistribution::chunkFile` verifica tamaño y huella). Alternativa manual: dejar el `.apk` por FTP en
+  `storage/apps/android/subir/` y elegirlo en el formulario (`inbox`).
 - Rondas (entrega 2): `RoundsRepository` guarda ronda/escaneos en la base local y encola `round.start` (con
   `started_at_device`), `round.scan` y `round.finish` (con `finished_at_device`) en `Outbox` (orden de creación, op_id).
   `SyncWorker` (WorkManager, requiere red, reintento exponencial + periódico 15 min) manda la cola y baja cambios: lo hecho
