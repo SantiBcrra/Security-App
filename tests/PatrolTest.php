@@ -807,6 +807,33 @@ return [
         assert_true(str_contains($html, 'id="modulos"') && str_contains($html, 'mod-rondas'));
     },
 
+    'puntos: editar nombre, código, ubicación y radio sin cambiar el QR; código repetido rechazado' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $_SESSION = [];
+        $uuid = $st['uuid']($st['p1']);
+        $before = Patrols::point($uuid);
+        $ctl = new \App\Controllers\Web\Panel\RoundsController();
+        $form = $ctl->pointForm(new \App\Core\Request('GET', '/'), $uuid)->body;
+        assert_true(str_contains($form, 'Editar punto P1') && str_contains($form, 'value="Portón"') && str_contains($form, '/panel/rondas/puntos/' . $uuid));
+        DB::tenant()->exec("UPDATE patrol_points SET updated_at = '2020-01-01 00:00:00' WHERE id = " . (int) $st['p1']);
+        $res = $ctl->pointStore(new \App\Core\Request('POST', '/', [], ['name' => 'Portón norte', 'code' => 'P1N', 'description' => 'Entrada camiones',
+            'lat' => '-34.6040', 'lng' => '-58.3816', 'radius_m' => '40', 'is_critical' => '1']), $uuid);
+        assert_same(302, $res->status);
+        $after = Patrols::point($uuid);
+        assert_same([$before['id'], 'Portón norte', 'P1N', 'Entrada camiones', 40, -34.604], [$after['id'], $after['name'], $after['code'], $after['description'], (int) $after['radius_m'], (float) $after['lat']]);
+        assert_true($after['updated_at'] > '2020-01-01 00:00:00', 'baja de nuevo a los celulares');
+        assert_true((int) DB::tenant()->query("SELECT COUNT(*) FROM audit_log WHERE action = 'patrol_point.update'")->fetchColumn() >= 1);
+        // Código de otro punto: no se guarda
+        $ctl->pointStore(new \App\Core\Request('POST', '/', [], ['name' => 'X', 'code' => 'P2', 'lat' => '-34.6', 'lng' => '-58.38', 'radius_m' => '30']), $uuid);
+        assert_same('P1N', Patrols::point($uuid)['code']);
+        // Volver a como estaba (otros tests usan P1)
+        Patrols::updatePoint((int) $st['p1'], ['name' => 'Portón', 'code' => 'P1', 'description' => '', 'site_id' => null, 'sector_id' => null,
+            'lat' => -34.6037, 'lng' => -58.3816, 'radius_m' => 30, 'is_critical' => true]);
+        assert_true(str_contains(\App\Core\View::render('panel/rounds/points', ['points' => Patrols::points(), 'canCreate' => true, 'canEdit' => true], null), '/editar'));
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

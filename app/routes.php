@@ -280,6 +280,8 @@ return static function (Router $r): void {
         $r->post('/rondas/puntos', [RoundsController::class, 'pointStore'], [$can('rondas', 'crear')]);
         $r->get('/rondas/puntos/{uuid}/qr', [RoundsController::class, 'qr'], [$can('rondas', 'ver')]);
         $r->post('/rondas/puntos/{uuid}/eliminar', [RoundsController::class, 'pointDelete'], [$can('rondas', 'editar')]);
+        $r->get('/rondas/puntos/{uuid}/editar', [RoundsController::class, 'pointForm'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/puntos/{uuid}', [RoundsController::class, 'pointStore'], [$can('rondas', 'editar')]);
 
         // Notificaciones (campanita) y "Recibido" de alertas críticas
         $r->get('/notificaciones', [NotificationsController::class, 'index']);

@@ -157,15 +157,24 @@ final class RoundsController
         return UserAuth::scope('rondas') === 'propios' ? (int) UserAuth::user()['id'] : null;
     }
 
-    public function pointForm(Request $request): Response
+    public function pointForm(Request $request, ?string $uuid = null): Response
     {
+        $point = $uuid ? Patrols::point($uuid) : null;
+        if ($uuid && (!$point || $point['deleted_at'] !== null)) return new Response('', 404);
         [$old, $errors] = Flash::pullInput();
+        if ($point && !$old) { // edición: el formulario arranca con lo guardado
+            $old = ['name' => $point['name'], 'code' => $point['code'], 'description' => $point['description'], 'lat' => (string) (float) $point['lat'],
+                'lng' => (string) (float) $point['lng'], 'radius_m' => $point['radius_m'], 'is_critical' => (int) $point['is_critical'] === 1,
+                'site' => $point['site_id'] ? (Sites::findById((int) $point['site_id'])['uuid'] ?? '') : '',
+                'sector' => $point['sector_id'] ? (Sectors::findById((int) $point['sector_id'])['uuid'] ?? '') : ''];
+        }
         // Doble clic en el mapa de rondas: llega con las coordenadas ya elegidas.
         foreach (['lat', 'lng'] as $k) {
             if (!isset($old[$k]) && is_numeric($request->input($k))) $old[$k] = (string) round((float) $request->input($k), 7);
         }
-        return Response::html(View::render('panel/rounds/point', ['title' => 'Nuevo punto de ronda', 'sites' => Sites::options(), 'sectors' => Sectors::options(), 'old' => $old, 'errors' => $errors,
-            'points' => Patrols::points()], 'layouts/app'));
+        return Response::html(View::render('panel/rounds/point', ['title' => $point ? 'Editar punto de ronda' : 'Nuevo punto de ronda', 'point' => $point,
+            'sites' => Sites::options(), 'sectors' => Sectors::options(), 'old' => $old, 'errors' => $errors,
+            'points' => array_values(array_filter(Patrols::points(), fn ($p) => !$point || $p['uuid'] !== $point['uuid']))], 'layouts/app'));
     }
 
     public function pointDelete(Request $request, string $uuid): Response
@@ -238,8 +247,11 @@ final class RoundsController
             'rounds' => array_slice($rounds, 0, 15), 'canEdit' => UserAuth::can('rondas', 'editar')], 'layouts/app'));
     }
 
-    public function pointStore(Request $request): Response
+    public function pointStore(Request $request, ?string $uuid = null): Response
     {
+        $point = $uuid ? Patrols::point($uuid) : null;
+        if ($uuid && (!$point || $point['deleted_at'] !== null)) return new Response('', 404);
+        $back = $point ? '/panel/rondas/puntos/' . $point['uuid'] . '/editar' : '/panel/rondas/puntos/nuevo';
         $p = $request->post;
         $name = trim((string) ($p['name'] ?? '')); $code = trim((string) ($p['code'] ?? ''));
         $latRaw = str_replace(',', '.', trim((string) ($p['lat'] ?? '')));
@@ -249,7 +261,7 @@ final class RoundsController
         if ($name === '' || $code === '' || !$hasCoords || ($lat == 0 && $lng == 0) || $lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
             Flash::add('danger', 'Nombre, código y coordenadas válidas son obligatorios.');
             Flash::withInput(array_diff_key($p, ['csrf_token' => 1]));
-            return Response::redirect('/panel/rondas/puntos/nuevo');
+            return Response::redirect($back);
         }
         try {
             $site = Sites::findByUuid((string) ($p['site'] ?? ''));
@@ -257,11 +269,24 @@ final class RoundsController
             $data = ['uuid' => Uuid::v4(), 'name' => $name, 'code' => $code, 'description' => trim((string) ($p['description'] ?? '')),
                 'site_id' => $site ? (int) $site['id'] : null, 'sector_id' => $sector ? (int) $sector['id'] : null,
                 'lat' => $lat, 'lng' => $lng, 'radius_m' => max(5, (int) ($p['radius_m'] ?? 50)), 'is_critical' => !empty($p['is_critical'])];
-            Patrols::createPoint($data);
-            Audit::tenant('patrol_point.create', 'patrol_point', $data['uuid'], null, array_diff_key($data, ['uuid' => 1, 'site_id' => 1, 'sector_id' => 1])
-                + ['site' => $site['name'] ?? null, 'sector' => $sector['name'] ?? null]);
-            Flash::add('success', 'Punto de ronda creado. Ya podés imprimir su QR.');
-        } catch (\Throwable $e) { Flash::add('danger', str_contains($e->getMessage(), 'uq_patrol_points_code') ? 'Ese código ya existe.' : 'No se pudo crear el punto.'); }
+            $after = array_diff_key($data, ['uuid' => 1, 'site_id' => 1, 'sector_id' => 1]) + ['site' => $site['name'] ?? null, 'sector' => $sector['name'] ?? null];
+            if ($point) {
+                Patrols::updatePoint((int) $point['id'], $data);
+                $before = ['name' => $point['name'], 'code' => $point['code'], 'description' => $point['description'], 'lat' => (float) $point['lat'],
+                    'lng' => (float) $point['lng'], 'radius_m' => (int) $point['radius_m'], 'is_critical' => (bool) $point['is_critical'],
+                    'site' => $point['site_name'], 'sector' => $point['sector_name']];
+                Audit::tenant('patrol_point.update', 'patrol_point', $point['uuid'], $before, $after);
+                Flash::add('success', "Punto {$code} actualizado. El QR es el mismo: no hace falta reimprimirlo. Los celulares lo reciben en la próxima sincronización.");
+            } else {
+                Patrols::createPoint($data);
+                Audit::tenant('patrol_point.create', 'patrol_point', $data['uuid'], null, $after);
+                Flash::add('success', 'Punto de ronda creado. Ya podés imprimir su QR.');
+            }
+        } catch (\Throwable $e) {
+            Flash::add('danger', str_contains($e->getMessage(), 'uq_patrol_points_code') ? 'Ese código ya lo usa otro punto.' : 'No se pudo guardar el punto.');
+            Flash::withInput(array_diff_key($p, ['csrf_token' => 1]));
+            return Response::redirect($back);
+        }
         return Response::redirect('/panel/rondas/puntos');
     }
 

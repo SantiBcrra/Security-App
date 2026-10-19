@@ -95,6 +95,14 @@ final class Patrols
         }
     }
 
+    /** Edición desde el panel. El QR no cambia (lleva el uuid): los pegados siguen sirviendo. Toca updated_at (baja a los celulares). */
+    public static function updatePoint(int $id, array $data): void
+    {
+        DB::tenant()->prepare('UPDATE patrol_points SET name = ?, code = ?, description = ?, site_id = ?, sector_id = ?, lat = ?, lng = ?, radius_m = ?,
+            is_critical = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([$data['name'], $data['code'], $data['description'] ?: null,
+                $data['site_id'] ?: null, $data['sector_id'] ?: null, $data['lat'], $data['lng'], $data['radius_m'], $data['is_critical'] ? 1 : 0, $id]);
+    }
+
     public static function createPoint(array $data): int
     {
         $data += ['uuid' => Uuid::v4(), 'is_active' => 1, 'is_critical' => 0, 'radius_m' => 50];
