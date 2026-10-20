@@ -12,6 +12,12 @@ DirectoryIndex index.php
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # Forzar HTTPS (salvo en la PC local de desarrollo: XAMPP, emulador, celular por Wi-Fi)
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https
+    RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1|10\.0\.2\.2|192\.168\.)
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
     # Carpetas internas: nunca accesibles por web (además tienen su propio .htaccess deny)
     RewriteRule ^(app|config|database|storage|tests|tools|vendor)(/|$) - [F,L]
 
