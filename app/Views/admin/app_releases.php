@@ -53,14 +53,15 @@ $err = fn (string $k) => isset($errors[$k]) ? '<div class="text-danger small">' 
                 <div class="progress my-2 d-none" id="up-progress" style="height: 18px"><div class="progress-bar" id="up-bar" style="width: 0%">0 %</div></div>
                 <div class="small mb-2" id="up-status"></div>
                 <div class="row g-2 mb-2">
-                    <div class="col-6"><label class="form-label small mb-0">Nombre de versión</label><input class="form-control form-control-sm" name="version_name" value="<?= e($v('version_name')) ?>" placeholder="1.0.0" required><?= $err('version_name') ?></div>
-                    <div class="col-6"><label class="form-label small mb-0">Código (versionCode)</label><input class="form-control form-control-sm" name="version_code" inputmode="numeric" value="<?= e($v('version_code', $next)) ?>" required><?= $err('version_code') ?></div>
+                    <div class="col-6"><label class="form-label small mb-0">Nombre de versión</label><input class="form-control form-control-sm" name="version_name" value="<?= e($v('version_name')) ?>" placeholder="se lee del APK"><?= $err('version_name') ?></div>
+                    <div class="col-6"><label class="form-label small mb-0">Código (versionCode)</label><input class="form-control form-control-sm" name="version_code" inputmode="numeric" value="<?= e($v('version_code')) ?>" placeholder="se lee del APK"><?= $err('version_code') ?></div>
                 </div>
                 <div class="mb-2"><label class="form-label small mb-0">Versión mínima obligatoria (código)</label>
                     <input class="form-control form-control-sm" name="min_version_code" inputmode="numeric" value="<?= e($v('min_version_code')) ?>" placeholder="vacío = actualización opcional"><?= $err('min_version_code') ?>
                     <div class="form-text">Las apps con un código menor no dejan seguir hasta actualizar (para cambios incompatibles o de seguridad).</div></div>
                 <div class="mb-2"><label class="form-label small mb-0">Novedades</label><textarea class="form-control form-control-sm" name="notes" rows="3"><?= e($v('notes')) ?></textarea></div>
-                <div class="form-text mb-2">El código y el nombre tienen que coincidir con los de <code>android/app/build.gradle.kts</code>. Android solo acepta la actualización si el APK está firmado con la misma clave.</div>
+                <div class="form-text mb-2">El nombre y el código de la versión <strong>se leen del APK</strong> (no hace falta escribirlos). Cada versión nueva tiene que tener un código mayor que la anterior,
+                    y Android solo acepta la actualización si el APK está firmado con la misma clave.</div>
                 <button class="btn btn-primary btn-sm" id="publish">Publicar</button>
             </div>
         </form>

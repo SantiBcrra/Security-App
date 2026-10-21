@@ -20,13 +20,16 @@ final class AppDistribution
     public static function upload(array $in, ?array $file, ?int $adminId): array
     {
         $errors = [];
-        $code = (int) ($in['version_code'] ?? 0);
-        $name = trim((string) ($in['version_name'] ?? ''));
+        // La versión sale del APK: lo que se escribió a mano solo se usa si no se puede leer.
+        $real = $file !== null && ($file['error'] ?? 1) === UPLOAD_ERR_OK && is_file((string) ($file['tmp_name'] ?? '')) ? self::apkVersion($file['tmp_name']) : null;
+        $code = $real['code'] ?? (int) ($in['version_code'] ?? 0);
+        $name = ($real['name'] ?? '') !== '' ? $real['name'] : trim((string) ($in['version_name'] ?? ''));
         $min = ($in['min_version_code'] ?? '') === '' ? 0 : (int) $in['min_version_code'];
         if ($code < 1) {
             $errors['version_code'] = 'Número de versión (versionCode) entero, mayor a 0.';
         } elseif ($code <= AppReleases::maxCode()) {
-            $errors['version_code'] = 'Tiene que ser mayor que la última subida (' . AppReleases::maxCode() . ').';
+            $errors['version_code'] = 'El APK es la versión ' . $name . ' (código ' . $code . ') y ya hay una igual o más nueva publicada (código ' . AppReleases::maxCode() . '): '
+                . 'subí el número de versión en la app (versionCode) y compilala de nuevo.';
         }
         if (!preg_match('/^\d+(\.\d+){0,3}([-+][\w.]+)?$/', $name)) {
             $errors['version_name'] = 'Nombre de versión tipo 1.0.3.';
@@ -161,6 +164,69 @@ final class AppDistribution
         $path = Storage::path(self::INBOX . '/' . $name);
         if (!str_ends_with(strtolower($name), '.apk') || !is_file($path)) return null;
         return ['error' => UPLOAD_ERR_OK, 'name' => $name, 'tmp_name' => $path, 'size' => (int) filesize($path), 'upload' => false, 'move' => true];
+    }
+
+    /**
+     * versionCode y versionName que trae el APK (AndroidManifest.xml en XML binario de Android). Así el código publicado es
+     * siempre el real: si se publicara con otro número, los celulares no verían la actualización.
+     * @return array{code: int, name: string}|null
+     */
+    public static function apkVersion(string $path): ?array
+    {
+        $zip = new \ZipArchive();
+        if ($zip->open($path) !== true) return null;
+        $xml = $zip->getFromName('AndroidManifest.xml');
+        $zip->close();
+        if (!is_string($xml) || strlen($xml) < 8 || unpack('v', $xml, 0)[1] !== 0x0003) return null;
+        $u16 = fn (int $o) => unpack('v', $xml, $o)[1];
+        $u32 = fn (int $o) => unpack('V', $xml, $o)[1];
+        $strings = [];
+        $resIds = [];
+        $pos = $u16(2); // después del encabezado del documento
+        $len = strlen($xml);
+        while ($pos + 8 <= $len) {
+            [$type, $hsize, $size] = [$u16($pos), $u16($pos + 2), $u32($pos + 4)];
+            if ($size < 8) break;
+            if ($type === 0x0001) { // tabla de textos
+                $count = $u32($pos + 8);
+                $utf8 = ($u32($pos + 16) & 0x100) !== 0;
+                $start = $pos + $u32($pos + 20);
+                for ($i = 0; $i < $count; $i++) {
+                    $o = $start + $u32($pos + $hsize + $i * 4);
+                    if ($utf8) {
+                        $o += (ord($xml[$o]) & 0x80) ? 2 : 1; // largo en UTF-16
+                        $n = ord($xml[$o]);
+                        if ($n & 0x80) { $n = (($n & 0x7F) << 8) | ord($xml[$o + 1]); $o += 2; } else { $o += 1; }
+                        $strings[$i] = substr($xml, $o, $n);
+                    } else {
+                        $n = $u16($o);
+                        if ($n & 0x8000) { $n = (($n & 0x7FFF) << 16) | $u16($o + 2); $o += 4; } else { $o += 2; }
+                        $strings[$i] = mb_convert_encoding(substr($xml, $o, $n * 2), 'UTF-8', 'UTF-16LE');
+                    }
+                }
+            } elseif ($type === 0x0180) { // ids de recursos de los atributos
+                for ($o = $pos + 8; $o + 4 <= $pos + $size; $o += 4) $resIds[] = $u32($o);
+            } elseif ($type === 0x0102) { // primer elemento = <manifest>
+                $attrStart = $u16($pos + 24);
+                $count = $u16($pos + 28);
+                $code = null;
+                $name = null;
+                for ($i = 0; $i < $count; $i++) {
+                    $a = $pos + 16 + $attrStart + $i * 20;
+                    $attr = $u32($a + 4);
+                    $raw = $u32($a + 8);
+                    $dataType = ord($xml[$a + 15]);
+                    $data = $u32($a + 16);
+                    $id = $resIds[$attr] ?? 0;
+                    $key = $strings[$attr] ?? '';
+                    if ($id === 0x0101021b || $key === 'versionCode') $code = $data;
+                    if ($id === 0x0101021c || $key === 'versionName') $name = $raw !== 0xFFFFFFFF ? ($strings[$raw] ?? null) : ($dataType === 0x03 ? ($strings[$data] ?? null) : null);
+                }
+                return $code !== null ? ['code' => (int) $code, 'name' => (string) $name] : null;
+            }
+            $pos += $size;
+        }
+        return null;
     }
 
     /** Un APK es un ZIP con AndroidManifest.xml adentro. */

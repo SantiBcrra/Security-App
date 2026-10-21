@@ -457,6 +457,8 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   hash de huella + tamaño) y manda partes de 1 MB a `/partes/{id}?offset=` con reintentos; al completar publica con
   `upload_id` (`AppDistribution::chunkFile` verifica tamaño y huella). Alternativa manual: dejar el `.apk` por FTP en
   `storage/apps/android/subir/` y elegirlo en el formulario (`inbox`).
+  **La versión se lee del APK** (`AppDistribution::apkVersion`: versionCode/versionName del AndroidManifest binario): lo escrito a
+  mano solo se usa si no se puede leer (pasó que se publicó la 1.3.0 con código 2 y los celulares con 13 no la veían).
 - Rondas (entrega 2): `RoundsRepository` guarda ronda/escaneos en la base local y encola `round.start` (con
   `started_at_device`), `round.scan` y `round.finish` (con `finished_at_device`) en `Outbox` (orden de creación, op_id).
   `SyncWorker` (WorkManager, requiere red, reintento exponencial + periódico 15 min) manda la cola y baja cambios: lo hecho
