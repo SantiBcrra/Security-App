@@ -62,8 +62,15 @@ $order = json_decode((string) ($round['point_order'] ?? ''), true);
 if (is_array($order)) $planned = array_merge(array_flip(array_values(array_filter($order, fn ($u) => isset($planned[$u])))), $planned);
 $planned = array_values(array_filter($planned, 'is_array'));
 ?>
-<?php if ($tracks || $mapScans || $planned): ?>
+<?php $live = $round['status'] === 'en_curso'; ?>
+<?php if ($tracks || $mapScans || $planned || $live): ?>
     <link rel="stylesheet" href="<?= e(asset('vendor/leaflet/leaflet.css')) ?>">
+    <?php if ($live): ?>
+        <div class="d-flex flex-wrap align-items-center gap-3 mb-1 small">
+            <span class="badge text-bg-success">● En vivo</span><span id="live-status" class="text-body-secondary">Se actualiza cada 15 segundos.</span>
+            <label class="form-check-label ms-auto"><input type="checkbox" class="form-check-input" id="live-follow" checked> Seguir al guardia</label>
+        </div>
+    <?php endif; ?>
     <div id="track-map" style="height: 420px" class="rounded border mb-2"></div>
     <div class="small text-body-secondary mb-4">
         <?= $tracks ? count($tracks) . ' posición(es) del recorrido' . ($round['last_track_at'] ?? null ? ' · última ' . e(fecha($round['last_track_at'], 'H:i')) : '') : 'Sin recorrido registrado (solo los escaneos).' ?>
@@ -81,11 +88,33 @@ $planned = array_values(array_filter($planned, 'is_array'));
         var bounds = planned.map(function (p) { return [p.lat, p.lng]; });
         if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 18 });
         if (planned.length) SAMaps.route(map, planned, { color: '#f2c014' });
-        if (tracks.length) { L.polyline(tracks, { color: '#353c4f', weight: 4, opacity: .8 }).addTo(map); bounds = bounds.concat(tracks);
-            L.circleMarker(tracks[tracks.length - 1], { radius: 7, color: '#f2c014', fillOpacity: 1 }).addTo(map).bindTooltip('Última posición'); }
+        var line = L.polyline(tracks, { color: '#2d9cdb', weight: 4, opacity: .9 }).addTo(map), last = null;
+        function lastAt(ll, label) {
+            if (!last) last = L.circleMarker(ll, { radius: 9, color: '#fff', weight: 3, fillColor: '#2d9cdb', fillOpacity: 1 }).addTo(map);
+            last.setLatLng(ll).bindTooltip(label);
+        }
+        if (tracks.length) { bounds = bounds.concat(tracks); lastAt(tracks[tracks.length - 1], 'Última posición'); }
         scans.forEach(function (s) { var el = document.createElement('div'); el.textContent = s.label;
             L.circleMarker([s.lat, s.lng], { radius: 8, color: s.ok ? '#1e7b45' : '#dc3545', fillOpacity: .7 }).addTo(map).bindPopup(el); bounds.push([s.lat, s.lng]); });
-        if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 18 });
+        if (bounds.length) map.fitBounds(bounds, { padding: [20, 20], maxZoom: 18 }); else map.setView([-34.6, -64.2], 4);
+        <?php if ($live): ?>
+        // En vivo: cada 15 s se actualiza la posición y el recorrido del guardia; si marcó un punto o terminó, se recarga la página.
+        var follow = document.getElementById('live-follow'), status = document.getElementById('live-status'), scans = <?= (int) count($mapScans) ?>;
+        setInterval(function () {
+            fetch(<?= json_encode(url('/panel/rondas/ronda/' . $round['uuid'] . '/vivo')) ?>, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+                .then(function (r) { return r.json(); }).then(function (j) {
+                    var d = j.data; if (!d) return;
+                    if (d.status !== 'en_curso' || d.scans !== scans) { location.reload(); return; }
+                    line.setLatLngs(d.tracks);
+                    if (d.tracks.length) {
+                        var ll = d.tracks[d.tracks.length - 1];
+                        lastAt(ll, 'Última posición ' + (d.last_at || ''));
+                        if (follow && follow.checked) map.panTo(ll);
+                    }
+                    if (status) status.textContent = d.last_at ? 'Última posición del celular: ' + d.last_at + (d.last_accuracy !== null ? ' (±' + d.last_accuracy + ' m)' : '') : 'Todavía sin posiciones del celular.';
+                }).catch(function () {});
+        }, 15000);
+        <?php endif; ?>
     })();
     </script>
 <?php endif; ?>

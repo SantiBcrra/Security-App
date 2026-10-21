@@ -283,6 +283,7 @@ return static function (Router $r): void {
         $r->post('/rondas/programacion/{uuid}/estado', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'toggle'], [$can('rondas', 'editar')]);
         $r->get('/rondas/rutas/nueva', [RoundsController::class, 'routeForm'], [$can('rondas', 'crear')]);
         $r->get('/rondas/ronda/{uuid}', [RoundsController::class, 'round'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/ronda/{uuid}/vivo', [RoundsController::class, 'roundLive'], [$can('rondas', 'ver')]);
         $r->get('/rondas/panico/{uuid}', [RoundsController::class, 'panic'], [$can('rondas', 'ver')]);
         $r->post('/rondas/panico/{uuid}/atendido', [RoundsController::class, 'ackPanic'], [$can('rondas', 'ver')]);
         $r->post('/rondas/rutas', [RoundsController::class, 'routeStore'], [$can('rondas', 'crear')]);

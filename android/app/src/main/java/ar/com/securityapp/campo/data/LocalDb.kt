@@ -76,6 +76,12 @@ class LocalDb(context: Context) : SQLiteOpenHelper(context, "campo.db", null, VE
         }, SQLiteDatabase.CONFLICT_IGNORE)
     }
 
+    /** Recorrido de una ronda guardado en el celular (para dibujarlo en el mapa mientras se hace). @return (lat, lng) en orden */
+    fun trackOf(roundUuid: String): List<Pair<Double, Double>> =
+        readableDatabase.rawQuery("SELECT lat, lng FROM tracks WHERE round_uuid = ? ORDER BY at", arrayOf(roundUuid)).use { c ->
+            buildList { while (c.moveToNext()) add(c.getDouble(0) to c.getDouble(1)) }
+        }
+
     fun unqueuedTracks(): List<TrackPoint> =
         readableDatabase.rawQuery("SELECT uuid, round_uuid, at, lat, lng, accuracy, battery FROM tracks WHERE queued = 0 ORDER BY at", null).use { c ->
             buildList {

@@ -124,7 +124,10 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
             }
             (ui.activeRoute ?: mapRoute)?.let { route ->
                 item {
-                    RouteMapCard(route, ui.points, onTouching = { mapTouched = it })
+                    RouteMapCard(route, ui.points, onTouching = { mapTouched = it },
+                        live = ui.active?.takeIf { ui.activeRoute != null }?.let { a ->
+                            LiveRound(a.uuid, ui.progress.filter { it.done }.map { it.uuid }.toSet(), ui.progress.firstOrNull { it.next }?.uuid)
+                        })
                     if (ui.activeRoute == null) TextButton({ mapRoute = null }, Modifier.fillMaxWidth()) { Text("Ocultar mapa") }
                 }
             }

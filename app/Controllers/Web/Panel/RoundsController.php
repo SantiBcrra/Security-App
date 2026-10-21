@@ -129,6 +129,19 @@ final class RoundsController
                 ? ['status' => $st, 'problems' => \App\Services\DeviceStatus::problems($st)] : null], 'layouts/app'));
     }
 
+    /** Ronda en curso en vivo (lo consulta el detalle cada 15 s): estado, marcas y recorrido del celular. */
+    public function roundLive(Request $request, string $uuid): Response
+    {
+        $round = Patrols::roundDetail($uuid);
+        $only = $this->onlyUser();
+        if (!$round || ($only !== null && (int) $round['user_id'] !== $only)) return Response::jsonError('No encontrada.', 404);
+        $scans = count(array_filter(array_merge($round['route_points'] ?? [], $round['extra_scans'] ?? []), fn ($s) => ($s['scanned_at_device'] ?? null) !== null));
+        $tracks = \App\Services\GuardSafety::tracks((int) $round['id']);
+        $last = $tracks ? end($tracks) : null;
+        return Response::json(['status' => $round['status'], 'scans' => $scans, 'tracks' => array_map(fn ($t) => [(float) $t['lat'], (float) $t['lng']], $tracks),
+            'last_at' => $last ? fecha($last['recorded_at_device'], 'H:i:s') : null, 'last_accuracy' => $last && $last['accuracy_m'] !== null ? (int) $last['accuracy_m'] : null]);
+    }
+
     /** Alerta de pánico: dónde, cuándo, recorrido de la ronda y "Atendido". Solo con alcance más amplio que "propios". */
     public function panic(Request $request, string $uuid): Response
     {

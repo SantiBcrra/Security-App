@@ -834,6 +834,26 @@ return [
         assert_true(str_contains(\App\Core\View::render('panel/rounds/points', ['points' => Patrols::points(), 'canCreate' => true, 'canEdit' => true], null), '/editar'));
     },
 
+    'panel: ronda en curso en vivo (posición y recorrido cada 15 s; recarga al marcar o terminar)' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['g2']);
+        $round = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $round, 'route_uuid' => null, 'started_at_device' => gmdate('Y-m-d\\TH:i:s\\Z')])]);
+        Push::run([$op('round.track', ['round_uuid' => $round, 'points' => [
+            ['uuid' => Uuid::v4(), 'at' => gmdate('Y-m-d\\TH:i:s\\Z', time() - 30), 'lat' => -34.6037, 'lng' => -58.3816, 'accuracy_m' => 8],
+            ['uuid' => Uuid::v4(), 'at' => gmdate('Y-m-d\\TH:i:s\\Z'), 'lat' => -34.6040, 'lng' => -58.3816, 'accuracy_m' => 6]]])]);
+        UserAuth::setCurrent($st['hys']);
+        $ctl = new \App\Controllers\Web\Panel\RoundsController();
+        $d = json_decode($ctl->roundLive(new \App\Core\Request('GET', '/'), $round)->body, true)['data'];
+        assert_same(['en_curso', 0, 2, -34.604, 6], [$d['status'], $d['scans'], count($d['tracks']), $d['tracks'][1][0], $d['last_accuracy']]);
+        $html = \App\Core\View::render('panel/rounds/round', ['round' => Patrols::roundDetail($round), 'tracks' => \App\Services\GuardSafety::tracks(
+            (int) Patrols::roundDetail($round)['id']), 'alerts' => []], null);
+        assert_true(str_contains($html, 'En vivo') && str_contains($html, '/vivo') && str_contains($html, 'Seguir al guardia'));
+        UserAuth::setCurrent($st['g2']);
+        Push::run([$op('round.finish', ['round_uuid' => $round, 'finished_at_device' => gmdate('Y-m-d\\TH:i:s\\Z')])]);
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');
