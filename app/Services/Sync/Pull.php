@@ -304,8 +304,9 @@ final class Pull
                 'deadline_at' => str_replace(' ', 'T', $r['deadline_at']) . 'Z'],
             'guard_shift_slots' => \App\Services\ShiftService::shape($r),
             'logbook_entries' => \App\Services\Logbook::shape($r),
-            'logbook_known' => ['uuid' => $r['uuid'], 'type' => $r['type'], 'key' => $r['lookup_key'], 'visits' => (int) $r['visits'],
-                'last_seen_at' => str_replace(' ', 'T', $r['last_seen_at']) . 'Z'] + (json_decode((string) $r['data'], true) ?: []),
+            'logbook_known' => (fn (array $d) => ['uuid' => $r['uuid'], 'type' => $r['type'], 'key' => $r['lookup_key'], 'visits' => (int) $r['visits'],
+                'last_seen_at' => str_replace(' ', 'T', $r['last_seen_at']) . 'Z', 'vehicle_type' => $d['type'] ?? null] + array_diff_key($d, ['type' => 1]))(
+                json_decode((string) $r['data'], true) ?: []),
             'guard_absences' => ['uuid' => $r['uuid'], 'date_from' => $r['date_from'], 'date_to' => $r['date_to'], 'type' => $r['type'],
                 'type_label' => \App\Services\ShiftAbsences::TYPES[$r['type']] ?? $r['type'], 'reason' => $r['reason'], 'status' => $r['status'],
                 'decision_note' => $r['decision_note']],

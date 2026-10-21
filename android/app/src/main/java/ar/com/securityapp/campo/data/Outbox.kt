@@ -25,6 +25,9 @@ class Outbox(private val api: ApiClient, private val db: LocalDb) {
 
     fun pendingCount(): Int = db.pendingOps()
 
+    /** ¿Hay algo en la cola (pendiente) que nombre a ese uuid? */
+    fun isPending(uuid: String): Boolean = db.ops("pending").any { it.data.contains(uuid) }
+
     /** Encola reemplazando lo pendiente del mismo tipo (p. ej. el estado del celular: solo importa el último). */
     fun replace(type: String, data: JsonObject): String {
         db.deleteOpsOfType(type)

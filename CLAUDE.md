@@ -272,8 +272,15 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Panel `/panel/libro` (predio + día, alta rápida novedad/persona/vehículo con foto, "Adentro ahora" con "Salió", cierre y
   recepción con firma, corregir, sello "Libro íntegro"), `/panel/libro/buscar` (+ purga con confirmación "BORRAR"),
   `/panel/libro/imprimir` (parte diario con folios, firmas y huella), `/panel/libro/exportar` (CSV auditado).
-- Sync (para la app, entrega 2): pull `logbook_entries` (últimas 48 h + lo que sigue adentro) y `logbook_known` (solo a quien
-  anota); push `logbook.create|exit|correct|close|receive`.
+- Sync: pull `logbook_entries` (últimas 48 h + lo que sigue adentro) y `logbook_known` (solo a quien anota; `vehicle_type` aparte
+  de `type`); push `logbook.create|exit|correct|close|receive`.
+- App Android (1.3.0, `versionCode 15`): módulo "Libro de guardia" en el inicio (`ui/logbook/LogbookScreen.kt`): predio (el del
+  turno, el último elegido o el único), + Novedad / + Persona / + Vehículo (sin señal, fotos con target `logbook_entry`, "Ya vino
+  antes" con el padrón por DNI o patente), "Adentro ahora" con "Salió", últimas anotaciones ("enviando…" mientras está en la
+  cola), cierre de turno y recepción con firma (`ui/logbook/SignaturePad.kt`, PNG transparente). `LogbookRepository` guarda local
+  (`local: true`) y encola; el pull lo reemplaza con folio. Integración con turnos: "Terminar turno" ofrece "Cerrar libro y
+  terminar" (firma y termina el turno) o "Terminar sin libro"; con un cierre de otro guardia sin recibir, "Mi turno" muestra
+  "Recibir el puesto".
 
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`

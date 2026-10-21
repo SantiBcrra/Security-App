@@ -187,6 +187,9 @@ class ShiftsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Al abrir la app con un turno en curso, el servicio tiene que estar corriendo. */
+    /** ¿Hay un cierre del libro de otro guardia sin recibir en este predio? */
+    fun pendingReceive(siteUuid: String): Boolean = c.logbook.pendingClose(siteUuid) != null
+
     fun ensureService() { if (repo.current() != null) ShiftTrackingService.start(getApplication()) }
 }
 
@@ -194,7 +197,7 @@ private fun span(s: GuardShift) = "${DAY.format(s.startAt)} · ${HOUR.format(s.s
 
 /** Tarjeta del inicio: turno en curso o el próximo, con Empezar / Terminar. */
 @Composable
-fun ShiftCard(onOpen: () -> Unit, vm: ShiftsViewModel = viewModel()) {
+fun ShiftCard(onOpen: () -> Unit, onLogbook: ((String) -> Unit)? = null, vm: ShiftsViewModel = viewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.reload(); vm.ensureService() }
     val cfg = ui.settings ?: return
@@ -238,6 +241,12 @@ fun ShiftCard(onOpen: () -> Unit, vm: ShiftsViewModel = viewModel()) {
                         Text(if (e.reason == null) "Saliste a las ${HOUR.format(e.leftAt)}: indicá el motivo." else "Saliste a las ${HOUR.format(e.leftAt)} (${cfg.reasons.toMap()[e.reason] ?: e.reason}). Al volver se registra solo.",
                             style = MaterialTheme.typography.bodySmall, color = Danger, modifier = Modifier.padding(top = 4.dp))
                     }
+                    // Relevo: el guardia anterior cerró el libro y nadie recibió el puesto.
+                    if (onLogbook != null && vm.pendingReceive(current.siteUuid)) {
+                        Button({ onLogbook("recibir") }, Modifier.fillMaxWidth().padding(top = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = Ok)) {
+                            Text("Recibir el puesto (relevo con firma)")
+                        }
+                    }
                     Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (ui.openExit == null) OutlinedButton({ if (vm.isPreview()) previewWarning = true else emergency = true }, Modifier.weight(1f)) { Text("Salgo por una emergencia") }
                         Button({ if (vm.isPreview()) previewWarning = true else confirmEnd = true }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = BrandDark)) { Text("Terminar turno") }
@@ -271,8 +280,16 @@ fun ShiftCard(onOpen: () -> Unit, vm: ShiftsViewModel = viewModel()) {
         AlertDialog(onDismissRequest = { confirmEnd = false }, title = { Text("¿Terminar el turno?") },
             text = { Text(if (!current.unscheduled && left > 5) "Todavía faltan $left min para tu horario de salida (${HOUR.format(current.endAt)}). Queda registrado que te fuiste antes."
                 else "Se registra la hora de salida y la app deja de usar tu ubicación.") },
-            confirmButton = { TextButton({ confirmEnd = false; vm.end() }) { Text("Terminar turno") } },
-            dismissButton = { TextButton({ confirmEnd = false }) { Text("Cancelar") } })
+            confirmButton = {
+                if (onLogbook != null) TextButton({ confirmEnd = false; onLogbook("cerrar") }) { Text("Cerrar libro y terminar") }
+                else TextButton({ confirmEnd = false; vm.end() }) { Text("Terminar turno") }
+            },
+            dismissButton = {
+                Row {
+                    if (onLogbook != null) TextButton({ confirmEnd = false; vm.end() }) { Text("Terminar sin libro") }
+                    TextButton({ confirmEnd = false }) { Text("Cancelar") }
+                }
+            })
     }
     if (emergency) ReasonDialog(cfg, "Salgo por una emergencia", "Elegí el motivo: se le avisa a tu supervisor. Cuando vuelvas al predio se registra solo.",
         onDismiss = { emergency = false }) { r, n -> emergency = false; vm.announceExit(r, n) }

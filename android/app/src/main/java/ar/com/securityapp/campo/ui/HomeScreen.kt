@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
@@ -82,7 +83,7 @@ import kotlinx.coroutines.launch
 private data class Module(val key: String, val label: String, val hint: String, val icon: ImageVector)
 
 /** Módulos que ya tienen pantalla en la app (el resto se habilita en las próximas entregas). */
-private val READY = setOf("rondas", "observaciones", "acciones", "inspecciones", "incidentes")
+private val READY = setOf("rondas", "observaciones", "acciones", "inspecciones", "incidentes", "libro")
 
 private val MODULES = listOf(
     Module("rondas", "Rondas", "Recorridas con QR y NFC", Icons.Filled.LocationOn),
@@ -90,6 +91,7 @@ private val MODULES = listOf(
     Module("inspecciones", "Inspecciones", "Checklists de equipos y sectores", Icons.Filled.CheckCircle),
     Module("acciones", "Acciones", "Correctivas a mi cargo", Icons.Filled.Build),
     Module("incidentes", "Incidentes", "Accidentes e incidentes", Icons.Filled.Warning),
+    Module("libro", "Libro de guardia", "Novedades, ingresos y salidas, relevo", Icons.Filled.Edit),
 )
 
 /*
@@ -107,6 +109,8 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     var openModule by remember(me.isPreview) { mutableStateOf<String?>(null) }
     var openScanner by remember(me.isPreview) { mutableStateOf(false) }
     var showShifts by remember(me.isPreview) { mutableStateOf(false) }
+    var logbookPage by remember(me.isPreview) { mutableStateOf<String?>(null) } // "cerrar" (desde Terminar turno) o "recibir"
+
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val unread by vm.unread.collectAsStateWithLifecycle()
@@ -175,6 +179,15 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
             }
             return
         }
+        "libro" -> {
+            HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null; logbookPage = null }, onActivity = { openModule = "rondas"; logbookPage = null },
+                onScan = { openModule = "rondas"; openScanner = true; logbookPage = null }, onNotices = { openModule = null; logbookPage = null; vm.openAvisos.value = true },
+                onMore = { openModule = null; logbookPage = null; showSettings = true }) {
+                ar.com.securityapp.campo.ui.logbook.LogbookScreen(onBack = { openModule = null; logbookPage = null; vm.refreshCounts() }, canCreate = me.can("libro", "crear"),
+                    showTopBar = false, startPage = logbookPage, onClosed = { openModule = null; logbookPage = null })
+            }
+            return
+        }
         "observaciones" -> {
             HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null }, onActivity = { openModule = "rondas" },
                 onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
@@ -230,7 +243,8 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
                 item(span = { GridItemSpan(2) }) { UpdateCard(release.versionName, update, onInstall = { vm.installUpdate(openIntent) }) }
             }
             if (me.can("rondas", "crear")) {
-                item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.ui.shifts.ShiftCard(onOpen = { showShifts = true }) }
+                item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.ui.shifts.ShiftCard(onOpen = { showShifts = true },
+                    onLogbook = if (me.can("libro", "crear")) ({ page -> logbookPage = page; openModule = "libro" }) else null) }
                 item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.panic.PanicButton(onTrigger = { vm.triggerPanic() }) }
             }
             if (nextRound != null && me.can("rondas")) {

@@ -35,6 +35,11 @@ class Prefs(context: Context) {
         get() = sp.getString("meta", null)
         set(value) { sp.edit().putString("meta", value).apply() }
 
+    /** Último predio elegido en el libro de guardia. */
+    var logbookSite: String?
+        get() = sp.getString("logbook_site", null)
+        set(value) { sp.edit().putString("logbook_site", value).apply() }
+
     var cursor: String?
         get() = sp.getString("cursor", null)
         set(value) { sp.edit().putString("cursor", value).apply() }
