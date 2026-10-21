@@ -23,7 +23,7 @@ use App\Services\UserAuth;
  */
 final class Pull
 {
-    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'patrol_slots', 'guard_shift_slots', 'guard_absences', 'actions', 'inspection_templates', 'inspection_schedule', 'incidents', 'work_permits', 'ppe_items', 'ppe_matrix', 'ppe_deliveries'];
+    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'patrol_slots', 'guard_shift_slots', 'guard_absences', 'logbook_entries', 'logbook_known', 'actions', 'inspection_templates', 'inspection_schedule', 'incidents', 'work_permits', 'ppe_items', 'ppe_matrix', 'ppe_deliveries'];
     private const OVERLAP_SECONDS = 5;
     private const OBS_HISTORY_DAYS = 180;
 
@@ -61,6 +61,10 @@ final class Pull
                     || ($entity === 'guard_shift_slots' && ((int) $row['user_id'] !== (int) (UserAuth::user()['id'] ?? 0)
                         || !in_array($row['status'], ['programado', 'en_curso', 'justificado'], true)))
                     || ($entity === 'guard_absences' && (int) $row['user_id'] !== (int) (UserAuth::user()['id'] ?? 0))
+                    // Libro de guardia: las últimas 48 h y lo que sigue adentro (lo viejo lo borra el celular); el padrón, a quien anota.
+                    || ($entity === 'logbook_entries' && (!UserAuth::can('libro', 'ver') || ($row['occurred_at'] < gmdate('Y-m-d H:i:s', time() - 48 * 3600)
+                        && !(in_array($row['kind'], ['persona', 'vehiculo'], true) && $row['exited_at'] === null))))
+                    || ($entity === 'logbook_known' && !UserAuth::can('libro', 'crear'))
                     // Incidentes: al celular solo llegan los que reportó el usuario (sin datos de salud).
                     || ($entity === 'incidents' && (int) $row['reported_by'] !== (int) (UserAuth::user()['id'] ?? 0))
                     // Permisos de trabajo: los que el usuario puede ver según su alcance (solicitante, autorizante o sector).
@@ -214,6 +218,14 @@ final class Pull
                         LEFT JOIN guard_shifts g ON g.id = t.shift_id WHERE {$after} AND t.end_at > UTC_TIMESTAMP() - INTERVAL 1 DAY{$order}", $params];
             case 'guard_absences':
                 return ["SELECT t.* FROM guard_absences t WHERE {$after} AND t.date_to >= CURDATE() - INTERVAL 60 DAY{$order}", $params];
+            case 'logbook_entries':
+                return ["SELECT e.*, u.name AS user_name, s.name AS site_name, s.uuid AS site_uuid, r.uuid AS ref_uuid, r.folio AS ref_folio, x.uuid AS exit_uuid,
+                        (SELECT COUNT(*) FROM logbook_attachments a WHERE a.entry_id = e.id) AS photos
+                    FROM logbook_entries t JOIN logbook_entries e ON e.id = t.id JOIN sites s ON s.id = e.site_id LEFT JOIN users u ON u.id = e.user_id
+                    LEFT JOIN logbook_entries r ON r.id = e.ref_entry_id LEFT JOIN logbook_entries x ON x.id = e.exit_entry_id
+                    WHERE {$after} AND (t.occurred_at > UTC_TIMESTAMP() - INTERVAL 3 DAY OR (t.kind IN ('persona','vehiculo') AND t.exited_at IS NULL)){$order}", $params];
+            case 'logbook_known':
+                return ["SELECT t.* FROM logbook_known t WHERE {$after}{$order}", $params];
             case 'patrol_points':
                 return ["SELECT t.* FROM patrol_points t WHERE {$after}{$order}", $params];
             case 'patrol_routes':
@@ -291,6 +303,9 @@ final class Pull
                 'due_at' => str_replace(' ', 'T', $r['due_at']) . 'Z', 'grace_minutes' => (int) $r['grace_minutes'],
                 'deadline_at' => str_replace(' ', 'T', $r['deadline_at']) . 'Z'],
             'guard_shift_slots' => \App\Services\ShiftService::shape($r),
+            'logbook_entries' => \App\Services\Logbook::shape($r),
+            'logbook_known' => ['uuid' => $r['uuid'], 'type' => $r['type'], 'key' => $r['lookup_key'], 'visits' => (int) $r['visits'],
+                'last_seen_at' => str_replace(' ', 'T', $r['last_seen_at']) . 'Z'] + (json_decode((string) $r['data'], true) ?: []),
             'guard_absences' => ['uuid' => $r['uuid'], 'date_from' => $r['date_from'], 'date_to' => $r['date_to'], 'type' => $r['type'],
                 'type_label' => \App\Services\ShiftAbsences::TYPES[$r['type']] ?? $r['type'], 'reason' => $r['reason'], 'status' => $r['status'],
                 'decision_note' => $r['decision_note']],

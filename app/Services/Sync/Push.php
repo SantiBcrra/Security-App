@@ -22,7 +22,8 @@ final class Push
     public const MAX_OPS = 50;
     public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.scan_auto', 'round.finish', 'round.track', 'device.status', 'patrol.point_locate', 'guard.panic', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
         'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close',
-        'shift.start', 'shift.end', 'shift.exit', 'shift.exit_reason', 'shift.return', 'shift.track', 'absence.request'];
+        'shift.start', 'shift.end', 'shift.exit', 'shift.exit_reason', 'shift.return', 'shift.track', 'absence.request',
+        'logbook.create', 'logbook.exit', 'logbook.correct', 'logbook.close', 'logbook.receive'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
     public static function run(array $operations): array
@@ -76,6 +77,7 @@ final class Push
                 'shift.return'           => ['status' => 'ok', 'data' => \App\Services\ShiftService::exitReturn($data)],
                 'shift.track'            => ['status' => 'ok', 'data' => \App\Services\ShiftService::track($data)],
                 'absence.request'        => ['status' => 'ok', 'data' => self::absenceRequest($data)],
+                'logbook.create', 'logbook.exit', 'logbook.correct', 'logbook.close', 'logbook.receive' => self::logbook($type, $data),
                 'guard.panic'            => self::panic($data),
                 'action.start'           => self::actionStep($data, 'tomar'),
                 'action.close'           => self::actionStep($data, 'cerrar'),
@@ -93,6 +95,19 @@ final class Push
             \App\Core\Logger::error('Sync push: falló una operación', ['type' => $type, 'error' => $e->getMessage()]);
             return self::error('Error del servidor al procesar la operación.');
         }
+    }
+
+    /** Libro de guardia desde la app (idempotente por el uuid de la anotación). */
+    private static function logbook(string $type, array $data): array
+    {
+        $r = match ($type) {
+            'logbook.create'  => \App\Services\Logbook::create($data, 'app'),
+            'logbook.exit'    => \App\Services\Logbook::exit((string) ($data['entry_uuid'] ?? ''), $data, 'app'),
+            'logbook.correct' => \App\Services\Logbook::correct((string) ($data['entry_uuid'] ?? ''), $data, 'app'),
+            'logbook.close'   => \App\Services\Logbook::close($data, 'app'),
+            'logbook.receive' => \App\Services\Logbook::receive((string) ($data['close_uuid'] ?? ''), $data, 'app'),
+        };
+        return ['status' => 'ok', 'data' => \App\Services\Logbook::shape($r['entry']) + ['duplicate' => $r['duplicate']]];
     }
 
     private static function absenceRequest(array $data): array

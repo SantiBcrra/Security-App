@@ -244,6 +244,19 @@ return static function (Router $r): void {
         $r->get('/rondas/puntos', [RoundsController::class, 'pointsList'], [$can('rondas', 'ver')]);
         $r->get('/rondas/metricas', [RoundsController::class, 'metrics'], [$can('rondas', 'ver')]);
         $r->get('/rondas/metricas/exportar', [RoundsController::class, 'metricsExport'], [$can('rondas', 'exportar')]);
+        // Libro de guardia
+        $r->get('/libro', [\App\Controllers\Web\Panel\LogbookController::class, 'index'], [$can('libro', 'ver')]);
+        $r->post('/libro/anotar', [\App\Controllers\Web\Panel\LogbookController::class, 'store'], [$can('libro', 'crear')]);
+        $r->post('/libro/cierre', [\App\Controllers\Web\Panel\LogbookController::class, 'close'], [$can('libro', 'crear')]);
+        $r->get('/libro/buscar', [\App\Controllers\Web\Panel\LogbookController::class, 'search'], [$can('libro', 'ver')]);
+        $r->get('/libro/autocompletar', [\App\Controllers\Web\Panel\LogbookController::class, 'lookup'], [$can('libro', 'crear')]);
+        $r->get('/libro/imprimir', [\App\Controllers\Web\Panel\LogbookController::class, 'printable'], [$can('libro', 'ver')]);
+        $r->get('/libro/exportar', [\App\Controllers\Web\Panel\LogbookController::class, 'export'], [$can('libro', 'exportar')]);
+        $r->post('/libro/purgar', [\App\Controllers\Web\Panel\LogbookController::class, 'purge'], [$can('libro', 'editar')]);
+        $r->post('/libro/{uuid}/salida', [\App\Controllers\Web\Panel\LogbookController::class, 'exit'], [$can('libro', 'crear')]);
+        $r->post('/libro/{uuid}/corregir', [\App\Controllers\Web\Panel\LogbookController::class, 'correct'], [$can('libro', 'crear')]);
+        $r->post('/libro/{uuid}/recibir', [\App\Controllers\Web\Panel\LogbookController::class, 'receive'], [$can('libro', 'crear')]);
+        $r->get('/libro/archivo/{uuid}/{what}', [\App\Controllers\Web\Panel\LogbookController::class, 'file'], [$can('libro', 'ver')]);
         $r->get('/rondas/turnos', [\App\Controllers\Web\Panel\ShiftsController::class, 'today'], [$can('rondas', 'ver')]);
         $r->get('/rondas/turno/{uuid}', [\App\Controllers\Web\Panel\ShiftsController::class, 'show'], [$can('rondas', 'ver')]);
         $r->get('/rondas/turnos/programacion', [\App\Controllers\Web\Panel\ShiftsController::class, 'schedules'], [$can('rondas', 'ver')]);

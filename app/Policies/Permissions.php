@@ -25,6 +25,7 @@ final class Permissions
         'capacitaciones'   => 'Capacitaciones',
         'reportes'         => 'Reportes',
         'rondas'           => 'Rondas de guardias',
+        'libro'            => 'Libro de guardia',
     ];
 
     public const ACTIONS = [
@@ -53,7 +54,7 @@ final class Permissions
     ];
 
     /** Módulos de seguridad e higiene (los que gestiona el responsable de SyH). */
-    public const SH_MODULES = ['observaciones', 'acciones', 'inspecciones', 'incidentes', 'permisos_trabajo', 'epp', 'capacitaciones', 'reportes', 'rondas'];
+    public const SH_MODULES = ['observaciones', 'acciones', 'inspecciones', 'incidentes', 'permisos_trabajo', 'epp', 'capacitaciones', 'reportes', 'rondas', 'libro'];
 
     public const ADMIN_ROLE = 'admin_empresa';
     public const AUDITOR_ROLE = 'auditor';
@@ -133,14 +134,16 @@ final class Permissions
                 'description' => 'Ve y gestiona solo sus sectores asignados.',
                 'permissions' => $grant($shWork, ['ver', 'crear', 'editar', 'cerrar'], 'sectores')
                     + $grant(['reportes'], ['ver', 'exportar'], 'sectores')
-                    + $grant(['datos_maestros'], ['ver'], 'todo'),
+                    + $grant(['datos_maestros'], ['ver'], 'todo')
+                    + $grant(['libro'], ['ver', 'crear', 'exportar'], 'todo'), // el libro es del predio, no de un sector
             ],
             'reportante' => [
                 'name'        => 'Reportante',
                 'description' => 'Operario o guardia: crea reportes y ve los propios.',
                 'permissions' => $grant(['observaciones', 'incidentes', 'inspecciones'], ['ver', 'crear'], 'propios') // inspecciones: pre-uso
                     + $grant(['rondas'], ['ver', 'crear', 'cerrar'], 'propios')
-                    + $grant(['acciones'], ['ver'], 'propios'), // como responsable igual toma y cierra las suyas
+                    + $grant(['acciones'], ['ver'], 'propios') // como responsable igual toma y cierra las suyas
+                    + $grant(['libro'], ['ver', 'crear'], 'todo'), // el guardia ve el libro del predio (relevo, quién sigue adentro)
             ],
             self::AUDITOR_ROLE => [
                 'name'        => 'Auditor externo',

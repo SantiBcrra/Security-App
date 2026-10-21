@@ -114,6 +114,9 @@ final class Notifier
         if (str_starts_with($event, 'guard.')) { // pánico o ronda sin señal: el guardia no se avisa a sí mismo
             return $row + ['_type' => 'guard', 'sector_id' => null, 'assigned_user_id' => null, 'reporter_user_id' => null, 'severity_level' => 4];
         }
+        if (str_starts_with($event, 'logbook.')) { // libro de guardia: el guardia que anotó no se avisa a sí mismo (ya lo hace el Notifier)
+            return $row + ['_type' => 'logbook', 'sector_id' => null, 'assigned_user_id' => null, 'reporter_user_id' => null, 'severity_level' => 3];
+        }
         if (str_starts_with($event, 'ppe.')) {
             return $row + ['_type' => 'ppe', 'assigned_user_id' => null, 'reporter_user_id' => null, 'severity_level' => 2];
         }

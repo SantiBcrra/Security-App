@@ -59,7 +59,7 @@ function absolute_url(string $path = '/'): string
 
 /**
  * Ícono SVG en línea (trazo, 24×24, sin librerías ni CDN). Toma el color del texto (currentColor).
- * Nombres: home, eye, clipboard, check, alert, file, helmet, route, database, users, shield, settings, bell,
+ * Nombres: home, eye, clipboard, check, alert, file, book, helmet, route, database, users, shield, settings, bell,
  * logout, menu, user, building, layers, clock, chart, x.
  */
 function icon(string $name, int $size = 18, string $class = ''): string
@@ -71,6 +71,7 @@ function icon(string $name, int $size = 18, string $class = ''): string
         'check'     => '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
         'alert'     => '<path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
         'file'      => '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6"/><path d="M8 17c1.5-2 2.5-2 3.5 0s2 2 3.5 0"/>',
+        'book'      => '<path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 21.5V4.5"/><path d="M8 7h8"/><path d="M8 11h6"/>',
         'helmet'    => '<path d="M3 17h18"/><path d="M4 17v-2a8 8 0 0 1 16 0v2"/><path d="M10 7V5h4v2"/><path d="M12 7v6"/><path d="M3 17v2h18v-2"/>',
         'route'     => '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h8.5a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 1 0-7H16"/>',
         'database'  => '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',

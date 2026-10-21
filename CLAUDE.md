@@ -252,6 +252,29 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   detalle `/panel/rondas/turno/{uuid}` (línea de tiempo + mapa con el predio y las salidas). Ajustes: Configuración →
   notificaciones → "Turnos de guardias" (`section=turnos`).
 
+## Libro de guardia — diseño en `docs/design/libro-de-guardia.md`
+- Decisiones del usuario: guardias de **empresa contratada** (su libro rubricado en papel es responsabilidad de ellos; este es
+  el libro de Indumor), datos de visitantes **optativos**, **ingreso libre**, **cierre de turno con firma siempre** y
+  **recepción con firma** solo si llega otro guardia, datos de visitantes **para siempre** (purga manual por fecha, a su riesgo).
+- Módulo `libro` (activable; permisos en roles base, migración tenant 0073): admin y SyH todo; supervisor ver/crear/exportar;
+  guardia (reportante) ver/crear con alcance todo (ve el libro del predio); auditor ver/exportar.
+- `logbook_entries` por predio con **folio** (`Sequences::next('libro:{site}')`) y **cadena de huellas** (`hash` = sha256 de
+  `prev_hash` + JSON canónico de `Logbook::HASHED`; `Logbook::verify()` detecta alteraciones). **Inmutable**: nunca UPDATE de
+  campos de la huella (ni en tests: rompe la cadena); salida, corrección y recepción son anotaciones nuevas con
+  `ref_entry_id`. Caché fuera de la huella: `exited_at`/`exit_entry_id`, `received_entry_id`, `purged_at`. Tipos: novedad
+  (categoría, importante), persona (nombre, DNI **o** empresa), vehiculo (patente normalizada obligatoria), salida,
+  correccion, cierre (resumen + firma), recepcion (firma). `logbook_known` = padrón para autocompletar por DNI/patente.
+  Fotos `logbook_attachments` (web y `uploads.logbook_entry_uuid` desde la app).
+- Servicio `Logbook`: create/exit/correct/close/receive (idempotentes por uuid), inside, day, search, summary, pendingClose,
+  lookup, verify, purge (borra datos personales anteriores a una fecha; `libro.editar` con alcance todo), run (cron).
+- Avisos: `logbook.important`, `logbook.inside_at_close` (cierre con gente o vehículos adentro), `logbook.inside_long`
+  (adentro hace más de `libro.horas_adentro` 12 h, uno por predio y día).
+- Panel `/panel/libro` (predio + día, alta rápida novedad/persona/vehículo con foto, "Adentro ahora" con "Salió", cierre y
+  recepción con firma, corregir, sello "Libro íntegro"), `/panel/libro/buscar` (+ purga con confirmación "BORRAR"),
+  `/panel/libro/imprimir` (parte diario con folios, firmas y huella), `/panel/libro/exportar` (CSV auditado).
+- Sync (para la app, entrega 2): pull `logbook_entries` (últimas 48 h + lo que sigue adentro) y `logbook_known` (solo a quien
+  anota); push `logbook.create|exit|correct|close|receive`.
+
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`
   (solo inserción) y `action_attachments` (evidencia inmutable, fotos o PDF, por `cycle`).

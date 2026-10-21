@@ -24,6 +24,7 @@ $sections = [
         ['/panel/permisos', 'Permisos de trabajo', 'file', UserAuth::can('permisos_trabajo', 'ver'), '/panel/permisos'],
         ['/panel/epp', 'EPP', 'helmet', UserAuth::can('epp', 'ver'), '/panel/epp'],
         ['/panel/rondas', 'Rondas', 'route', UserAuth::can('rondas', 'ver'), '/panel/rondas'],
+        ['/panel/libro', 'Libro de guardia', 'book', UserAuth::can('libro', 'ver'), '/panel/libro'],
     ],
     'Prevención' => [
         ['/panel/observaciones', 'Observaciones', 'eye', UserAuth::can('observaciones', 'ver'), '/panel/observaciones'],

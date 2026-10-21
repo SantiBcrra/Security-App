@@ -63,6 +63,9 @@ final class Messages
         'guard.shift_uncovered'    => 'Puesto sin cubrir (ausencia sin reemplazo)',
         'guard.absence_requested'  => 'Pedido de ausencia de un guardia',
         'guard.absence_decided'    => 'Respuesta a un pedido de ausencia',
+        'logbook.important'        => 'Libro de guardia: novedad importante',
+        'logbook.inside_at_close'  => 'Libro de guardia: personas o vehículos adentro al cerrar el turno',
+        'logbook.inside_long'      => 'Libro de guardia: adentro hace muchas horas',
         'ppe.due_soon' => 'EPP por vencer', 'ppe.overdue' => 'EPP vencido', 'ppe.missing' => 'EPP pendiente',
     ];
 
@@ -88,6 +91,7 @@ final class Messages
             return self::forPermit($event, $obs, $extra);
         }
         if (str_starts_with($event, 'ppe.')) return self::forPpe($event, $obs, $extra);
+        if (str_starts_with($event, 'logbook.')) return self::forLogbook($event, $obs);
         if (str_starts_with($event, 'guard.')) {
             return self::forGuard($event, $obs, $extra);
         }
@@ -244,6 +248,25 @@ Llamalo y marcá la alerta como atendida.",
             'guard.absence_decided' => [$r['status'] === 'aprobada' ? 'Ausencia aprobada' : 'Ausencia rechazada',
                 'Tu pedido de ausencia del ' . date('d/m', strtotime((string) $r['date_from'])) . ' al ' . date('d/m', strtotime((string) $r['date_to'])) . ' fue '
                 . ($r['status'] === 'aprobada' ? 'aprobado' : 'rechazado') . (!empty($r['decision_note']) ? ': ' . $r['decision_note'] : '.')],
+            default => [self::EVENTS[$event] ?? $event, ''],
+        };
+        return ['title' => $title, 'body' => $body, 'url' => $url, 'critical' => false];
+    }
+
+    /** Libro de guardia. */
+    private static function forLogbook(string $event, array $e): array
+    {
+        $site = $e['site_name'] ?? '';
+        $url = '/panel/libro?predio=' . ($e['site_uuid'] ?? '');
+        [$title, $body] = match ($event) {
+            'logbook.important' => ['⚠ Novedad importante · ' . $site, ($e['user_name'] ?? 'El guardia') . ' anotó a las ' . fecha($e['occurred_at'] ?? null, 'H:i')
+                . ' (' . (\App\Services\Logbook::CATEGORIES[$e['category'] ?? ''] ?? 'Novedad') . '): ' . mb_strimwidth((string) ($e['text'] ?? ''), 0, 300, '…')],
+            'logbook.inside_at_close' => ['Quedaron adentro al cerrar el turno · ' . $site, ($e['user_name'] ?? 'El guardia') . ' cerró su turno a las '
+                . fecha($e['occurred_at'] ?? null, 'H:i') . ' con ' . count($e['inside'] ?? []) . ' persona(s) o vehículo(s) sin salida: '
+                . implode('; ', array_map(fn ($i) => $i['que'], array_slice($e['inside'] ?? [], 0, 6))) . (count($e['inside'] ?? []) > 6 ? '…' : '') . '.'],
+            'logbook.inside_long' => ['Adentro hace más de ' . (int) ($e['hours'] ?? 12) . ' h · ' . $site, (int) ($e['count'] ?? 0)
+                . ' persona(s) o vehículo(s) figuran adentro desde hace más de ' . (int) ($e['hours'] ?? 12) . ' horas (el más antiguo desde el '
+                . fecha($e['oldest'] ?? null, 'd/m H:i') . '). Revisá si se olvidó anotar la salida.'],
             default => [self::EVENTS[$event] ?? $event, ''],
         };
         return ['title' => $title, 'body' => $body, 'url' => $url, 'critical' => false];

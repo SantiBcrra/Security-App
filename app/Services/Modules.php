@@ -18,6 +18,7 @@ final class Modules
     public const GROUPS = [
         'Operación' => [
             'rondas'           => ['Rondas', 'Rondas de guardias con QR / NFC, GPS, pánico y programación'],
+            'libro'            => ['Libro de guardia', 'Novedades, ingreso y egreso de personas y vehículos, relevo de turno con firma'],
             'permisos_trabajo' => ['Permisos de trabajo', 'Trabajos en altura, en caliente, espacios confinados, bloqueos'],
             'epp'              => ['EPP', 'Entregas de elementos de protección personal con firma'],
         ],

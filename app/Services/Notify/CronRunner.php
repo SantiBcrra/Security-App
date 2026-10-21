@@ -50,6 +50,7 @@ final class CronRunner
                         'rounds'    => \App\Services\RoundAutomation::run(),
                         'schedules' => \App\Services\PatrolPlanner::run(),
                         'shifts'    => \App\Services\ShiftService::run(),
+                        'logbook'   => \App\Services\Logbook::run(),
                         'round_summary' => \App\Services\RoundMetrics::dailySummary(),
                         'digests'   => Digests::run(),
                         'queue'     => QueueRunner::run($remaining, 100),
