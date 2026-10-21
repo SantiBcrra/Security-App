@@ -114,7 +114,9 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
             Text("Rondas", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (ui.pending > 0) Text("${ui.pending} sin enviar", color = Accent, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(end = 12.dp))
         }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Mientras se toca el mapa la lista no se desplaza: así el mapa se mueve y hace zoom sin trabarse.
+        var mapTouched by remember { mutableStateOf(false) }
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), userScrollEnabled = !mapTouched) {
             if (ui.failed > 0) item {
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFDE3E5))) {
                     Text("${ui.failed} envío(s) rechazado(s) por el servidor. Revisalos en Ajustes.", Modifier.padding(14.dp), color = Danger)
@@ -122,7 +124,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
             }
             (ui.activeRoute ?: mapRoute)?.let { route ->
                 item {
-                    RouteMapCard(route, ui.points)
+                    RouteMapCard(route, ui.points, onTouching = { mapTouched = it })
                     if (ui.activeRoute == null) TextButton({ mapRoute = null }, Modifier.fillMaxWidth()) { Text("Ocultar mapa") }
                 }
             }

@@ -106,9 +106,9 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Alcance: `ObservationService::scope()` / `canView()` (propios, sectores + lo propio, todo).
 - Anónimo (setting `observaciones.anonimo_habilitado`): sin autor, sin auditoría que lo vincule.
 - Riesgo inminente: evento `imminent_alert` + `ObservationAlerts::imminent()` (Etapa 7 envía avisos).
-- Mapas: Leaflet local (`public/assets/vendor/leaflet`) + `public/assets/js/maps.js` (`SAMaps.base(map, 'satellite'|'map')`: capas
-  "Satélite" = Esri World Imagery + calles y lugares, y "Mapa" = OpenStreetMap, con selector; recuerda la elegida en el navegador).
-  CSP: `*.tile.openstreetmap.org` y `server.arcgisonline.com`. Rondas/pánico arrancan en satélite; observaciones en mapa.
+- Mapas: Leaflet local (`public/assets/vendor/leaflet`) + `public/assets/js/maps.js` (`SAMaps.base(map)`): **siempre satélite**
+  (Esri World Imagery + calles y lugares), sin selector — decisión del usuario (21/10/2026): nada de mapas de calles grises, ni
+  en la web ni en la app (Android: `MAP_TYPE_HYBRID` fijo). CSP: `server.arcgisonline.com`.
   ⚠️ Las imágenes de Esri sin clave sirven para desarrollo/uso bajo; para producción comercial sacar una clave gratuita de
   ArcGIS Location Platform (o usar otro proveedor) y agregarla a las URL de `maps.js`.
 - "PDF" = página imprimible (`/imprimir`), sin librerías.
@@ -176,7 +176,7 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   punteado + recorrido real), en métricas y en el resumen diario. La app avisa al guardia "fuera de orden: tocaba X".
 - Cada escaneo guarda hora del dispositivo, hora de recepción, GPS, precisión, distancia calculada y si quedó dentro del radio. No se duplica un punto dentro de la misma ronda.
 - La app Android guarda rondas y escaneos sin conexión y los envía con `round.start`, `round.scan` y `round.finish`; las operaciones son idempotentes por `op_id`.
-- El panel web conserva Leaflet/OpenStreetMap. La app Android usa Google Maps SDK para Android: `RouteMapCard` dibuja los puntos sincronizados y la línea de la ruta, con vista de calles o satélite. La clave se lee de `android/secrets.properties` (ignorado por Git) mediante `MAPS_API_KEY`; no se incluye ninguna clave en el APK versionado. La restricción de Google para debug usa el paquete `ar.com.securityapp.campo.debug` y su SHA-1; release usa `ar.com.securityapp.campo` y la SHA-1 de la firma release.
+- La app Android usa Google Maps SDK para Android: `RouteMapCard` dibuja los puntos sincronizados y la línea de la ruta, siempre en satélite con nombres (híbrido), 380 dp de alto y ≈ 95 % del ancho, con +/−, brújula, "Mi ubicación" y "Centrar ruta". Para que se pueda mover y hacer zoom dentro de la lista, `TouchFrame` pide `requestDisallowInterceptTouchEvent` y la `LazyColumn` de Rondas desactiva su scroll mientras se toca el mapa (app 1.3.1). La clave se lee de `android/secrets.properties` (ignorado por Git) mediante `MAPS_API_KEY`; no se incluye ninguna clave en el APK versionado. La restricción de Google para debug usa el paquete `ar.com.securityapp.campo.debug` y su SHA-1; release usa `ar.com.securityapp.campo` y la SHA-1 de la firma release.
 - Rutas: al celular llegan solo las asignadas (`patrol_route_assignments`; alcance "todo" ve todas), con `points` = UUIDs en
   orden; las no asignadas viajan como baja. **Cambiar asignaciones o puntos de una ruta debe tocar `patrol_routes.updated_at`.**
   Iniciar una ruta no asignada se rechaza. Al finalizar: `completa` o `incompleta` (puntos salteados).

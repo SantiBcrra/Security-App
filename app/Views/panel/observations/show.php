@@ -89,7 +89,7 @@ $openAction = $old['action'] ?? null;
                 (function () {
                     var p = [<?= (float) $obs['lat'] ?>, <?= (float) $obs['lng'] ?>];
                     var map = L.map('obs-map', { scrollWheelZoom: false }).setView(p, 17);
-                    SAMaps.base(map, 'map');
+                    SAMaps.base(map, 'satellite');
                     L.circleMarker(p, { radius: 9, color: '#fff', weight: 2, fillColor: '<?= e($obs['severity_color'] ?: '#dc3545') ?>', fillOpacity: .9 }).addTo(map);
                     <?php if ($obs['gps_accuracy_m']): ?>L.circle(p, { radius: <?= (int) $obs['gps_accuracy_m'] ?>, weight: 1, fillOpacity: .08 }).addTo(map);<?php endif; ?>
                 })();

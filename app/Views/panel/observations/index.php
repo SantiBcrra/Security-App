@@ -77,7 +77,7 @@ $query = fn (array $over) => '?' . http_build_query(array_filter(array_merge($fo
                     'imminent' => (bool) $r['imminent_risk'],
                 ], $rows), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;
                 var map = L.map('obs-map');
-                SAMaps.base(map, 'map');
+                SAMaps.base(map, 'satellite');
                 var bounds = [];
                 points.forEach(function (p) {
                     var m = L.circleMarker([p.lat, p.lng], { radius: p.imminent ? 11 : 8, color: p.imminent ? '#000' : '#fff', weight: 2, fillColor: p.color, fillOpacity: .9 }).addTo(map);
