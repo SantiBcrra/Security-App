@@ -171,7 +171,7 @@ final class ShiftService
         $start = self::localInput($in['start_at'] ?? '') ?? throw new UserError('Indicá el inicio programado.');
         $end = self::localInput($in['end_at'] ?? '') ?? throw new UserError('Indicá el fin programado.');
         if ($end <= $start) throw new UserError('El fin tiene que ser posterior al inicio (para un turno nocturno, poné la fecha del día siguiente).');
-        if (strtotime($end . ' UTC') - strtotime($start . ' UTC') > 36 * 3600) throw new UserError('Un turno no puede durar más de 36 horas.');
+        if (strtotime($end . ' UTC') - strtotime($start . ' UTC') > ShiftPlanner::MAX_BLOCK_HOURS * 3600) throw new UserError('Un turno no puede durar más de ' . ShiftPlanner::MAX_BLOCK_HOURS . ' horas.');
         $grace = ($in['grace_minutes'] ?? '') === '' ? ShiftPlanner::defaultGrace() : max(1, min(120, (int) $in['grace_minutes']));
         $realStart = self::localInput($in['started_at'] ?? '');
         $realEnd = self::localInput($in['ended_at'] ?? '');

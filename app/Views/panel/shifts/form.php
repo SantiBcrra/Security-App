@@ -7,6 +7,10 @@ $pattern = $v['pattern'] ?? ($s['pattern'] ?? 'weekly');
 $days = array_map('intval', (array) ($v['days'] ?? explode(',', (string) ($s['days'] ?? '1,2,3,4,5'))));
 $users = (array) ($v['users'] ?? $userUuids);
 $site = $v['site'] ?? ($s['site_uuid'] ?? (count($sites) === 1 ? $sites[0]['uuid'] : ''));
+// Franjas del horario por día para el formulario: {day, start, plus (días hasta la salida), end}
+$rawBlocks = isset($v['blocks']) ? (json_decode((string) $v['blocks'], true) ?: []) : ShiftPlanner::blocks($s);
+$formBlocks = array_map(fn ($b) => ['day' => (int) ($b['day'] ?? 1), 'start' => (string) ($b['start'] ?? '08:00'), 'end' => (string) ($b['end'] ?? '16:00'),
+    'plus' => isset($b['plus']) ? (int) $b['plus'] : (((int) ($b['end_day'] ?? $b['day'] ?? 1) - (int) ($b['day'] ?? 1) + 7) % 7)], $rawBlocks);
 ?>
 <?= App\Core\View::render('panel/shifts/_subnav', ['sub' => 'programacion'], null) ?>
 <h2 class="h4 mb-3"><?= $shift ? 'Editar turno' : 'Nuevo turno de guardia' ?></h2>
@@ -16,7 +20,27 @@ $site = $v['site'] ?? ($s['site_uuid'] ?? (count($sites) === 1 ? $sites[0]['uuid
 <form method="post" action="<?= e(url('/panel/rondas/turnos/programacion' . ($shift ? '/' . $shift['uuid'] : ''))) ?>" class="card card-body" style="max-width: 860px"
       x-data="{ pattern: <?= e(json_encode($pattern)) ?>, on: <?= (int) ($v['rotation_on'] ?? ($s['rotation_on'] ?? 1)) ?>, off: <?= (int) ($v['rotation_off'] ?? ($s['rotation_off'] ?? 1)) ?>,
                start: <?= e(json_encode($v['start_time'] ?? ($s['start_time'] ?? '08:00'))) ?>, end: <?= e(json_encode($v['end_time'] ?? ($s['end_time'] ?? '16:00'))) ?>,
-               preset(on, off, start, end) { this.pattern = 'rotation'; this.on = on; this.off = off; this.start = start; this.end = end; } }">
+               preset(on, off, start, end) { this.pattern = 'rotation'; this.on = on; this.off = off; this.start = start; this.end = end; },
+               dayNames: <?= e(json_encode(array_values(ShiftPlanner::DAYS))) ?>, maxHours: <?= ShiftPlanner::MAX_BLOCK_HOURS ?>,
+               blocks: <?= e(json_encode($formBlocks)) ?>,
+               min(t) { const [h, m] = (t || '0:0').split(':').map(Number); return h * 60 + m; },
+               minutes(b) { return Number(b.plus) * 1440 + this.min(b.end) - this.min(b.start); },
+               hours(b) { const m = this.minutes(b); return m <= 0 ? 'la salida es antes de la entrada' : (Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : '')); },
+               bad(b) { const m = this.minutes(b); return m <= 0 || m > this.maxHours * 60; },
+               endName(b, plus) { return this.dayNames[(Number(b.day) - 1 + plus) % 7] + (plus === 0 ? ' (mismo día)' : (plus === 1 ? ' (día siguiente)' : '')); },
+               fixEnd(b) { if (Number(b.plus) === 0 && this.min(b.end) <= this.min(b.start)) b.plus = 1; },
+               add() { const last = this.blocks[this.blocks.length - 1]; this.blocks.push(last ? { ...last, day: last.day % 7 + 1 } : { day: 1, start: '08:00', plus: 0, end: '16:00' }); },
+               copyWeekdays(b) { for (let d = 1; d <= 5; d++) { if (!this.blocks.some(x => Number(x.day) === d)) this.blocks.push({ ...b, day: d }); } this.sort(); },
+               sort() { this.blocks.sort((a, b) => (a.day - b.day) || (this.min(a.start) - this.min(b.start))); },
+               fromWeekly() {
+                   if (this.blocks.length) return;
+                   const days = [...document.querySelectorAll('input[name=\'days[]\']:checked')].map(i => Number(i.value));
+                   const plus = this.min(this.end) <= this.min(this.start) ? 1 : 0;
+                   this.blocks = (days.length ? days : [1, 2, 3, 4, 5]).map(d => ({ day: d, start: this.start, plus, end: this.end }));
+               },
+               usePreset(list) { this.blocks = list.map(([day, start, plus, end]) => ({ day, start, plus, end })); },
+               payload() { return JSON.stringify(this.blocks.map(b => ({ day: Number(b.day), start: b.start, end_day: (Number(b.day) - 1 + Number(b.plus)) % 7 + 1, end: b.end }))); } }"
+      x-init="$watch('pattern', p => { if (p === 'custom') fromWeekly(); })">
     <?= csrf_field() ?>
     <div class="row g-3">
         <div class="col-md-6"><label class="form-label">Predio</label>
@@ -30,7 +54,48 @@ $site = $v['site'] ?? ($s['site_uuid'] ?? (count($sites) === 1 ? $sites[0]['uuid
     <label class="form-label mt-3">Tipo de turno</label>
     <div class="btn-group mb-2 flex-wrap" role="group">
         <input type="radio" class="btn-check" name="pattern" value="weekly" id="p-weekly" x-model="pattern"><label class="btn btn-outline-primary" for="p-weekly">Fijo (días de la semana)</label>
+        <input type="radio" class="btn-check" name="pattern" value="custom" id="p-custom" x-model="pattern"><label class="btn btn-outline-primary" for="p-custom">Horario por día (franjas)</label>
         <input type="radio" class="btn-check" name="pattern" value="rotation" id="p-rot" x-model="pattern"><label class="btn btn-outline-primary" for="p-rot">Rotativo (días sí / días no)</label>
+    </div>
+    <div class="form-text mb-2" x-show="pattern === 'custom'">Horarios distintos según el día y turnos largos de fin de semana: cada franja tiene día y hora de entrada y de
+        salida (por ejemplo, sábado 14:00 a lunes 08:00). Cada franja es un turno en la app del guardia, de hasta <?= ShiftPlanner::MAX_BLOCK_HOURS ?> h.</div>
+
+    <div x-show="pattern === 'custom'" class="mb-3">
+        <input type="hidden" name="blocks" :value="payload()">
+        <div class="small mb-1">Atajos (reemplazan las franjas):</div>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <button type="button" class="btn btn-sm btn-outline-secondary" @click="usePreset([[1,'20:00',1,'08:00'],[2,'20:00',1,'08:00'],[3,'20:00',1,'08:00'],[4,'20:00',1,'08:00'],[5,'20:00',1,'08:00'],[6,'14:00',2,'08:00']])">Noches Lun a Vie + fin de semana (Sáb 14:00 a Lun 08:00)</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @click="usePreset([[1,'08:00',0,'17:00'],[2,'08:00',0,'17:00'],[3,'08:00',0,'17:00'],[4,'08:00',0,'17:00'],[5,'08:00',0,'17:00'],[6,'08:00',0,'13:00']])">Lun a Vie 08–17 + Sáb 08–13</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @click="usePreset([[1,'08:00',1,'08:00'],[2,'08:00',1,'08:00'],[3,'08:00',1,'08:00'],[4,'08:00',1,'08:00'],[5,'08:00',1,'08:00'],[6,'08:00',1,'08:00'],[7,'08:00',1,'08:00']])">24 h todos los días (08 a 08)</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @click="usePreset([[5,'18:00',3,'06:00']])">Fin de semana completo (Vie 18:00 a Lun 06:00)</button>
+        </div>
+        <div class="table-responsive"><table class="table table-sm align-middle mb-2">
+            <thead><tr><th>Entra el día</th><th>a las</th><th>Sale el día</th><th>a las</th><th>Duración</th><th></th></tr></thead>
+            <tbody>
+            <template x-for="(b, i) in blocks" :key="i">
+                <tr :class="bad(b) ? 'table-danger' : ''">
+                    <td><select class="form-select form-select-sm" x-model.number="b.day" style="min-width: 90px">
+                        <template x-for="(n, k) in dayNames" :key="k"><option :value="k + 1" x-text="n" :selected="k + 1 === Number(b.day)"></option></template></select></td>
+                    <td><input class="form-control form-control-sm" type="time" x-model="b.start" @change="fixEnd(b)" required></td>
+                    <td><select class="form-select form-select-sm" x-model.number="b.plus" style="min-width: 150px">
+                        <template x-for="p in [0, 1, 2, 3]" :key="p"><option :value="p" x-text="endName(b, p)" :selected="p === Number(b.plus)"></option></template></select></td>
+                    <td><input class="form-control form-control-sm" type="time" x-model="b.end" @change="fixEnd(b)" required></td>
+                    <td class="small text-nowrap" :class="bad(b) ? 'text-danger fw-semibold' : 'text-body-secondary'" x-text="hours(b) + (minutes(b) > maxHours * 60 ? ' (máx. ' + maxHours + ' h)' : '')"></td>
+                    <td class="text-end text-nowrap">
+                        <button type="button" class="btn btn-sm btn-link p-0 me-2" @click="copyWeekdays(b)" title="Agrega esta misma franja a los días de lunes a viernes que no tengan ninguna">Copiar a Lun–Vie</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0" @click="blocks.splice(i, 1)" title="Quitar">×</button>
+                    </td>
+                </tr>
+            </template>
+            <tr x-show="!blocks.length"><td colspan="6" class="text-body-secondary small">Sin franjas: usá un atajo o agregá una.</td></tr>
+            </tbody>
+        </table></div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <button type="button" class="btn btn-sm btn-outline-primary" @click="add()">+ Agregar franja</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @click="sort()">Ordenar por día</button>
+            <span class="small text-body-secondary">Total semanal: <strong x-text="Math.round(blocks.reduce((t, b) => t + Math.max(0, minutes(b)), 0) / 6) / 10 + ' h'"></strong>
+                por guardia · cuenta el día en que entra (ausencias y días sin servicio).</span>
+        </div>
     </div>
     <div x-show="pattern === 'rotation'" class="mb-2">
         <div class="small mb-1">Esquemas comunes:</div>
@@ -43,9 +108,9 @@ $site = $v['site'] ?? ($s['site_uuid'] ?? (count($sites) === 1 ? $sites[0]['uuid
         </div>
     </div>
 
-    <div class="row g-3">
-        <div class="col-sm-3"><label class="form-label">Entra</label><input class="form-control" type="time" name="start_time" x-model="start" required></div>
-        <div class="col-sm-3"><label class="form-label">Sale</label><input class="form-control" type="time" name="end_time" x-model="end" required></div>
+    <div class="row g-3" x-show="pattern !== 'custom'">
+        <div class="col-sm-3"><label class="form-label">Entra</label><input class="form-control" type="time" name="start_time" x-model="start" :required="pattern !== 'custom'"></div>
+        <div class="col-sm-3"><label class="form-label">Sale</label><input class="form-control" type="time" name="end_time" x-model="end" :required="pattern !== 'custom'"></div>
         <div class="col-sm-6 form-text pt-sm-4">Si sale a una hora menor que la de entrada, termina al día siguiente (22:00 → 06:00). Cuenta el día en que empieza.</div>
     </div>
 

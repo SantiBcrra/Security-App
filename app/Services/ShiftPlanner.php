@@ -12,7 +12,9 @@ use App\Models\Users;
 /**
  * Programación de turnos de guardias (docs/design/turnos-guardias.md):
  * - semanal: días de la semana + horario (puede cruzar la medianoche; el día que cuenta es el del comienzo);
- * - rotativo: N días trabaja / M descansa desde una fecha de referencia (12×36 = 1/1 con turno de 12 h, 24×48 = 1/2, 2×2, 4×4…).
+ * - rotativo: N días trabaja / M descansa desde una fecha de referencia (12×36 = 1/1 con turno de 12 h, 24×48 = 1/2, 2×2, 4×4…);
+ * - por día (custom): franjas semanales con día y hora de entrada y de salida, cada una de hasta MAX_BLOCK_HOURS
+ *   (ej. Lun a Vie 20:00 → 08:00 del día siguiente y Sáb 14:00 → Lun 08:00). Sin superposiciones.
  * El cron genera los turnos (guard_shift_slots) de ayer a +6 días, uno por guardia, sin días sin servicio; si el guardia
  * tiene una ausencia aprobada el turno nace "justificado".
  */
@@ -20,6 +22,8 @@ final class ShiftPlanner
 {
     public const DAYS = [1 => 'Lun', 2 => 'Mar', 3 => 'Mié', 4 => 'Jue', 5 => 'Vie', 6 => 'Sáb', 7 => 'Dom'];
     public const AHEAD_DAYS = 6;
+    public const MAX_BLOCK_HOURS = 72;
+    public const MAX_BLOCKS = 21;
 
     public static function tz(): \DateTimeZone
     {
@@ -38,11 +42,19 @@ final class ShiftPlanner
         $site = \App\Models\Sites::findByUuid((string) ($in['site'] ?? ''));
         if (!$site || (int) $site['is_active'] !== 1) $errors['site'] = 'Elegí la planta / predio.';
         $hhmm = fn ($v) => preg_match('/^([01]?\d|2[0-3]):([0-5]\d)$/', trim((string) $v), $m) ? sprintf('%02d:%02d', $m[1], $m[2]) : null;
-        $start = $hhmm($in['start_time'] ?? '');
-        $end = $hhmm($in['end_time'] ?? '');
-        if ($start === null || $end === null) $errors['time'] = 'Indicá el horario (HH:MM a HH:MM).';
-        elseif ($start === $end) $errors['time'] = 'Para un turno de 24 h poné el mismo horario en "rotativo" con fin un minuto antes (ej. 08:00 a 07:59).';
-        $pattern = ($in['pattern'] ?? 'weekly') === 'rotation' ? 'rotation' : 'weekly';
+        $pattern = in_array($in['pattern'] ?? '', ['rotation', 'custom'], true) ? (string) $in['pattern'] : 'weekly';
+        $blocks = null;
+        if ($pattern === 'custom') {
+            [$blocks, $blockError] = self::parseBlocks($in['blocks'] ?? null);
+            if ($blockError !== null) $errors['blocks'] = $blockError;
+            $start = $blocks[0]['start'] ?? '00:00';
+            $end = $blocks[0]['end'] ?? '00:00';
+        } else {
+            $start = $hhmm($in['start_time'] ?? '');
+            $end = $hhmm($in['end_time'] ?? '');
+            if ($start === null || $end === null) $errors['time'] = 'Indicá el horario (HH:MM a HH:MM).';
+            elseif ($start === $end) $errors['time'] = 'Para un turno de 24 h poné el mismo horario en "rotativo" con fin un minuto antes (ej. 08:00 a 07:59), o usá "Horario por día".';
+        }
         $days = null;
         $on = $off = null;
         $anchor = null;
@@ -52,6 +64,10 @@ final class ShiftPlanner
             sort($list);
             if (!$list) $errors['days'] = 'Elegí al menos un día.';
             $days = implode(',', $list);
+        } elseif ($pattern === 'custom') {
+            $list = array_values(array_unique(array_column($blocks ?? [], 'day')));
+            sort($list);
+            $days = implode(',', $list) ?: null;
         } else {
             $on = (int) ($in['rotation_on'] ?? 0);
             $off = (int) ($in['rotation_off'] ?? 0);
@@ -72,8 +88,87 @@ final class ShiftPlanner
         $grace = ($in['grace_minutes'] ?? '') === '' ? null : max(1, min(120, (int) $in['grace_minutes']));
         $data = ['name' => mb_substr(trim((string) ($in['name'] ?? '')), 0, 120) ?: null, 'site_id' => $site ? (int) $site['id'] : null,
             'user_ids' => json_encode($users), 'pattern' => $pattern, 'days' => $days, 'rotation_on' => $on, 'rotation_off' => $off,
-            'anchor_date' => $anchor, 'start_time' => $start, 'end_time' => $end, 'valid_from' => $from, 'valid_until' => $until, 'grace_minutes' => $grace];
+            'anchor_date' => $anchor, 'start_time' => $start, 'end_time' => $end,
+            'blocks' => $blocks ? json_encode($blocks) : null, 'valid_from' => $from, 'valid_until' => $until, 'grace_minutes' => $grace];
         return [$data, $errors];
+    }
+
+    /**
+     * Franjas del horario por día: [{day 1..7, start HH:MM, end_day 1..7, end HH:MM}] (JSON o arreglo). La salida es el primer
+     * end_day/end posterior a la entrada (mismo día si la hora es mayor). Cada una dura hasta MAX_BLOCK_HOURS y no se pisan
+     * entre sí (también de una semana a la otra).
+     * @return array{0: ?list<array{day:int,start:string,end_day:int,end:string}>, 1: ?string}
+     */
+    public static function parseBlocks(mixed $raw): array
+    {
+        if (is_string($raw)) $raw = json_decode($raw, true);
+        if (!is_array($raw) || !$raw) return [null, 'Agregá al menos una franja (día y hora de entrada y de salida).'];
+        if (count($raw) > self::MAX_BLOCKS) return [null, 'Máximo ' . self::MAX_BLOCKS . ' franjas.'];
+        $hhmm = fn ($v) => preg_match('/^([01]?\d|2[0-3]):([0-5]\d)$/', trim((string) $v), $m) ? sprintf('%02d:%02d', $m[1], $m[2]) : null;
+        $out = [];
+        foreach (array_values($raw) as $i => $b) {
+            $n = $i + 1;
+            $day = (int) ($b['day'] ?? 0);
+            $endDay = (int) ($b['end_day'] ?? $day);
+            $start = $hhmm($b['start'] ?? '');
+            $end = $hhmm($b['end'] ?? '');
+            if ($day < 1 || $day > 7 || $endDay < 1 || $endDay > 7 || $start === null || $end === null) return [null, "Franja {$n}: completá día y hora de entrada y de salida."];
+            $row = ['day' => $day, 'start' => $start, 'end_day' => $endDay, 'end' => $end];
+            $minutes = self::blockMinutes($row);
+            if ($minutes > self::MAX_BLOCK_HOURS * 60) {
+                return [null, "Franja {$n} (" . self::blockLabel($row) . '): dura más de ' . self::MAX_BLOCK_HOURS . ' horas.'];
+            }
+            $out[] = $row;
+        }
+        usort($out, fn ($a, $b) => self::blockOffset($a) <=> self::blockOffset($b));
+        // Superposición: cada franja tiene que terminar antes de que empiece la siguiente (la última, antes de la primera + 1 semana).
+        $count = count($out);
+        for ($i = 0; $i < $count; $i++) {
+            $a = $out[$i];
+            $b = $out[($i + 1) % $count];
+            $nextStart = self::blockOffset($b) + ($i + 1 === $count ? 7 * 1440 : 0);
+            if ($count > 1 && self::blockOffset($a) + self::blockMinutes($a) > $nextStart) {
+                return [null, 'Las franjas ' . self::blockLabel($a) . ' y ' . self::blockLabel($b) . ' se superponen.'];
+            }
+        }
+        return [$out, null];
+    }
+
+    /** Minuto de la semana (lunes 00:00 = 0) en que empieza una franja. */
+    private static function blockOffset(array $b): int
+    {
+        [$h, $m] = array_map('intval', explode(':', $b['start']));
+        return ((int) $b['day'] - 1) * 1440 + $h * 60 + $m;
+    }
+
+    /** Duración en minutos: de la entrada a la primera salida posterior (mismo día si la hora de salida es mayor; si no, hasta 7 días). */
+    public static function blockMinutes(array $b): int
+    {
+        [$sh, $sm] = array_map('intval', explode(':', $b['start']));
+        [$eh, $em] = array_map('intval', explode(':', $b['end']));
+        $days = ((int) $b['end_day'] - (int) $b['day'] + 7) % 7;
+        $minutes = $days * 1440 + ($eh * 60 + $em) - ($sh * 60 + $sm);
+        return $minutes <= 0 ? $minutes + 7 * 1440 : $minutes;
+    }
+
+    /** "Sáb 14:00 a Lun 08:00" / "Lun 20:00 a 08:00" (sale al día siguiente) / "Lun 08:00 a 16:00". */
+    public static function blockLabel(array $b): string
+    {
+        $endDays = intdiv(self::blockMinutes($b) + self::minuteOfDay($b['start']), 1440);
+        $end = $endDays === 0 ? $b['end'] : ($endDays === 1 ? $b['end'] . ' del día siguiente' : self::DAYS[(int) $b['end_day']] . ' ' . $b['end']);
+        return self::DAYS[(int) $b['day']] . " {$b['start']} a {$end}";
+    }
+
+    private static function minuteOfDay(string $hhmm): int
+    {
+        [$h, $m] = array_map('intval', explode(':', $hhmm));
+        return $h * 60 + $m;
+    }
+
+    /** @return list<array{day:int,start:string,end_day:int,end:string}> */
+    public static function blocks(array $s): array
+    {
+        return array_values(json_decode((string) ($s['blocks'] ?? ''), true) ?: []);
     }
 
     public static function save(?array $shift, array $data): string
@@ -138,14 +233,38 @@ final class ShiftPlanner
     /** "22:00 a 06:00 · Lun a Vie" o "08:00 a 20:00 · rotativo 1×1 (desde 01/11)". */
     public static function describe(array $s): string
     {
+        if ($s['pattern'] === 'custom') {
+            // Agrupa los días con el mismo horario: "Lun a Vie 20:00 a 08:00 del día siguiente · Sáb 14:00 a Lun 08:00".
+            $groups = [];
+            foreach (self::blocks($s) as $b) {
+                $span = intdiv(self::blockMinutes($b) + self::minuteOfDay($b['start']), 1440);
+                $key = $span <= 1 ? "{$b['start']}|{$b['end']}|{$span}" : 'x' . count($groups);
+                $groups[$key][] = $b;
+            }
+            $parts = [];
+            foreach ($groups as $list) {
+                $days = array_map(fn ($b) => (int) $b['day'], $list);
+                if (count($list) === 1) { $parts[] = self::blockLabel($list[0]); continue; }
+                $label = self::blockLabel($list[0]);
+                $parts[] = self::daysText($days) . substr($label, strlen(self::DAYS[$days[0]]));
+            }
+            return implode(' · ', $parts) ?: 'sin franjas';
+        }
         $when = "{$s['start_time']} a {$s['end_time']}";
         if ($s['pattern'] === 'rotation') {
             return "{$when} · rotativo {$s['rotation_on']} día(s) sí / {$s['rotation_off']} no (ciclo desde " . date('d/m/Y', strtotime((string) $s['anchor_date'])) . ')';
         }
-        $days = array_map('intval', explode(',', (string) $s['days']));
-        $txt = count($days) === 7 ? 'todos los días' : ($days === [1, 2, 3, 4, 5] ? 'Lun a Vie' : ($days === [6, 7] ? 'fines de semana'
-            : implode(', ', array_map(fn ($d) => self::DAYS[$d], $days))));
-        return "{$when} · {$txt}";
+        return "{$when} · " . self::daysText(array_map('intval', explode(',', (string) $s['days'])));
+    }
+
+    /** "todos los días", "Lun a Vie", "Lun a Jue", "fines de semana" o "Lun, Mié". */
+    public static function daysText(array $days): string
+    {
+        sort($days);
+        if (count($days) === 7) return 'todos los días';
+        if ($days === [6, 7]) return 'fines de semana';
+        if (count($days) >= 3 && $days === range($days[0], end($days))) return self::DAYS[$days[0]] . ' a ' . self::DAYS[end($days)];
+        return implode(', ', array_map(fn ($d) => self::DAYS[$d], $days));
     }
 
     /** Nombres de los guardias de una programación. */
@@ -172,7 +291,9 @@ final class ShiftPlanner
             $cycle = (int) $s['rotation_on'] + (int) $s['rotation_off'];
             return $cycle > 0 && ((($diff % $cycle) + $cycle) % $cycle) < (int) $s['rotation_on'];
         }
-        return in_array((int) (new \DateTimeImmutable($day))->format('N'), array_map('intval', explode(',', (string) $s['days'])), true);
+        $weekday = (int) (new \DateTimeImmutable($day))->format('N');
+        if ($s['pattern'] === 'custom') return in_array($weekday, array_map(fn ($b) => (int) $b['day'], self::blocks($s)), true);
+        return in_array($weekday, array_map('intval', explode(',', (string) $s['days'])), true);
     }
 
     /**
@@ -187,6 +308,16 @@ final class ShiftPlanner
         for ($d = new \DateTimeImmutable($fromDay, $tz); $d->format('Y-m-d') <= $toDay; $d = $d->modify('+1 day')) {
             $day = $d->format('Y-m-d');
             if (!self::worksOn($s, $day)) continue;
+            if ($s['pattern'] === 'custom') {
+                $weekday = (int) $d->format('N');
+                foreach (self::blocks($s) as $b) {
+                    if ((int) $b['day'] !== $weekday) continue;
+                    $start = new \DateTimeImmutable("{$day} {$b['start']}", $tz);
+                    $end = $start->modify('+' . self::blockMinutes($b) . ' minutes');
+                    $out[] = ['day' => $day, 'start' => $start->setTimezone($utc)->format('Y-m-d H:i:s'), 'end' => $end->setTimezone($utc)->format('Y-m-d H:i:s')];
+                }
+                continue;
+            }
             $start = new \DateTimeImmutable("{$day} {$s['start_time']}", $tz);
             $end = new \DateTimeImmutable("{$day} {$s['end_time']}", $tz);
             if ($end <= $start) $end = $end->modify('+1 day');

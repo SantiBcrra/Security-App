@@ -106,6 +106,53 @@ return [
         assert_true(isset($errors['site'], $errors['time'], $errors['rotation'], $errors['anchor_date'], $errors['users']));
     },
 
+    'turnos: horario por día (noches Lun a Vie + sábado 14:00 a lunes 08:00), superposición y máximo de horas' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']); // UTC−3
+        $blocks = [];
+        foreach ([1, 2, 3, 4, 5] as $d) $blocks[] = ['day' => $d, 'start' => '20:00', 'end_day' => $d % 7 + 1, 'end' => '08:00'];
+        $blocks[] = ['day' => 6, 'start' => '14:00', 'end_day' => 1, 'end' => '08:00'];
+        [$data, $errors] = ShiftPlanner::validate(['site' => $st['site']['uuid'], 'pattern' => 'custom', 'blocks' => json_encode($blocks), 'users' => [$st['g1']['uuid']]]);
+        assert_same([], $errors);
+        assert_same(['1,2,3,4,5,6', '20:00', '08:00'], [$data['days'], $data['start_time'], $data['end_time']]);
+        $occ = ShiftPlanner::occurrences($data + ['valid_from' => null, 'valid_until' => null], '2026-10-16', '2026-10-19'); // vie, sáb, dom, lun
+        assert_same([
+            ['day' => '2026-10-16', 'start' => '2026-10-16 23:00:00', 'end' => '2026-10-17 11:00:00'],
+            ['day' => '2026-10-17', 'start' => '2026-10-17 17:00:00', 'end' => '2026-10-19 11:00:00'],
+            ['day' => '2026-10-19', 'start' => '2026-10-19 23:00:00', 'end' => '2026-10-20 11:00:00'],
+        ], $occ, 'el sábado entra a las 14 y sale el lunes a las 8 (42 h); el domingo no empieza ninguno');
+        assert_same('Lun a Vie 20:00 a 08:00 del día siguiente · Sáb 14:00 a Lun 08:00', ShiftPlanner::describe($data));
+        // Sábado 06:00 a lunes 08:00 se pisa con la noche del viernes (sale el sábado 08:00)
+        $bad = $blocks;
+        $bad[5]['start'] = '06:00';
+        [, $e] = ShiftPlanner::validate(['site' => $st['site']['uuid'], 'pattern' => 'custom', 'blocks' => $bad, 'users' => [$st['g1']['uuid']]]);
+        assert_true(isset($e['blocks']) && str_contains($e['blocks'], 'superponen'), 'superposición');
+        // Domingo 20:00 a lunes 08:00 se pisa con la franja del sábado (de una semana a la otra también se controla)
+        [, $e] = ShiftPlanner::validate(['site' => $st['site']['uuid'], 'pattern' => 'custom', 'blocks' => array_merge($blocks, [['day' => 7, 'start' => '20:00', 'end_day' => 1, 'end' => '08:00']]), 'users' => [$st['g1']['uuid']]]);
+        assert_true(isset($e['blocks']));
+        [, $e] = ShiftPlanner::validate(['site' => $st['site']['uuid'], 'pattern' => 'custom', 'blocks' => [['day' => 5, 'start' => '08:00', 'end_day' => 1, 'end' => '09:00']], 'users' => [$st['g1']['uuid']]]);
+        assert_true(isset($e['blocks']) && str_contains($e['blocks'], '72 horas'), 'más de 72 h');
+        [, $e] = ShiftPlanner::validate(['site' => $st['site']['uuid'], 'pattern' => 'custom', 'blocks' => '[]', 'users' => [$st['g1']['uuid']]]);
+        assert_true(isset($e['blocks']), 'sin franjas');
+        // 24 h seguidas todos los días: una termina justo cuando empieza la otra (vale)
+        $h24 = array_map(fn ($d) => ['day' => $d, 'start' => '08:00', 'end_day' => $d % 7 + 1, 'end' => '08:00'], range(1, 7));
+        [$d24, $e] = ShiftPlanner::validate(['site' => $st['site']['uuid'], 'pattern' => 'custom', 'blocks' => $h24, 'users' => [$st['g1']['uuid']]]);
+        assert_same([], $e);
+        assert_same('todos los días 08:00 a 08:00 del día siguiente', ShiftPlanner::describe($d24));
+        // Se guarda y el cron genera las franjas; el formulario las muestra
+        UserAuth::setCurrent($st['hys']);
+        DB::tenant()->exec('DELETE FROM guard_shift_slots');
+        $uuid = ShiftPlanner::save(null, $data);
+        $slots = DB::tenant()->query("SELECT start_at, end_at FROM guard_shift_slots WHERE status = 'programado' ORDER BY start_at")->fetchAll();
+        assert_true(count($slots) >= 5 && count($slots) <= 7, 'una por franja en la semana (' . count($slots) . ')');
+        $long = array_filter($slots, fn ($x) => strtotime($x['end_at'] . ' UTC') - strtotime($x['start_at'] . ' UTC') === 42 * 3600);
+        assert_same(1, count($long), 'la del fin de semana dura 42 h');
+        $html = \App\Core\View::render('panel/shifts/form', ['shift' => ShiftPlanner::find($uuid), 'sites' => [], 'guards' => [], 'userUuids' => [], 'defaultGrace' => 15, 'old' => null], null);
+        assert_true(str_contains($html, 'Horario por día') && str_contains($html, '&quot;plus&quot;:2'), 'el formulario carga las franjas');
+        ShiftPlanner::delete(ShiftPlanner::find($uuid));
+        DB::tenant()->exec('DELETE FROM guard_shift_slots');
+    },
+
     'turnos: el cron genera uno por guardia, idempotente, sin días sin servicio; editar regenera' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['a']);

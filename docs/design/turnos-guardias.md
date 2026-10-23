@@ -64,3 +64,11 @@ predio y su radio.
 
 App Android: tarjeta "Mi turno" en el inicio (Empezar / Terminar, estado dentro/fuera), servicio "En turno", pregunta de
 salida, alarmas de inicio/fin, "Mis turnos" (historial y horas) y "Pedir ausencia".
+
+## Horario por día (franjas) — 23/10/2026
+Pedido del usuario: "lunes a viernes de 20 a 8 y el sábado de 14 hasta las 8 del lunes". Tercer tipo de programación
+(`pattern = custom`, columna `guard_shifts.blocks`, migración tenant 0076): lista de franjas semanales, cada una con día y hora
+de entrada y día y hora de salida. Cada franja genera un turno (el del fin de semana dura 42 h); máximo 72 h por franja; no se
+pueden superponer (se controla también el paso del domingo al lunes). Para ausencias y días sin servicio cuenta el día de
+entrada. Atajos en el formulario: noches Lun a Vie + fin de semana, Lun a Vie 08–17 + Sáb 08–13, 24 h todos los días,
+fin de semana completo.

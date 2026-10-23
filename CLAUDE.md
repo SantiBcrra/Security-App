@@ -237,6 +237,12 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   `unscheduled`, `replaces_slot_id`, `absence_id`), `guard_absences` (solicitada | aprobada | rechazada | cancelada, reemplazo),
   `guard_closures` (días sin servicio por predio o todos), `guard_shift_exits` (motivo, avisó antes, vuelta, distancia máx.),
   `guard_shift_positions`. `patrol_slots.status = justificada` (+ `note`) cuando todos los guardias a cargo están ausentes.
+- Tipos de programación (`guard_shifts.pattern`): `weekly` (días + un horario), `rotation` (N sí / M no) y **`custom` = horario
+  por día** (tenant 0076, `blocks` JSON `[{day, start, end_day, end}]`): cada franja con día/hora de entrada y de salida (ej. Lun a
+  Vie 20:00 → 08:00 y Sáb 14:00 → Lun 08:00), hasta `ShiftPlanner::MAX_BLOCK_HOURS` (72) cada una, sin superposiciones (también
+  de una semana a la otra; `parseBlocks`). Cada franja = un turno; cuenta el día de entrada. `start_time/end_time/days` se llenan
+  con la primera franja y sus días (compatibilidad). Formulario con atajos, "Copiar a Lun–Vie" y duración en vivo. Un turno
+  editado a mano también puede durar hasta 72 h.
 - Servicios: `ShiftPlanner` (validar/guardar, `occurrences`, `worksOn`, `generate` de ayer a +6 días, idempotente, sin días sin
   servicio; ausencia aprobada → nace `justificado`), `ShiftAbsences` (pedir, cargar aprobada, aprobar/rechazar con reemplazo,
   cancelar, `apply` idempotente, `allAbsentAt`, días sin servicio), `ShiftService` (start/end/exit/exitReason/exitReturn/track,
