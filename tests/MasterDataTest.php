@@ -321,6 +321,42 @@ return [
         $_SESSION = [];
     },
 
+    'eliminar: datos maestros y usuarios (baja lógica, libera DNI y códigos, protege al último admin)' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        $mk = fn (string $role, string $email) => Users::findById(Users::create(['name' => $role . ' del', 'email' => $email,
+            'role_id' => (int) Roles::findBySlug($role)['id'], 'password_hash' => password_hash('x', PASSWORD_DEFAULT)]));
+        $adm = $mk('admin_empresa', 'adm-del@md.test');
+        $go = function (string $method, string $path, array $user, array $post = []) use ($st) {
+            $_SESSION = [Impersonation::TENANT_KEY => $st['a']['uuid'], UserAuth::USER_KEY => $user['uuid'], '_csrf_token' => 't'];
+            UserAuth::setCurrent(null);
+            $router = new Router();
+            (require BASE_PATH . '/app/routes.php')($router);
+            return $router->dispatch(new Request($method, $path, [], $post + ['csrf_token' => 't']));
+        };
+        // Empleado con DNI (columna de 12) y legajo: se elimina y el DNI se puede volver a cargar.
+        $emp = Employees::findById(Employees::create(['dni' => '123456789012', 'file_number' => 'L-77', 'last_name' => 'Borrar', 'first_name' => 'Ana']));
+        $res = $go('POST', '/panel/datos/empleados/' . $emp['uuid'] . '/eliminar', $adm);
+        assert_same(302, $res->status);
+        $row = Employees::findByUuid($emp['uuid']);
+        assert_true($row['deleted_at'] !== null && (int) $row['is_active'] === 0);
+        assert_true(str_ends_with($row['dni'], '~' . $emp['id']) && strlen($row['dni']) <= 12, 'DNI liberado y entra en la columna');
+        assert_same(null, Employees::findBy('dni', '123456789012'));
+        assert_true(!in_array($emp['uuid'], array_column(Employees::list(null, true), 'uuid'), true), 'fuera de la lista (incluso inactivos)');
+        Employees::create(['dni' => '123456789012', 'file_number' => 'L-77', 'last_name' => 'Otra', 'first_name' => 'Vez']);
+        assert_same(404, $go('POST', '/panel/datos/empleados/' . $emp['uuid'] . '/eliminar', $adm)->status, 'ya eliminado');
+        // Usuarios: no a sí mismo, no el último admin; uno común sí (libera email y cierra el acceso).
+        $other = $mk('reportante', 'rep-del@md.test');
+        $go('POST', '/panel/usuarios/' . $adm['uuid'] . '/eliminar', $adm);
+        assert_same(null, Users::findByUuid($adm['uuid'])['deleted_at'], 'no se elimina a sí mismo');
+        $go('POST', '/panel/usuarios/' . $other['uuid'] . '/eliminar', $adm);
+        $gone = Users::findByUuid($other['uuid']);
+        assert_true($gone['deleted_at'] !== null && $gone['email'] === null && $gone['password_hash'] === null);
+        assert_true(!in_array($other['uuid'], array_column(Users::all(), 'uuid'), true));
+        $mk('reportante', 'rep-del@md.test'); // el email quedó libre
+        $_SESSION = [];
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

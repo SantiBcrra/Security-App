@@ -28,6 +28,9 @@ $err = fn (string $k) => isset($errors[$k]) ? '<div class="text-danger small">' 
                                 <a href="<?= e(url('/panel/epp/catalogo?editar=' . $i['uuid'])) ?>">Editar</a>
                                 <form class="d-inline" method="post" action="<?= e(url('/panel/epp/catalogo/' . $i['uuid'] . '/estado')) ?>"><?= csrf_field() ?>
                                     <button class="btn btn-link btn-sm p-0 ms-2"><?= (int) $i['is_active'] ? 'Dar de baja' : 'Activar' ?></button></form>
+                                <form class="d-inline" method="post" action="<?= e(url('/panel/epp/catalogo/' . $i['uuid'] . '/eliminar')) ?>"
+                                      onsubmit="return confirm('¿Eliminar <?= e($i['name']) ?> del catálogo? Las entregas hechas lo conservan.')"><?= csrf_field() ?>
+                                    <button class="btn btn-link btn-sm p-0 ms-2 text-danger">Eliminar</button></form>
                             <?php endif; ?></td>
                         </tr>
                     <?php endforeach; ?>

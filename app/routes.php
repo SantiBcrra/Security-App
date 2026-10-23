@@ -126,6 +126,7 @@ return static function (Router $r): void {
         $r->post('/usuarios', [UsersController::class, 'store'], [$can('usuarios', 'crear')]);
         $r->get('/usuarios/{uuid}', [UsersController::class, 'edit'], [$can('usuarios', 'ver')]);
         $r->post('/usuarios/{uuid}', [UsersController::class, 'update'], [$can('usuarios', 'editar')]);
+        $r->post('/usuarios/{uuid}/eliminar', [UsersController::class, 'delete'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/estado', [UsersController::class, 'toggle'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/invitacion', [UsersController::class, 'invite'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/dispositivos/{device}/revocar', [UsersController::class, 'revokeDevice'], [$can('usuarios', 'editar')]);
@@ -179,6 +180,7 @@ return static function (Router $r): void {
         $r->post('/epp/catalogo', [PpeController::class, 'saveItem'], [$can('epp', 'editar')]);
         $r->post('/epp/catalogo/plantilla', [PpeController::class, 'applyTemplate'], [$can('epp', 'editar')]);
         $r->post('/epp/catalogo/{uuid}/estado', [PpeController::class, 'toggleItem'], [$can('epp', 'editar')]);
+        $r->post('/epp/catalogo/{uuid}/eliminar', [PpeController::class, 'deleteItem'], [$can('epp', 'editar')]);
         $r->get('/epp/matriz', [PpeController::class, 'matrix'], [$can('epp', 'ver')]);
         $r->post('/epp/matriz', [PpeController::class, 'saveCell'], [$can('epp', 'editar')]);
         $r->post('/epp/matriz/copiar', [PpeController::class, 'copyMatrix'], [$can('epp', 'editar')]);
@@ -224,12 +226,14 @@ return static function (Router $r): void {
         $r->post('/inspecciones/programas', [InspectionProgramsController::class, 'save'], [$can('inspecciones', 'editar')]);
         $r->get('/inspecciones/programas/{uuid}', [InspectionProgramsController::class, 'edit'], [$can('inspecciones', 'editar')]);
         $r->post('/inspecciones/programas/{uuid}/estado', [InspectionProgramsController::class, 'toggle'], [$can('inspecciones', 'editar')]);
+        $r->post('/inspecciones/programas/{uuid}/eliminar', [InspectionProgramsController::class, 'delete'], [$can('inspecciones', 'editar')]);
         $r->get('/inspecciones/plantillas', [InspectionTemplatesController::class, 'index'], [$can('inspecciones', 'editar')]);
         $r->get('/inspecciones/plantillas/nueva', [InspectionTemplatesController::class, 'create'], [$can('inspecciones', 'editar')]);
         $r->post('/inspecciones/plantillas', [InspectionTemplatesController::class, 'save'], [$can('inspecciones', 'editar')]);
         $r->post('/inspecciones/plantillas/precargadas', [InspectionTemplatesController::class, 'presets'], [$can('inspecciones', 'editar')]);
         $r->get('/inspecciones/plantillas/{uuid}', [InspectionTemplatesController::class, 'edit'], [$can('inspecciones', 'editar')]);
         $r->post('/inspecciones/plantillas/{uuid}/estado', [InspectionTemplatesController::class, 'toggle'], [$can('inspecciones', 'editar')]);
+        $r->post('/inspecciones/plantillas/{uuid}/eliminar', [InspectionTemplatesController::class, 'delete'], [$can('inspecciones', 'editar')]);
         $r->get('/inspecciones/{uuid}', [InspectionsController::class, 'show'], [$can('inspecciones', 'ver')]);
         $r->get('/inspecciones/{uuid}/imprimir', [InspectionsController::class, 'printable'], [$can('inspecciones', 'ver')]);
         $r->post('/inspecciones/{uuid}/anular', [InspectionsController::class, 'annul'], [$can('inspecciones', 'cerrar')]);
@@ -276,6 +280,7 @@ return static function (Router $r): void {
         $r->get('/rondas/turnos/ausencias', [\App\Controllers\Web\Panel\ShiftsController::class, 'absences'], [$can('rondas', 'ver')]);
         $r->post('/rondas/turnos/ausencias', [\App\Controllers\Web\Panel\ShiftsController::class, 'storeAbsence'], [$can('rondas', 'editar')]);
         $r->post('/rondas/turnos/ausencias/{uuid}/decidir', [\App\Controllers\Web\Panel\ShiftsController::class, 'decide'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turnos/ausencias/{uuid}/editar', [\App\Controllers\Web\Panel\ShiftsController::class, 'updateAbsence'], [$can('rondas', 'editar')]);
         $r->post('/rondas/turnos/ausencias/{uuid}/cancelar', [\App\Controllers\Web\Panel\ShiftsController::class, 'cancelAbsence'], [$can('rondas', 'ver')]);
         $r->post('/rondas/turnos/sin-servicio', [\App\Controllers\Web\Panel\ShiftsController::class, 'storeClosure'], [$can('rondas', 'editar')]);
         $r->post('/rondas/turnos/sin-servicio/{uuid}/borrar', [\App\Controllers\Web\Panel\ShiftsController::class, 'deleteClosure'], [$can('rondas', 'editar')]);
@@ -291,6 +296,7 @@ return static function (Router $r): void {
         $r->post('/rondas/rutas/{uuid}/eliminar', [RoundsController::class, 'routeDelete'], [$can('rondas', 'editar')]);
         $r->get('/rondas/rutas/nueva', [RoundsController::class, 'routeForm'], [$can('rondas', 'crear')]);
         $r->get('/rondas/ronda/{uuid}', [RoundsController::class, 'round'], [$can('rondas', 'ver')]);
+        $r->post('/rondas/ronda/{uuid}/anular', [RoundsController::class, 'roundCancel'], [$can('rondas', 'editar')]);
         $r->get('/rondas/ronda/{uuid}/vivo', [RoundsController::class, 'roundLive'], [$can('rondas', 'ver')]);
         $r->get('/rondas/panico/{uuid}', [RoundsController::class, 'panic'], [$can('rondas', 'ver')]);
         $r->post('/rondas/panico/{uuid}/atendido', [RoundsController::class, 'ackPanic'], [$can('rondas', 'ver')]);
@@ -314,6 +320,7 @@ return static function (Router $r): void {
         $r->get('/configuracion/notificaciones', [NotificationRulesController::class, 'index'], [$can('configuracion', 'ver')]);
         $r->post('/configuracion/notificaciones', [NotificationRulesController::class, 'save'], [$can('configuracion', 'editar')]);
         $r->post('/configuracion/notificaciones/ajustes', [NotificationRulesController::class, 'saveSettings'], [$can('configuracion', 'editar')]);
+        $r->post('/configuracion/notificaciones/{uuid}/eliminar', [NotificationRulesController::class, 'delete'], [$can('configuracion', 'editar')]);
         $r->post('/perfil/notificaciones', [ProfileController::class, 'savePrefs']);
 
         $r->get('/configuracion', [SettingsController::class, 'show'], [$can('configuracion', 'ver')]);
@@ -336,6 +343,7 @@ return static function (Router $r): void {
         $r->get('/datos/{resource}/{uuid}', [MasterDataController::class, 'edit'], [$can('datos_maestros', 'ver')]);
         $r->post('/datos/{resource}/{uuid}', [MasterDataController::class, 'update'], [$can('datos_maestros', 'editar')]);
         $r->post('/datos/{resource}/{uuid}/estado', [MasterDataController::class, 'toggle'], [$can('datos_maestros', 'editar')]);
+        $r->post('/datos/{resource}/{uuid}/eliminar', [MasterDataController::class, 'delete'], [$can('datos_maestros', 'editar')]);
 
         // Importación Excel/CSV
         $r->get('/importar', [ImportController::class, 'index'], [$can('datos_maestros', 'crear')]);

@@ -209,6 +209,33 @@ final class Patrols
      * Eliminar una ruta (baja lógica): deja de verse y baja de los celulares; sus programaciones se eliminan y se anulan las
      * rondas programadas futuras. Las rondas ya hechas conservan la ruta en su historial. Una ronda en curso puede terminar.
      */
+    /**
+     * Anula una ronda terminada (cargada por error, de prueba, hecha por otro guardia…): no cuenta en métricas,
+     * cumplimiento ni resúmenes, pero el registro, los escaneos y el motivo quedan. La ronda programada que había
+     * cumplido vuelve a pendiente (o a no realizada si ya venció).
+     */
+    public static function cancelRound(array $round, string $note): void
+    {
+        $note = trim($note);
+        if ($note === '') throw new UserError('Indicá el motivo de la anulación.');
+        if (!in_array($round['status'], ['completa', 'incompleta'], true)) {
+            throw new UserError($round['status'] === 'anulada' ? 'La ronda ya está anulada.' : 'Solo se puede anular una ronda terminada.');
+        }
+        $db = DB::tenant();
+        $db->beginTransaction();
+        try {
+            $db->prepare("UPDATE patrol_rounds SET status = 'anulada', cancelled_at = UTC_TIMESTAMP(), cancelled_by = ?, cancel_note = ?, updated_at = UTC_TIMESTAMP()
+                WHERE id = ? AND status IN ('completa','incompleta')")->execute([(int) UserAuth::user()['id'], mb_substr($note, 0, 500), (int) $round['id']]);
+            $db->prepare("UPDATE patrol_slots SET status = IF(deadline_at > UTC_TIMESTAMP(), 'pendiente', 'no_realizada'), round_id = NULL, started_at = NULL,
+                on_time = NULL, updated_at = UTC_TIMESTAMP() WHERE round_id = ? AND status = 'realizada'")->execute([(int) $round['id']]);
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+        \App\Services\Audit::tenant('round.cancel', 'patrol_round', $round['uuid'], ['estado' => $round['status']], ['estado' => 'anulada', 'motivo' => $note]);
+    }
+
     public static function deleteRoute(array $route): void
     {
         $db = DB::tenant();
@@ -316,7 +343,8 @@ final class Patrols
 
     public static function round(string $uuid): ?array
     {
-        $stmt = DB::tenant()->prepare('SELECT r.*, u.name AS user_name, pr.name AS route_name, pr.expected_minutes FROM patrol_rounds r JOIN users u ON u.id=r.user_id LEFT JOIN patrol_routes pr ON pr.id=r.route_id WHERE r.uuid=? LIMIT 1');
+        $stmt = DB::tenant()->prepare('SELECT r.*, u.name AS user_name, pr.name AS route_name, pr.expected_minutes, cb.name AS cancelled_by_name FROM patrol_rounds r JOIN users u ON u.id=r.user_id
+            LEFT JOIN patrol_routes pr ON pr.id=r.route_id LEFT JOIN users cb ON cb.id=r.cancelled_by WHERE r.uuid=? LIMIT 1');
         $stmt->execute([$uuid]);
         $row = $stmt->fetch() ?: null;
         if ($row) {
@@ -344,7 +372,8 @@ final class Patrols
             if ((int) $f['route_id'] === 0) $where[] = 'r.route_id IS NULL';
             else { $where[] = 'r.route_id = ?'; $params[] = (int) $f['route_id']; }
         }
-        if (in_array($f['status'] ?? '', ['completa', 'incompleta', 'en_curso'], true)) { $where[] = 'r.status = ?'; $params[] = $f['status']; }
+        if (in_array($f['status'] ?? '', ['completa', 'incompleta', 'en_curso', 'anulada'], true)) { $where[] = 'r.status = ?'; $params[] = $f['status']; }
+        elseif (($f['status'] ?? '') !== 'todas') $where[] = "r.status <> 'anulada'"; // las anuladas solo con su filtro
         if (($f['status'] ?? '') === 'con_problemas') {
             $where[] = "(EXISTS (SELECT 1 FROM patrol_scans s WHERE s.round_id = r.id AND s.location_status IN ('lejos','simulada'))
                 OR EXISTS (SELECT 1 FROM patrol_round_alerts a WHERE a.round_id = r.id) OR EXISTS (SELECT 1 FROM panic_alerts pa WHERE pa.round_id = r.id))";
@@ -386,6 +415,7 @@ final class Patrols
         if (!$round || (int) $round['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('La ronda no está disponible.');
         $at = self::deviceTime($data['scanned_at_device'] ?? null);
         // Sin señal el escaneo puede llegar después del fin de la ronda (reintento): vale si se hizo antes de terminarla.
+        if ($round['status'] === 'anulada') throw new UserError('La ronda fue anulada por un supervisor.');
         $late = $round['status'] !== 'en_curso';
         if ($late && ($round['finished_at'] === null || $at > $round['finished_at'])) throw new UserError('La ronda no está disponible.');
         $lat = isset($data['lat']) && $data['lat'] !== '' ? (float) $data['lat'] : null;

@@ -27,6 +27,9 @@
                 </div>
                 <form method="post" action="<?= e(url('/panel/inspecciones/programas/' . $p['uuid'] . '/estado')) ?>"><?= csrf_field() ?>
                     <button class="btn btn-sm btn-outline-secondary"><?= $p['is_active'] ? 'Pausar' : 'Activar' ?></button></form>
+                <form method="post" action="<?= e(url('/panel/inspecciones/programas/' . $p['uuid'] . '/eliminar')) ?>" class="ms-1"
+                      onsubmit="return confirm('¿Eliminar el programa? Se omiten sus inspecciones pendientes; las ya hechas quedan.')"><?= csrf_field() ?>
+                    <button class="btn btn-sm btn-outline-danger">Eliminar</button></form>
             </div>
         <?php endforeach; ?>
         <?php if (!$programs): ?><div class="list-group-item small text-body-secondary">Todavía no hay programas. Ej.: pre-uso diario de todos los autoelevadores, extintores una vez por mes.</div><?php endif; ?>

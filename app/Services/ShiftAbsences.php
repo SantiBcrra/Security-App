@@ -99,12 +99,46 @@ final class ShiftAbsences
         if (!in_array($absence['status'], ['solicitada', 'aprobada'], true)) throw new UserError('La ausencia ya no está vigente.');
         $db = DB::tenant();
         $db->prepare("UPDATE guard_absences SET status = 'cancelada', updated_at = UTC_TIMESTAMP() WHERE id = ?")->execute([(int) $absence['id']]);
-        // Turnos que todavía no empezaron: vuelven a programado; los del reemplazo se anulan.
-        $db->prepare("UPDATE guard_shift_slots SET status = 'anulado', updated_at = UTC_TIMESTAMP() WHERE replaces_slot_id IN
-            (SELECT id FROM (SELECT id FROM guard_shift_slots WHERE absence_id = ?) x) AND status = 'programado' AND start_at > UTC_TIMESTAMP()")->execute([(int) $absence['id']]);
-        $db->prepare("UPDATE guard_shift_slots SET status = 'programado', absence_id = NULL, updated_at = UTC_TIMESTAMP()
-            WHERE absence_id = ? AND status = 'justificado' AND start_at > UTC_TIMESTAMP()")->execute([(int) $absence['id']]);
+        self::revert((int) $absence['id']);
         Audit::tenant('guard_absence.cancel', 'guard_absence', $absence['uuid'], ['status' => $absence['status']], ['status' => 'cancelada']);
+    }
+
+    /**
+     * El supervisor corrige una ausencia pendiente o aprobada (guardia, fechas, tipo, motivo, reemplazo). Si estaba
+     * aprobada, los turnos futuros se rearman con los datos nuevos; lo que ya pasó no se toca.
+     */
+    public static function update(array $absence, array $in): array
+    {
+        if (!self::canManage()) throw new UserError('No tenés permiso para editar ausencias.');
+        if (!in_array($absence['status'], ['solicitada', 'aprobada'], true)) throw new UserError('La ausencia ya no está vigente: no se puede editar.');
+        [$data, $errors] = self::validate($in, true);
+        if ($errors) throw new UserError(implode(' ', $errors));
+        $db = DB::tenant();
+        $db->beginTransaction();
+        try {
+            self::revert((int) $absence['id']);
+            $db->prepare('UPDATE guard_absences SET user_id = ?, date_from = ?, date_to = ?, type = ?, reason = ?, replacement_user_id = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?')
+                ->execute([$data['user_id'], $data['date_from'], $data['date_to'], $data['type'], $data['reason'], $data['replacement_user_id'], (int) $absence['id']]);
+            $row = self::findById((int) $absence['id']);
+            if ($row['status'] === 'aprobada') self::apply($row);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+        $keys = ['user_id', 'date_from', 'date_to', 'type', 'reason', 'replacement_user_id'];
+        Audit::tenant('guard_absence.update', 'guard_absence', $absence['uuid'], array_intersect_key($absence, array_flip($keys)), $data);
+        return $row;
+    }
+
+    /** Deshace lo que aplicó una ausencia en los turnos que todavía no empezaron: vuelven a programado; los del reemplazo se anulan. */
+    private static function revert(int $absenceId): void
+    {
+        $db = DB::tenant();
+        $db->prepare("UPDATE guard_shift_slots SET status = 'anulado', updated_at = UTC_TIMESTAMP() WHERE replaces_slot_id IN
+            (SELECT id FROM (SELECT id FROM guard_shift_slots WHERE absence_id = ?) x) AND status = 'programado' AND start_at > UTC_TIMESTAMP()")->execute([$absenceId]);
+        $db->prepare("UPDATE guard_shift_slots SET status = 'programado', absence_id = NULL, updated_at = UTC_TIMESTAMP()
+            WHERE absence_id = ? AND status = 'justificado' AND start_at > UTC_TIMESTAMP()")->execute([$absenceId]);
     }
 
     /**
@@ -183,7 +217,7 @@ final class ShiftAbsences
         return $q->fetchAll();
     }
 
-    private const SELECT = 'SELECT a.*, u.name AS user_name, u.uuid AS user_uuid, r.name AS replacement_name, d.name AS decided_by_name
+    private const SELECT = 'SELECT a.*, u.name AS user_name, u.uuid AS user_uuid, r.name AS replacement_name, r.uuid AS replacement_uuid, d.name AS decided_by_name
         FROM guard_absences a JOIN users u ON u.id = a.user_id LEFT JOIN users r ON r.id = a.replacement_user_id LEFT JOIN users d ON d.id = a.decided_by';
 
     private static function insert(array $data, ?string $uuid = null): array

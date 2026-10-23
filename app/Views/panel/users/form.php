@@ -98,6 +98,11 @@ foreach ($roles as $r) { if ($r['slug'] === Permissions::AUDITOR_ROLE) { $audito
                                 <?= (int) $user['is_active'] === 1 ? 'Desactivar' : 'Reactivar' ?>
                             </button>
                         </form>
+                        <form method="post" action="<?= e(url('/panel/usuarios/' . $user['uuid'] . '/eliminar')) ?>"
+                              onsubmit="return confirm('¿Eliminar el usuario? No va a poder entrar, desaparece de las listas y se lo saca de rutas y turnos futuros. Su nombre queda en lo que hizo. No se puede deshacer.')">
+                            <?= csrf_field() ?>
+                            <button class="btn btn-sm btn-danger">Eliminar</button>
+                        </form>
                     <?php endif; ?>
                 </div>
             <?php endif; ?>

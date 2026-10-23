@@ -30,6 +30,11 @@ final class NotificationRules
         return $row ? self::decode($row) : null;
     }
 
+    public static function delete(int $id): void
+    {
+        DB::tenant()->prepare('DELETE FROM notification_rules WHERE id = ?')->execute([$id]);
+    }
+
     public static function save(?int $id, array $data): string
     {
         $data['recipients'] = json_encode($data['recipients']);

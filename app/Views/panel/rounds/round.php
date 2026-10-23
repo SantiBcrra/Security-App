@@ -1,6 +1,6 @@
 <?php
 /** @var array $round */
-$badge = ['completa' => 'success', 'incompleta' => 'danger', 'en_curso' => 'warning'];
+$badge = ['completa' => 'success', 'incompleta' => 'danger', 'en_curso' => 'warning', 'anulada' => 'dark'];
 $dist = fn ($d) => $d === null ? 'sin GPS' : ((float) $d >= 1000 ? number_format((float) $d / 1000, 1, ',', '.') . ' km' : number_format((float) $d, 0, ',', '.') . ' m');
 // Estado de la ubicación de cada marca (Patrols::LOCATION_STATES); las marcas viejas sin estado usan within_radius.
 $locBadge = function (?string $status, int $within, ?int $radius): string {
@@ -17,7 +17,24 @@ $locBadge = function (?string $status, int $within, ?int $radius): string {
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
     <h2 class="h4 m-0"><?= e($round['route_name'] ?: 'Ronda libre') ?></h2>
     <span class="badge text-bg-<?= $badge[$round['status']] ?? 'secondary' ?>"><?= e(str_replace('_', ' ', $round['status'])) ?></span>
+    <?php if (in_array($round['status'], ['completa', 'incompleta'], true) && App\Services\UserAuth::can('rondas', 'editar')): ?>
+        <button class="btn btn-sm btn-outline-danger ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#cancel-round">Anular ronda</button>
+    <?php endif; ?>
 </div>
+<?php if (in_array($round['status'], ['completa', 'incompleta'], true) && App\Services\UserAuth::can('rondas', 'editar')): ?>
+    <form id="cancel-round" class="collapse card card-body border-danger mb-3" method="post" action="<?= e(url('/panel/rondas/ronda/' . $round['uuid'] . '/anular')) ?>" style="max-width: 640px">
+        <?= csrf_field() ?>
+        <p class="small mb-2">La ronda deja de contar en las métricas, el cumplimiento de la programación y el resumen diario (si cumplía una ronda
+            programada, esa vuelve a pendiente o a no realizada). El registro y las marcas quedan, con el motivo.</p>
+        <label class="form-label">Motivo</label>
+        <input class="form-control mb-2" name="note" required maxlength="500" placeholder="Ej.: ronda de prueba, la hizo otro guardia con este celular…">
+        <div><button class="btn btn-danger btn-sm">Anular ronda</button></div>
+    </form>
+<?php endif; ?>
+<?php if ($round['status'] === 'anulada'): ?>
+    <div class="alert alert-dark small">Anulada por <?= e($round['cancelled_by_name'] ?? '—') ?> el <?= e(fecha($round['cancelled_at'])) ?>: <?= e($round['cancel_note']) ?>.
+        No cuenta en métricas ni en el cumplimiento.</div>
+<?php endif; ?>
 <p class="text-body-secondary">
     <?= e($round['user_name']) ?> · inicio <?= e(fecha($round['started_at'])) ?>
     <?= $round['finished_at'] ? ' · fin ' . e(fecha($round['finished_at'])) : '' ?>

@@ -551,6 +551,25 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - Consentimiento (celular personal, Ley 25.326): `Consent::VERSION` + texto en el servidor, `user_consents` (tenant 0061),
   `GET/POST /api/v1/consent`; `/me` informa `consentimiento`.
 
+## Editar, eliminar y anular (CRUD)
+- **Configuración y datos maestros se editan y se eliminan** (baja lógica: `is_active = 0` + `deleted_at` + `updated_at`, así baja a
+  los celulares; lo que ya los usó conserva la referencia; auditado con los valores anteriores). `Repository::softDelete($id,
+  $uniqueColumns)` libera los campos únicos (" [eliminado id]", o "~id" en columnas cortas como DNI/CUIT: usa el largo real de la
+  columna); `Repository::where()`/`options()` excluyen `deleted_at`. Resources: `canDelete()` (por defecto = `canDeactivate`) y
+  `uniqueColumns()`; ruta `POST /panel/datos/{recurso}/{uuid}/eliminar`.
+- Usuarios (`Users::softDelete`, tenant 0075 `users.deleted_at`): borra email/DNI/contraseña, revoca dispositivos, lo saca de rutas
+  y anula sus turnos futuros; nunca a uno mismo ni al último admin. También se eliminan: programas y plantillas de inspección
+  (plantilla en uso por un programa → no), elementos del catálogo EPP (y su matriz/extras), reglas de notificación (borrado
+  real), rutas, puntos y programaciones de rondas y de turnos (anulan lo futuro pendiente).
+- Turnos (tenant 0074): editar/eliminar cada turno y turno suelto (`ShiftService::adminSave|adminCancel`; corregir horas reales exige
+  motivo; el generador no recrea un turno editado/anulado: `origin_user_id`/`origin_start_at`/`edited_at`). Ausencias:
+  `ShiftAbsences::update()` (pendiente o aprobada; deshace y vuelve a aplicar en los turnos futuros).
+- Rondas realizadas: **anular** con motivo (`Patrols::cancelRound`, estado `anulada`, `cancelled_*`, tenant 0075; solo terminadas,
+  `rondas.editar`): fuera de métricas, cumplimiento, resumen e historial por defecto (filtro "Anuladas"); la programada que cumplía
+  vuelve a pendiente/no realizada; un escaneo tardío se rechaza.
+- **Registros de evidencia NO se editan ni borran** (observaciones, incidentes, inspecciones hechas, libro de guardia, entregas EPP,
+  permisos de trabajo, marcas de ronda): solo corrección como evento o anulación con motivo.
+
 ## Migraciones
 - Archivo nuevo = siguiente número: `database/migrations/{master|tenant}/0004_descripcion.sql`.
   Nunca editar una migración ya aplicada: se crea otra.

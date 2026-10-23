@@ -14,7 +14,7 @@ final class Users
 
     public static function all(): array
     {
-        return DB::tenant()->query(self::SELECT . ' ORDER BY u.is_active DESC, u.name')->fetchAll();
+        return DB::tenant()->query(self::SELECT . ' WHERE u.deleted_at IS NULL ORDER BY u.is_active DESC, u.name')->fetchAll();
     }
 
     public static function findByUuid(string $uuid): ?array
@@ -80,6 +80,25 @@ final class Users
     }
 
     /** Administradores activos (rol admin_empresa), opcionalmente excluyendo a uno. */
+    /**
+     * Eliminar (baja lógica): no aparece más, no puede entrar y se liberan su email y DNI para cargarlos de nuevo. Su nombre
+     * sigue apareciendo en lo que hizo (observaciones, rondas, libro…). Se cierran sus sesiones y se lo saca de rutas y turnos futuros.
+     */
+    public static function softDelete(int $id): void
+    {
+        $db = DB::tenant();
+        $db->prepare('UPDATE users SET is_active = 0, deleted_at = UTC_TIMESTAMP(), email = NULL, dni = NULL, password_hash = NULL, activation_token_hash = NULL,
+            updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([$id]);
+        UserDevices::revokeAllForUser($id, 'Usuario eliminado');
+        $routes = $db->prepare('SELECT DISTINCT route_id FROM patrol_route_assignments WHERE user_id = ? AND is_active = 1');
+        $routes->execute([$id]);
+        $routeIds = array_map('intval', $routes->fetchAll(\PDO::FETCH_COLUMN));
+        $db->prepare('UPDATE patrol_route_assignments SET is_active = 0 WHERE user_id = ?')->execute([$id]);
+        if ($routeIds) $db->exec('UPDATE patrol_routes SET updated_at = UTC_TIMESTAMP() WHERE id IN (' . implode(',', $routeIds) . ')');
+        $db->prepare("UPDATE guard_shift_slots SET status = 'anulado', edit_note = 'Usuario eliminado', edited_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP()
+            WHERE user_id = ? AND status IN ('programado', 'justificado') AND start_at > UTC_TIMESTAMP()")->execute([$id]);
+    }
+
     public static function countActiveAdmins(?int $exceptId = null): int
     {
         $stmt = DB::tenant()->prepare("SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id

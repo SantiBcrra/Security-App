@@ -873,6 +873,46 @@ return [
         assert_true(in_array($route['uuid'], (array) ($page['deleted']->patrol_routes ?? []), true), 'al celular le llega como baja');
     },
 
+    'rondas: anular una ronda terminada con motivo (no cuenta en métricas, el registro queda)' => function () use ($setup, &$st, $op) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $route = Uuid::v4();
+        Patrols::createRoute(['uuid' => $route, 'name' => 'Para anular', 'description' => '', 'frequency' => 'manual', 'expected_minutes' => null,
+            'point_ids' => [$st['p1']], 'user_ids' => [(int) $st['g1']['id']]]);
+        $routeId = (int) Patrols::route($route)['id'];
+        UserAuth::setCurrent($st['g1']);
+        $iso = fn (int $ago) => gmdate('Y-m-d\TH:i:s\Z', time() - $ago);
+        $r1 = Uuid::v4();
+        Push::run([$op('round.start', ['uuid' => $r1, 'route_uuid' => $route, 'started_at_device' => $iso(600)])]);
+        UserAuth::setCurrent($st['hys']);
+        try { Patrols::cancelRound(Patrols::round($r1), 'Prueba'); assert_true(false, 'en curso no se anula'); } catch (\App\Core\UserError) {}
+        UserAuth::setCurrent($st['g1']);
+        Push::run([$op('round.finish', ['round_uuid' => $r1, 'finished_at_device' => $iso(300)])]);
+        UserAuth::setCurrent($st['hys']);
+        $tz = new DateTimeZone('America/Argentina/Buenos_Aires');
+        $today = (new DateTimeImmutable('now', $tz))->format('Y-m-d');
+        assert_same(1, \App\Services\RoundMetrics::report($today, $today, ['route_id' => $routeId])['rounds']['rounds']);
+        try { Patrols::cancelRound(Patrols::round($r1), '  '); assert_true(false, 'motivo obligatorio'); } catch (\App\Core\UserError) {}
+        $ctl = new \App\Controllers\Web\Panel\RoundsController();
+        $ctl->roundCancel(new \App\Core\Request('POST', '/', [], ['note' => 'Ronda de prueba']), $r1);
+        $round = Patrols::round($r1);
+        assert_same(['anulada', 'Ronda de prueba', $st['hys']['name']], [$round['status'], $round['cancel_note'], $round['cancelled_by_name']]);
+        assert_same(0, \App\Services\RoundMetrics::report($today, $today, ['route_id' => $routeId])['rounds']['rounds'], 'fuera de las métricas');
+        assert_same([], Patrols::searchRounds(['route_id' => $routeId])['rows'], 'fuera del historial por defecto');
+        assert_same([$r1], array_column(Patrols::searchRounds(['route_id' => $routeId, 'status' => 'anulada'])['rows'], 'uuid'), 'con su filtro');
+        // Un escaneo que llega tarde no la "revive"
+        UserAuth::setCurrent($st['g1']);
+        $res = Push::run([$op('round.scan', ['uuid' => Uuid::v4(), 'round_uuid' => $r1, 'point_uuid' => ($st['uuid'])($st['p1']), 'scanned_at_device' => $iso(400)])])[0];
+        assert_same('error', $res['status']);
+        assert_same('anulada', Patrols::round($r1)['status']);
+        UserAuth::setCurrent($st['hys']);
+        try { Patrols::cancelRound(Patrols::round($r1), 'Otra vez'); assert_true(false, 'ya anulada'); } catch (\App\Core\UserError) {}
+        assert_same(1, (int) DB::tenant()->query("SELECT COUNT(*) FROM audit_log WHERE action = 'round.cancel' AND entity_uuid = '{$r1}'")->fetchColumn());
+        $html = \App\Core\View::render('panel/rounds/round', ['round' => Patrols::roundDetail($r1), 'tracks' => [], 'alerts' => [], 'device' => null], null);
+        assert_true(str_contains($html, 'Anulada por') && !str_contains($html, 'cancel-round'), 'muestra el motivo, sin botón');
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

@@ -11,7 +11,7 @@
         <div class="col-md-2"><label class="form-label small">Ruta</label><select name="ruta" class="form-select"><option value="">Todas</option><option value="libre" <?= $filters['ruta'] === 'libre' ? 'selected' : '' ?>>Rondas libres</option>
             <?php foreach ($routes as $rt): ?><option value="<?= e($rt['uuid']) ?>" <?= $filters['ruta'] === $rt['uuid'] ? 'selected' : '' ?>><?= e($rt['name']) ?></option><?php endforeach; ?></select></div>
         <div class="col-md-2"><label class="form-label small">Estado</label><select name="estado" class="form-select">
-            <?php foreach (['' => 'Todos', 'completa' => 'Completas', 'incompleta' => 'Incompletas', 'en_curso' => 'En curso', 'con_problemas' => 'Con problemas (fuera de lugar / alertas)'] as $k => $l): ?>
+            <?php foreach (['' => 'Todos', 'completa' => 'Completas', 'incompleta' => 'Incompletas', 'en_curso' => 'En curso', 'con_problemas' => 'Con problemas (fuera de lugar / alertas)', 'anulada' => 'Anuladas'] as $k => $l): ?>
                 <option value="<?= e($k) ?>" <?= $filters['estado'] === $k ? 'selected' : '' ?>><?= e($l) ?></option><?php endforeach; ?></select></div>
         <div class="col-md-2 d-flex gap-2"><button class="btn btn-primary flex-grow-1">Filtrar</button><a class="btn btn-outline-secondary" href="<?= e(url('/panel/rondas/historial')) ?>" title="Limpiar filtros">✕</a></div>
     </div>

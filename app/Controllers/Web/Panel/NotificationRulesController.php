@@ -112,6 +112,18 @@ final class NotificationRulesController
         return Response::redirect('/panel/configuracion/notificaciones');
     }
 
+    /** Eliminar una regla (configuración, no evidencia: se borra; queda en la auditoría con lo que tenía). */
+    public function delete(Request $request, string $uuid): Response
+    {
+        $rule = NotificationRules::findByUuid($uuid);
+        if ($rule !== null) {
+            NotificationRules::delete((int) $rule['id']);
+            Audit::tenant('notification_rule.delete', 'notification_rule', $uuid, array_intersect_key($rule, array_flip(['name', 'event', 'recipients', 'channels'])), null);
+            Flash::add('success', 'Regla eliminada. Ese aviso ya no le llega a esos destinatarios.');
+        }
+        return Response::redirect('/panel/configuracion/notificaciones');
+    }
+
     public function saveSettings(Request $request): Response
     {
         // Dos formularios en la misma pantalla: cada uno guarda SOLO lo suyo (si no, guardar uno borraba el otro).

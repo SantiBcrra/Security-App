@@ -62,9 +62,14 @@ $has = fn (string $type, ?string $value = null) => $form && (bool) array_filter(
                 <?php endforeach; ?>
                 <div class="form-check form-switch mt-3"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="is_active" <?= $form['is_active'] ? 'checked' : '' ?>><label class="form-check-label" for="is_active">Regla activa</label></div>
             </div>
-            <div class="col-12 d-flex gap-2"><button class="btn btn-primary">Guardar regla</button><a class="btn btn-link" href="<?= e(url('/panel/configuracion/notificaciones')) ?>">Cancelar</a></div>
+            <div class="col-12 d-flex gap-2"><button class="btn btn-primary">Guardar regla</button><a class="btn btn-link" href="<?= e(url('/panel/configuracion/notificaciones')) ?>">Cancelar</a>
+                <?php if ($form['uuid']): ?><button class="btn btn-outline-danger ms-auto" form="del-rule">Eliminar regla</button><?php endif; ?></div>
         </div>
     </form>
+    <?php if ($form['uuid']): ?>
+    <form id="del-rule" method="post" action="<?= e(url('/panel/configuracion/notificaciones/' . $form['uuid'] . '/eliminar')) ?>"
+          onsubmit="return confirm('¿Eliminar esta regla? Ese aviso deja de llegarle a esos destinatarios.')"><?= csrf_field() ?></form>
+    <?php endif; ?>
 <?php endif; ?>
 
 <div class="card shadow-sm mb-3">

@@ -245,13 +245,14 @@ final class ShiftPlanner
         $created = 0;
         $touched = [];
         $shifts = $db->query('SELECT * FROM guard_shifts WHERE is_active = 1 AND deleted_at IS NULL')->fetchAll();
+        $activeUsers = array_map('intval', $db->query('SELECT id FROM users WHERE is_active = 1')->fetchAll(\PDO::FETCH_COLUMN));
         foreach ($shifts as $s) {
             $grace = (int) ($s['grace_minutes'] ?? self::defaultGrace());
             $since = strtotime($s['updated_at'] . ' UTC');
             $closed = self::closures((int) $s['site_id'], $from, $to);
             foreach (self::occurrences($s, $from, $to) as $occ) {
                 if (isset($closed[$occ['day']]) || strtotime($occ['end'] . ' UTC') <= $since) continue; // sin servicio, o ya había pasado al crear/editar
-                foreach (self::userIds($s) as $userId) {
+                foreach (array_intersect(self::userIds($s), $activeUsers) as $userId) {
                     $absence = ShiftAbsences::approvedFor($userId, $occ['day']);
                     if ($absence) $touched[(int) $absence['id']] = $absence;
                     $insert->execute([Uuid::v4(), (int) $s['id'], $userId, (int) $s['site_id'], $occ['start'], $occ['end'], $grace,

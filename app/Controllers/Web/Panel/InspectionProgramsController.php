@@ -61,6 +61,21 @@ final class InspectionProgramsController
         return Response::redirect('/panel/inspecciones/programas');
     }
 
+    /** Eliminar un programa: deja de generar inspecciones y las pendientes que no vencieron se omiten. Lo hecho queda. */
+    public function delete(Request $request, string $uuid): Response
+    {
+        $p = InspectionPrograms::findByUuid($uuid);
+        if ($p !== null && $p['deleted_at'] === null) {
+            \App\Core\DB::tenant()->prepare('UPDATE inspection_programs SET is_active = 0, deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = ?')
+                ->execute([(int) $p['id']]);
+            \App\Core\DB::tenant()->prepare("UPDATE inspection_schedule SET status = 'omitida', skip_reason = 'Programa eliminado', skipped_by = ?, updated_at = UTC_TIMESTAMP()
+                WHERE program_id = ? AND status = 'pendiente' AND due_on >= ?")->execute([(int) \App\Services\UserAuth::user()['id'], (int) $p['id'], ActionService::today()]);
+            \App\Services\Audit::tenant('inspection_program.delete', 'inspection_program', $uuid, ['nombre' => $p['name']], null);
+            Flash::add('success', 'Programa eliminado: se omitieron sus inspecciones pendientes. Las ya hechas quedan.');
+        }
+        return Response::redirect('/panel/inspecciones/programas');
+    }
+
     private function editor(?array $p): Response
     {
         [$old] = Flash::pullInput();

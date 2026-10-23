@@ -36,7 +36,7 @@ final class RoundMetrics
     {
         [$from, $to] = self::range($fromDay, $toDay);
         $db = DB::tenant();
-        $where = ['r.started_at >= ?', 'r.started_at < ?'];
+        $where = ['r.started_at >= ?', 'r.started_at < ?', "r.status <> 'anulada'"];
         $params = [$from, $to];
         if (!empty($f['route_id'])) { $where[] = 'r.route_id = ?'; $params[] = (int) $f['route_id']; }
         if (!empty($f['user_id'])) { $where[] = 'r.user_id = ?'; $params[] = (int) $f['user_id']; }
@@ -133,7 +133,7 @@ final class RoundMetrics
             $q = $db->prepare("SELECT DISTINCT u.id, u.name, (SELECT MAX(started_at) FROM patrol_rounds x WHERE x.user_id = u.id) AS ultima
                 FROM patrol_route_assignments a JOIN patrol_routes pr ON pr.id = a.route_id JOIN users u ON u.id = a.user_id
                 WHERE a.is_active = 1 AND pr.is_active = 1 AND pr.deleted_at IS NULL AND u.is_active = 1" . (!empty($f['route_id']) ? ' AND pr.id = ' . (int) $f['route_id'] : '') . "
-                AND NOT EXISTS (SELECT 1 FROM patrol_rounds r WHERE r.user_id = u.id AND r.started_at >= ? AND r.started_at < ? " . (!empty($f['route_id']) ? ' AND r.route_id = ' . (int) $f['route_id'] : '') . ") ORDER BY u.name");
+                AND NOT EXISTS (SELECT 1 FROM patrol_rounds r WHERE r.user_id = u.id AND r.status <> 'anulada' AND r.started_at >= ? AND r.started_at < ? " . (!empty($f['route_id']) ? ' AND r.route_id = ' . (int) $f['route_id'] : '') . ") ORDER BY u.name");
             $q->execute([$from, $to]);
             $idle = $q->fetchAll();
         }
@@ -173,7 +173,7 @@ final class RoundMetrics
         $q = $db->prepare("SELECT s.scanned_at_device AS at, s.location_status, s.distance_m, u.name AS user_name, r.uuid AS round_uuid, pr.name AS route_name, p.code
             FROM patrol_scans s JOIN patrol_rounds r ON r.id = s.round_id JOIN users u ON u.id = r.user_id JOIN patrol_points p ON p.id = s.point_id
             LEFT JOIN patrol_routes pr ON pr.id = r.route_id
-            WHERE s.location_status IN ('lejos','simulada') AND s.scanned_at_device >= ? AND s.scanned_at_device < ?{$uf}{$rf}");
+            WHERE r.status <> 'anulada' AND s.location_status IN ('lejos','simulada') AND s.scanned_at_device >= ? AND s.scanned_at_device < ?{$uf}{$rf}");
         $q->execute([$from, $to]);
         foreach ($q->fetchAll() as $s) {
             $d = (float) $s['distance_m'];

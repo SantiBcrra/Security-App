@@ -118,6 +118,23 @@ final class MasterDataController
         return Response::redirect("/panel/datos/{$resource}/{$uuid}");
     }
 
+    public function delete(Request $request, string $resource, string $uuid): Response
+    {
+        $res = Registry::get($resource);
+        $row = $res ? ($res->model())::findByUuid($uuid) : null;
+        if ($row === null || !self::belongs($res, $row) || $row['deleted_at'] !== null) {
+            return self::notFound();
+        }
+        if (($reason = $res->canDelete($row)) !== null) {
+            Flash::add('danger', $reason);
+            return Response::redirect("/panel/datos/{$resource}/{$uuid}");
+        }
+        ($res->model())::softDelete((int) $row['id'], $res->uniqueColumns());
+        Audit::tenant($res->entity() . '.delete', $res->entity(), $uuid, array_intersect_key($row, array_flip(array_merge(['name'], $res->uniqueColumns()))), null);
+        Flash::add('success', 'Eliminado. Ya no aparece en las listas ni en los celulares; los registros que lo usaron lo conservan en su historial.');
+        return Response::redirect("/panel/datos/{$resource}");
+    }
+
     /** Cargar plantilla de rubro (catálogos y puestos). Idempotente. */
     public function applyTemplate(Request $request): Response
     {

@@ -200,6 +200,21 @@ final class RoundsController
         return Response::redirect('/panel/rondas/puntos');
     }
 
+    /** Anular una ronda terminada con motivo: deja de contar en métricas y cumplimiento; el registro queda. */
+    public function roundCancel(Request $request, string $uuid): Response
+    {
+        $round = Patrols::round($uuid);
+        $only = $this->onlyUser();
+        if (!$round || ($only !== null && (int) $round['user_id'] !== $only)) return new Response('', 404);
+        try {
+            Patrols::cancelRound($round, (string) $request->input('note', ''));
+            Flash::add('success', 'Ronda anulada: ya no cuenta en métricas ni en el cumplimiento de la programación.');
+        } catch (\App\Core\UserError $e) {
+            Flash::add('danger', $e->getMessage());
+        }
+        return Response::redirect('/panel/rondas/ronda/' . $uuid);
+    }
+
     public function routeDelete(Request $request, string $uuid): Response
     {
         $route = Patrols::route($uuid);

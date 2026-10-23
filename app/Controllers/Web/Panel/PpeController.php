@@ -276,6 +276,22 @@ final class PpeController
         return Response::redirect('/panel/epp/catalogo');
     }
 
+    /** Eliminar un elemento del catálogo: sale de la matriz y de los faltantes; las entregas hechas lo conservan. */
+    public function deleteItem(Request $request, string $uuid): Response
+    {
+        $item = PpeItems::findByUuid($uuid);
+        if ($item === null || !PpeService::canManage() || $item['deleted_at'] !== null) {
+            return self::notFound();
+        }
+        PpeItems::softDelete((int) $item['id']);
+        // Sale de la matriz y de los extras (configuración): deja de contar como faltante o por vencer.
+        \App\Core\DB::tenant()->prepare('UPDATE ppe_matrix SET is_active = 0, updated_at = UTC_TIMESTAMP() WHERE item_id = ?')->execute([(int) $item['id']]);
+        \App\Core\DB::tenant()->prepare('UPDATE ppe_employee_extras SET is_active = 0, updated_at = UTC_TIMESTAMP() WHERE item_id = ?')->execute([(int) $item['id']]);
+        Audit::tenant('ppe.item_delete', 'ppe_item', $uuid, ['nombre' => $item['name']], null);
+        Flash::add('success', $item['name'] . ' eliminado del catálogo. Las entregas hechas lo conservan.');
+        return Response::redirect('/panel/epp/catalogo');
+    }
+
     public function applyTemplate(Request $request): Response
     {
         if (!PpeService::canManage()) {

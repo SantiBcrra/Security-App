@@ -1,6 +1,6 @@
 <?php
 /** Tabla de rondas (Hoy y Rondas realizadas). @var array $rows (Patrols::searchRounds) @var string $empty */
-$state = ['completa' => ['Completa', 'success'], 'incompleta' => ['Incompleta', 'danger'], 'en_curso' => ['En curso', 'warning']];
+$state = ['completa' => ['Completa', 'success'], 'incompleta' => ['Incompleta', 'danger'], 'en_curso' => ['En curso', 'warning'], 'anulada' => ['Anulada', 'dark']];
 $dur = function (array $r): string {
     $end = $r['finished_at'] ? strtotime($r['finished_at'] . ' UTC') : time();
     $m = intdiv(max(0, $end - strtotime($r['started_at'] . ' UTC')), 60);

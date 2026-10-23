@@ -207,6 +207,8 @@ final class ShiftsController
             'current' => ShiftAbsences::list('vigentes', $only), 'history' => ShiftAbsences::list(null, $only, 60),
             'closures' => ShiftAbsences::closuresList(), 'guards' => $this->guards(), 'canEdit' => ShiftAbsences::canManage(),
             'sites' => \App\Models\Sites::list(), 'today' => $this->localToday(),
+            'editing' => ShiftAbsences::canManage() && ($e = ShiftAbsences::find((string) $request->input('editar', ''))) !== null
+                && in_array($e['status'], ['solicitada', 'aprobada'], true) ? $e : null,
         ], 'layouts/app'));
     }
 
@@ -236,6 +238,20 @@ final class ShiftsController
             Flash::add('success', $approve ? 'Ausencia aprobada: se le avisó al guardia.' : 'Ausencia rechazada: se le avisó al guardia.');
         } catch (UserError $e) {
             Flash::add('danger', $e->getMessage());
+        }
+        return $this->back();
+    }
+
+    public function updateAbsence(Request $request, string $uuid): Response
+    {
+        $a = ShiftAbsences::find($uuid);
+        if ($a === null) return new Response('', 404);
+        try {
+            ShiftAbsences::update($a, $request->post);
+            Flash::add('success', $a['status'] === 'aprobada' ? 'Ausencia actualizada: los turnos futuros se rearmaron con las fechas nuevas.' : 'Ausencia actualizada.');
+        } catch (UserError $e) {
+            Flash::add('danger', $e->getMessage());
+            return Response::redirect('/panel/rondas/turnos/ausencias?editar=' . $uuid . '#cargar');
         }
         return $this->back();
     }

@@ -284,7 +284,23 @@ return [
         assert_same($unc + 1, $count('guard.shift_uncovered'), 'a SyH (el supervisor que la cargó no se avisa a sí mismo), una vez');
         assert_true(ShiftAbsences::allAbsentAt([(int) $st['g1']['id']], gmdate('Y-m-d H:i:s', strtotime($from . ' UTC') + 12 * 3600)));
         assert_true(!ShiftAbsences::allAbsentAt([(int) $st['g1']['id'], (int) $st['g2']['id']], gmdate('Y-m-d H:i:s', strtotime($from . ' UTC') + 12 * 3600)));
+        // Editar la aprobada: se mueve al día siguiente con reemplazo → el turno de ese día vuelve a programado.
+        $next = date('Y-m-d', strtotime($day . ' +1 day'));
+        $ed = ShiftAbsences::update(ShiftAbsences::find($ab['uuid']), ['user' => $st['g1']['uuid'], 'date_from' => $next, 'date_to' => $next,
+            'type' => 'licencia', 'reason' => 'Corrigió la fecha', 'replacement' => $st['g3']['uuid']]);
+        assert_same([$next, 'licencia', 'aprobada', $st['g3']['uuid']], [$ed['date_from'], $ed['type'], $ed['status'], $ed['replacement_uuid']]);
+        assert_same('programado', ShiftService::find($s1)['status'], 'el turno que ya no cubre vuelve a programado');
+        assert_true(!ShiftAbsences::allAbsentAt([(int) $st['g1']['id']], gmdate('Y-m-d H:i:s', strtotime($from . ' UTC') + 12 * 3600)));
+        assert_same(1, (int) DB::tenant()->query("SELECT COUNT(*) FROM audit_log WHERE action = 'guard_absence.update' AND entity_uuid = '{$ab['uuid']}'")->fetchColumn());
+        try { ShiftAbsences::update(ShiftAbsences::find($ab['uuid']), ['user' => $st['g1']['uuid'], 'date_from' => $next, 'date_to' => $day, 'type' => 'licencia']);
+            assert_true(false, 'hasta antes de desde'); } catch (\App\Core\UserError) {}
+        UserAuth::setCurrent($st['g1']);
+        try { ShiftAbsences::update(ShiftAbsences::find($ab['uuid']), ['user' => $st['g1']['uuid'], 'date_from' => $day, 'type' => 'licencia']);
+            assert_true(false, 'el guardia no edita'); } catch (\App\Core\UserError) {}
+        UserAuth::setCurrent($st['sup']);
         ShiftAbsences::cancel(ShiftAbsences::find($ab['uuid']));
+        try { ShiftAbsences::update(ShiftAbsences::find($ab['uuid']), ['user' => $st['g1']['uuid'], 'date_from' => $day, 'type' => 'licencia']);
+            assert_true(false, 'cancelada no se edita'); } catch (\App\Core\UserError) {}
     },
 
     'turnos: al celular le llegan solo sus turnos y ausencias, con los ajustes; horas y CSV' => function () use ($setup, &$st, $op, $slot, $iso) {

@@ -80,6 +80,12 @@ require __DIR__ . '/_nav.php';
                     <?= (int) $row['is_active'] === 1 ? 'Desactivar' : 'Reactivar' ?>
                 </button>
             </form>
+            <form class="mt-2" method="post" action="<?= e($action . '/eliminar') ?>"
+                  onsubmit="return confirm('¿Eliminar? Deja de aparecer en las listas y en los celulares. Los registros que ya lo usaron (observaciones, inspecciones, etc.) lo conservan en su historial.')">
+                <?= csrf_field() ?>
+                <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+                <span class="form-text ms-2">Desactivar lo oculta para elegir pero lo deja en la lista; eliminar lo saca de todos lados.</span>
+            </form>
         <?php endif; ?>
     </div>
 

@@ -126,6 +126,26 @@ final class UsersController
         return Response::redirect('/panel/usuarios/' . $uuid);
     }
 
+    public function delete(Request $request, string $uuid): Response
+    {
+        $user = Users::findByUuid($uuid);
+        if ($user === null || $user['deleted_at'] !== null) {
+            return Response::redirect('/panel/usuarios');
+        }
+        if ((int) $user['id'] === (int) UserAuth::user()['id']) {
+            Flash::add('danger', 'No podés eliminar tu propio usuario.');
+            return Response::redirect('/panel/usuarios/' . $uuid);
+        }
+        if ($user['role_slug'] === Permissions::ADMIN_ROLE && Users::countActiveAdmins((int) $user['id']) === 0) {
+            Flash::add('danger', 'Es el único administrador activo: la empresa no puede quedarse sin administrador.');
+            return Response::redirect('/panel/usuarios/' . $uuid);
+        }
+        Users::softDelete((int) $user['id']);
+        Audit::tenant('user.delete', 'user', $uuid, ['nombre' => $user['name'], 'email' => $user['email'], 'dni' => $user['dni'], 'rol' => $user['role_name']], null);
+        Flash::add('success', "Usuario {$user['name']} eliminado: ya no puede entrar, se cerraron sus sesiones y se lo sacó de rutas y turnos futuros. Su nombre queda en lo que hizo.");
+        return Response::redirect('/panel/usuarios');
+    }
+
     public function invite(Request $request, string $uuid): Response
     {
         $user = Users::findByUuid($uuid);

@@ -61,6 +61,24 @@ final class InspectionTemplatesController
         return Response::redirect('/panel/inspecciones/plantillas');
     }
 
+    /** Eliminar una plantilla: deja de ofrecerse (web y celulares). Las inspecciones hechas conservan su versión. */
+    public function delete(Request $request, string $uuid): Response
+    {
+        $t = InspectionTemplates::findByUuid($uuid);
+        if ($t !== null && $t['deleted_at'] === null) {
+            $used = (int) \App\Core\DB::tenant()->query('SELECT COUNT(*) FROM inspection_programs WHERE deleted_at IS NULL AND template_id = ' . (int) $t['id'])->fetchColumn();
+            if ($used > 0) {
+                Flash::add('danger', "La usan {$used} programa(s) de inspección: eliminalos o cambiales la plantilla primero.");
+                return Response::redirect('/panel/inspecciones/plantillas');
+            }
+            \App\Core\DB::tenant()->prepare('UPDATE inspection_templates SET is_active = 0, deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = ?')
+                ->execute([(int) $t['id']]);
+            \App\Services\Audit::tenant('inspection_template.delete', 'inspection_template', $uuid, ['nombre' => $t['name']], null);
+            Flash::add('success', 'Plantilla eliminada. Las inspecciones hechas con ella la conservan.');
+        }
+        return Response::redirect('/panel/inspecciones/plantillas');
+    }
+
     public function presets(Request $request): Response
     {
         try {

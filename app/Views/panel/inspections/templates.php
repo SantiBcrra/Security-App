@@ -20,6 +20,9 @@
                 </div>
                 <form method="post" action="<?= e(url('/panel/inspecciones/plantillas/' . $t['uuid'] . '/estado')) ?>"><?= csrf_field() ?>
                     <button class="btn btn-sm btn-outline-secondary"><?= $t['is_active'] ? 'Desactivar' : 'Activar' ?></button></form>
+                <form method="post" action="<?= e(url('/panel/inspecciones/plantillas/' . $t['uuid'] . '/eliminar')) ?>" class="ms-1"
+                      onsubmit="return confirm('¿Eliminar la plantilla? Deja de ofrecerse; las inspecciones hechas la conservan.')"><?= csrf_field() ?>
+                    <button class="btn btn-sm btn-outline-danger">Eliminar</button></form>
             </div>
         <?php endforeach; ?>
         <?php if (!$templates): ?><div class="list-group-item small text-body-secondary">Todavía no hay plantillas. Creá una o cargá las precargadas del rubro.</div><?php endif; ?>

@@ -46,7 +46,7 @@ abstract class Repository
 
     protected static function where(?string $search, bool $includeInactive, array $filters): array
     {
-        $where = [];
+        $where = ['t.deleted_at IS NULL']; // eliminados: no aparecen nunca (su historial queda)
         $params = [];
         if (!$includeInactive) {
             $where[] = 't.is_active = 1';
@@ -115,6 +115,26 @@ abstract class Repository
             ->execute([...array_values($data), $id]);
     }
 
+    /**
+     * Eliminar (baja lógica): deja de aparecer en listas y para elegir, y baja de los celulares; lo que ya lo usó conserva la
+     * referencia. Los campos únicos (código, DNI, nombre) se liberan para poder volver a cargarlo.
+     * @param list<string> $uniqueColumns
+     */
+    public static function softDelete(int $id, array $uniqueColumns = []): void
+    {
+        $sets = ['is_active = 0', 'deleted_at = UTC_TIMESTAMP()', 'updated_at = UTC_TIMESTAMP()'];
+        $len = DB::tenant()->prepare('SELECT CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?');
+        foreach ($uniqueColumns as $c) {
+            $len->execute([static::TABLE, $c]);
+            $max = (int) $len->fetchColumn();
+            // Columnas cortas (DNI, CUIT): "~id" al final, recortando el valor para que entre.
+            $suffix = $max >= 60 ? " [eliminado {$id}]" : "~{$id}";
+            $keep = max(0, ($max ?: 190) - mb_strlen($suffix));
+            $sets[] = "`{$c}` = IF(`{$c}` IS NULL, NULL, CONCAT(LEFT(`{$c}`, {$keep}), '{$suffix}'))";
+        }
+        DB::tenant()->prepare('UPDATE ' . static::TABLE . ' SET ' . implode(', ', $sets) . ' WHERE id = ?')->execute([$id]);
+    }
+
     public static function setActive(int $id, bool $active): void
     {
         static::update($id, ['is_active' => $active ? 1 : 0]);
@@ -124,7 +144,7 @@ abstract class Repository
     public static function options(?int $includeId = null): array
     {
         $stmt = DB::tenant()->prepare('SELECT t.id, t.uuid, t.' . static::labelColumn() . ' AS label FROM ' . static::TABLE
-            . ' t WHERE t.is_active = 1 OR t.id = ? ORDER BY ' . static::ORDER);
+            . ' t WHERE (t.is_active = 1 AND t.deleted_at IS NULL) OR t.id = ? ORDER BY ' . static::ORDER);
         $stmt->execute([$includeId ?? 0]);
         $options = [];
         foreach ($stmt->fetchAll() as $row) {

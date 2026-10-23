@@ -199,6 +199,18 @@ abstract class Resource
         return null;
     }
 
+    /** Motivo por el que no se puede eliminar, o null. Por defecto, lo mismo que para desactivar. */
+    public function canDelete(array $row): ?string
+    {
+        return $this->canDeactivate($row);
+    }
+
+    /** Columnas con valor único (se liberan al eliminar para poder volver a cargarlas). @return list<string> */
+    public function uniqueColumns(): array
+    {
+        return array_values(array_map(fn ($f) => $f['name'], array_filter($this->fields(null), fn ($f) => !empty($f['unique']))));
+    }
+
     protected function convert(array $f, mixed $value): mixed
     {
         return match ($f['type'] ?? 'text') {
