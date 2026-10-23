@@ -368,6 +368,56 @@ return [
         Push::run([$op('shift.end', ['slot_uuid' => $s, 'ended_at_device' => $iso(0)])]);
     },
 
+    'turnos: el supervisor edita (horario, guardia, corrección de horas reales con motivo), elimina y el generador lo respeta' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        DB::tenant()->exec('DELETE FROM guard_shift_positions'); DB::tenant()->exec('DELETE FROM guard_shift_exits'); DB::tenant()->exec('DELETE FROM guard_shift_slots');
+        [$data] = ShiftPlanner::validate(['site' => $st['site']['uuid'], 'pattern' => 'weekly', 'days' => [1, 2, 3, 4, 5, 6, 7],
+            'start_time' => '08:00', 'end_time' => '16:00', 'users' => [$st['g1']['uuid']], 'name' => 'Diurno edición']);
+        $shiftUuid = ShiftPlanner::save(null, $data);
+        $total = (int) DB::tenant()->query("SELECT COUNT(*) FROM guard_shift_slots WHERE status <> 'anulado'")->fetchColumn();
+        $slot = ShiftService::find((string) DB::tenant()->query("SELECT uuid FROM guard_shift_slots WHERE start_at > UTC_TIMESTAMP() ORDER BY start_at LIMIT 1")->fetchColumn());
+        $local = fn (string $utc, int $h) => (new DateTimeImmutable($utc . ' UTC'))->setTimezone(ShiftPlanner::tz())->modify("+{$h} hours")->format('Y-m-d\\TH:i');
+        // Cambiar guardia y correr la hora: el generador no lo vuelve a crear para el guardia original.
+        $edited = ShiftService::adminSave($slot, ['user' => $st['g2']['uuid'], 'site' => $st['site']['uuid'], 'start_at' => $local($slot['start_at'], 1),
+            'end_at' => $local($slot['end_at'], 1), 'note' => 'Cambio de cobertura']);
+        assert_same(['Guardia2', 'Cambio de cobertura'], [$edited['user_name'], $edited['edit_note']]);
+        ShiftPlanner::generate();
+        assert_same($total, (int) DB::tenant()->query("SELECT COUNT(*) FROM guard_shift_slots WHERE status <> 'anulado'")->fetchColumn(), 'no se duplica');
+        // Corrección de horas reales: exige motivo.
+        $past = ShiftService::find((string) DB::tenant()->query("SELECT uuid FROM guard_shift_slots WHERE end_at < UTC_TIMESTAMP() AND status <> 'anulado' ORDER BY start_at DESC LIMIT 1")->fetchColumn());
+        if ($past) {
+            $in = ['user' => $past['user_uuid'], 'site' => $st['site']['uuid'], 'start_at' => $local($past['start_at'], 0), 'end_at' => $local($past['end_at'], 0),
+                'started_at' => $local($past['start_at'], 0), 'ended_at' => $local($past['end_at'], 0)];
+            try { ShiftService::adminSave($past, $in); assert_true(false, 'sin motivo no'); } catch (App\Core\UserError) {}
+            $fixed = ShiftService::adminSave($past, $in + ['note' => 'No tenía batería, avisó por teléfono']);
+            assert_same(['cumplido', 'manual', 480], [$fixed['status'], $fixed['end_mode'], ShiftReport::measure($fixed)['worked']]);
+        }
+        // Eliminar: anulado con motivo, y el generador no lo reactiva.
+        try { ShiftService::adminCancel($edited, ''); assert_true(false); } catch (App\Core\UserError) {}
+        ShiftService::adminCancel($edited, 'Cargado por error');
+        ShiftPlanner::generate();
+        assert_same('anulado', ShiftService::find($edited['uuid'])['status']);
+        // Turno suelto
+        $one = ShiftService::adminSave(null, ['user' => $st['g3']['uuid'], 'site' => $st['site']['uuid'], 'start_at' => $local(gmdate('Y-m-d H:i:s'), 24),
+            'end_at' => $local(gmdate('Y-m-d H:i:s'), 32)]);
+        assert_same(['programado', null], [$one['status'], $one['shift_id']]);
+        try { ShiftService::adminSave(null, ['user' => $st['g3']['uuid'], 'site' => $st['site']['uuid'], 'start_at' => '2026-10-10T10:00', 'end_at' => '2026-10-10T09:00']); assert_true(false); } catch (App\Core\UserError) {}
+        UserAuth::setCurrent($st['g1']);
+        try { ShiftService::adminCancel($one, 'x'); assert_true(false, 'el guardia no edita turnos'); } catch (App\Core\UserError) {}
+        UserAuth::setCurrent($st['hys']);
+        // Eliminar la programación: anula los futuros que no fueron editados ni empezaron.
+        ShiftPlanner::delete(ShiftPlanner::find($shiftUuid));
+        assert_same(null, ShiftPlanner::find($shiftUuid));
+        assert_same(0, (int) DB::tenant()->query("SELECT COUNT(*) FROM guard_shift_slots t JOIN guard_shifts g ON g.id = t.shift_id WHERE g.uuid = '{$shiftUuid}'
+            AND t.status = 'programado' AND t.start_at > UTC_TIMESTAMP()")->fetchColumn());
+        $ctl = new \App\Controllers\Web\Panel\ShiftsController();
+        assert_true(str_contains($ctl->slotForm(new \App\Core\Request('GET', '/'), $one['uuid'])->body, 'Editar turno'));
+        assert_true(str_contains($ctl->show(new \App\Core\Request('GET', '/'), $one['uuid'])->body, '/eliminar'));
+        DB::tenant()->exec('DELETE FROM guard_shift_positions'); DB::tenant()->exec('DELETE FROM guard_shift_exits'); DB::tenant()->exec('DELETE FROM guard_shift_slots');
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

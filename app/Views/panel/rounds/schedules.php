@@ -63,6 +63,9 @@ $closed = $count['ok'] + $count['late'] + $count['missed'];
                 <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/panel/rondas/programacion/' . $sc['uuid'])) ?>">Editar</a>
                 <form method="post" action="<?= e(url('/panel/rondas/programacion/' . $sc['uuid'] . '/estado')) ?>" class="d-inline"><?= csrf_field() ?>
                     <button class="btn btn-sm btn-outline-<?= (int) $sc['is_active'] === 1 ? 'warning' : 'success' ?>"><?= (int) $sc['is_active'] === 1 ? 'Pausar' : 'Activar' ?></button></form>
+                <form method="post" action="<?= e(url('/panel/rondas/programacion/' . $sc['uuid'] . '/eliminar')) ?>" class="d-inline"
+                      onsubmit="return confirm('¿Eliminar esta programación? Se anulan sus rondas futuras; lo ya hecho queda en el historial.')"><?= csrf_field() ?>
+                    <button class="btn btn-sm btn-outline-danger">Eliminar</button></form>
             <?php endif; ?></td>
         </tr>
     <?php endforeach; ?>

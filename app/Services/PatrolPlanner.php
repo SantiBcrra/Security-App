@@ -135,6 +135,14 @@ final class PatrolPlanner
         if ($active) self::generate();
     }
 
+    /** Eliminar una programación: deja de generar rondas y se anulan las futuras pendientes (lo pasado queda). */
+    public static function delete(array $schedule): void
+    {
+        DB::tenant()->prepare('UPDATE patrol_schedules SET is_active = 0, deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([(int) $schedule['id']]);
+        self::dropFuture((int) $schedule['id']);
+        Audit::tenant('patrol_schedule.delete', 'patrol_schedule', $schedule['uuid'], ['ruta' => $schedule['route_name'] ?? null, 'horario' => self::describe($schedule)], null);
+    }
+
     /** Las pendientes que todavía no llegaron a su hora se borran (y bajan como baja al celular); las pasadas quedan como registro. */
     private static function dropFuture(int $scheduleId): void
     {

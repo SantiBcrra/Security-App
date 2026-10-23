@@ -54,6 +54,7 @@ final class ShiftService
 
     private const SELECT = 'SELECT t.*, u.name AS user_name, u.uuid AS user_uuid, s.uuid AS site_uuid, s.name AS site_name, s.lat AS site_lat,
             s.lng AS site_lng, s.geofence_radius_m AS site_radius, g.uuid AS shift_uuid, g.name AS shift_name,
+            (SELECT name FROM users eu WHERE eu.id = t.edited_by) AS edited_by_name,
             (SELECT COUNT(*) FROM guard_shift_exits e WHERE e.slot_id = t.id) AS exits_count,
             (SELECT e.uuid FROM guard_shift_exits e WHERE e.slot_id = t.id AND e.returned_at IS NULL ORDER BY e.left_at DESC LIMIT 1) AS open_exit_uuid
         FROM guard_shift_slots t JOIN users u ON u.id = t.user_id JOIN sites s ON s.id = t.site_id LEFT JOIN guard_shifts g ON g.id = t.shift_id';
@@ -142,6 +143,86 @@ final class ShiftService
         $radius = (int) ($slot['site_radius'] ?: 200) + self::toleranceM();
         $status = Patrols::locationStatus($d, $accuracy, $radius, $mock);
         return ['distance' => round($d, 2), 'inside' => in_array($status, ['ok', 'impreciso'], true), 'status' => $status];
+    }
+
+    // ── alta, edición y baja desde el panel (supervisor) ──────────
+
+    /** "2026-10-23T22:00" (hora de la empresa) → UTC 'Y-m-d H:i:s', o null. */
+    private static function localInput(mixed $v): ?string
+    {
+        $v = trim((string) $v);
+        if ($v === '' || !preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/', $v)) return null;
+        $d = \DateTimeImmutable::createFromFormat('Y-m-d H:i', substr(str_replace('T', ' ', $v), 0, 16), ShiftPlanner::tz());
+        return $d ? $d->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s') : null;
+    }
+
+    /**
+     * Crear un turno suelto (sin programación) o editar uno: guardia, predio, horario programado, tolerancia y, como
+     * corrección, el inicio y el fin reales (con motivo obligatorio: queda auditado con el antes y el después).
+     * @return array el turno guardado
+     */
+    public static function adminSave(?array $slot, array $in): array
+    {
+        if (!UserAuth::can('rondas', 'editar')) throw new UserError('No tenés permiso para editar turnos.');
+        $user = \App\Models\Users::findByUuid((string) ($in['user'] ?? ''));
+        if ($user === null || (int) $user['is_active'] !== 1) throw new UserError('Elegí el guardia.');
+        $site = \App\Models\Sites::findByUuid((string) ($in['site'] ?? ''));
+        if ($site === null) throw new UserError('Elegí el predio.');
+        $start = self::localInput($in['start_at'] ?? '') ?? throw new UserError('Indicá el inicio programado.');
+        $end = self::localInput($in['end_at'] ?? '') ?? throw new UserError('Indicá el fin programado.');
+        if ($end <= $start) throw new UserError('El fin tiene que ser posterior al inicio (para un turno nocturno, poné la fecha del día siguiente).');
+        if (strtotime($end . ' UTC') - strtotime($start . ' UTC') > 36 * 3600) throw new UserError('Un turno no puede durar más de 36 horas.');
+        $grace = ($in['grace_minutes'] ?? '') === '' ? ShiftPlanner::defaultGrace() : max(1, min(120, (int) $in['grace_minutes']));
+        $realStart = self::localInput($in['started_at'] ?? '');
+        $realEnd = self::localInput($in['ended_at'] ?? '');
+        if ($realEnd !== null && $realStart === null) throw new UserError('Para cargar el fin real, cargá también el inicio real.');
+        if ($realStart !== null && $realEnd !== null && $realEnd < $realStart) throw new UserError('El fin real es anterior al inicio real.');
+        if ($realStart !== null && strtotime($realStart . ' UTC') > time() + 300) throw new UserError('El inicio real no puede ser en el futuro.');
+        $note = mb_substr(trim((string) ($in['note'] ?? '')), 0, 500);
+        $realChanged = $slot === null ? $realStart !== null : ($realStart !== $slot['started_at'] || $realEnd !== $slot['ended_at']);
+        if ($realChanged && $note === '') throw new UserError('Explicá el motivo de la corrección del inicio o fin real (queda en la auditoría).');
+        if ($slot !== null && $note === '') $note = 'Editado desde el panel';
+        $status = match (true) {
+            $realStart !== null && $realEnd !== null => 'cumplido',
+            $realStart !== null => 'en_curso',
+            ($slot['status'] ?? '') === 'justificado' => 'justificado',
+            strtotime($end . ' UTC') <= time() => 'ausente',
+            default => 'programado',
+        };
+        $endMode = $realEnd === null ? null : ($slot !== null && $realEnd === $slot['ended_at'] ? $slot['end_mode'] : 'manual');
+        $db = DB::tenant();
+        $me = (int) UserAuth::user()['id'];
+        $data = ['user_id' => (int) $user['id'], 'site_id' => (int) $site['id'], 'start_at' => $start, 'end_at' => $end, 'grace_minutes' => $grace,
+            'started_at' => $realStart, 'ended_at' => $realEnd, 'end_mode' => $endMode, 'status' => $status];
+        if ($slot === null) {
+            $uuid = Uuid::v4();
+            $db->prepare("INSERT INTO guard_shift_slots (uuid, shift_id, user_id, site_id, start_at, end_at, grace_minutes, started_at, ended_at, end_mode, status,
+                unscheduled, edited_by, edited_at, edit_note, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, UTC_TIMESTAMP(), ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())")
+                ->execute([$uuid, $data['user_id'], $data['site_id'], $start, $end, $grace, $realStart, $realEnd, $endMode, $status, $me, $note ?: 'Turno cargado desde el panel']);
+            Audit::tenant('guard_shift_slot.create', 'guard_shift_slot', $uuid, null, $data + ['guardia' => $user['name'], 'predio' => $site['name'], 'motivo' => $note ?: null]);
+            return self::find($uuid);
+        }
+        $cols = array_keys($data);
+        $db->prepare('UPDATE guard_shift_slots SET ' . implode(', ', array_map(fn ($c) => "{$c} = ?", $cols)) . ', edited_by = ?, edited_at = UTC_TIMESTAMP(), edit_note = ?,
+            updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute(array_merge(array_values($data), [$me, $note, (int) $slot['id']]));
+        Audit::tenant('guard_shift_slot.update', 'guard_shift_slot', $slot['uuid'], array_intersect_key($slot, $data), $data + ['motivo' => $note]);
+        return self::findById((int) $slot['id']);
+    }
+
+    /** Eliminar (anular) un turno: deja de contar en horas y avisos; queda el registro con el motivo. No se reactiva solo. */
+    public static function adminCancel(array $slot, string $note): void
+    {
+        if (!UserAuth::can('rondas', 'editar')) throw new UserError('No tenés permiso para eliminar turnos.');
+        $note = mb_substr(trim($note), 0, 500);
+        if ($note === '') throw new UserError('Indicá el motivo.');
+        if ($slot['status'] === 'anulado') return;
+        foreach (self::exits((int) $slot['id']) as $e) {
+            if ($e['returned_at'] === null) self::closeExit($e, gmdate('Y-m-d H:i:s'));
+        }
+        DB::tenant()->prepare("UPDATE guard_shift_slots SET status = 'anulado', edited_by = ?, edited_at = UTC_TIMESTAMP(), edit_note = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?")
+            ->execute([(int) UserAuth::user()['id'], $note, (int) $slot['id']]);
+        Audit::tenant('guard_shift_slot.delete', 'guard_shift_slot', $slot['uuid'], ['estado' => $slot['status'], 'inicio_real' => $slot['started_at'],
+            'fin_real' => $slot['ended_at']], ['estado' => 'anulado', 'motivo' => $note]);
     }
 
     // ── operaciones de la app (idempotentes) ──────────────────────

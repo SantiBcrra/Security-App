@@ -67,6 +67,58 @@ final class ShiftsController
         ], 'layouts/app'));
     }
 
+    // ── un turno: alta suelta, edición y baja ────────────────────
+
+    public function slotForm(Request $request, ?string $uuid = null): Response
+    {
+        $slot = $uuid ? ShiftService::find($uuid) : null;
+        if ($uuid && !$slot) return new Response('', 404);
+        $old = Session::get('slot_old');
+        Session::forget('slot_old');
+        return Response::html(View::render('panel/shifts/slot_form', [
+            'title' => $slot ? 'Editar turno' : 'Nuevo turno', 'slot' => $slot, 'old' => $old, 'guards' => $this->guards(),
+            'sites' => \App\Models\Sites::list(), 'defaultGrace' => ShiftPlanner::defaultGrace(),
+            'day' => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $request->input('fecha', '')) ? (string) $request->input('fecha') : $this->localToday(),
+        ], 'layouts/app'));
+    }
+
+    public function slotStore(Request $request, ?string $uuid = null): Response
+    {
+        $slot = $uuid ? ShiftService::find($uuid) : null;
+        if ($uuid && !$slot) return new Response('', 404);
+        try {
+            $saved = ShiftService::adminSave($slot, $request->post);
+            Flash::add('success', $slot ? 'Turno actualizado.' : 'Turno cargado.');
+            return Response::redirect('/panel/rondas/turno/' . $saved['uuid']);
+        } catch (UserError $e) {
+            Flash::add('danger', $e->getMessage());
+            Session::put('slot_old', $request->post);
+            return Response::redirect($slot ? '/panel/rondas/turno/' . $slot['uuid'] . '/editar' : '/panel/rondas/turno/nuevo');
+        }
+    }
+
+    public function slotDelete(Request $request, string $uuid): Response
+    {
+        $slot = ShiftService::find($uuid);
+        if (!$slot) return new Response('', 404);
+        try {
+            ShiftService::adminCancel($slot, (string) $request->input('note', ''));
+            Flash::add('success', 'Turno eliminado (anulado): no cuenta en las horas ni genera avisos. Queda el registro con el motivo.');
+        } catch (UserError $e) {
+            Flash::add('danger', $e->getMessage());
+        }
+        return Response::redirect('/panel/rondas/turno/' . $uuid);
+    }
+
+    public function scheduleDelete(Request $request, string $uuid): Response
+    {
+        if ($shift = ShiftPlanner::find($uuid)) {
+            ShiftPlanner::delete($shift);
+            Flash::add('success', 'Programación eliminada: se anularon sus turnos futuros. Los turnos ya hechos quedan.');
+        }
+        return Response::redirect('/panel/rondas/turnos/programacion');
+    }
+
     // ── programación ─────────────────────────────────────────────
 
     public function schedules(Request $request): Response

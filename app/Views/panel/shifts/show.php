@@ -17,7 +17,26 @@ $dur = function (?string $a, ?string $b): string {
     <h2 class="h4 m-0"><?= e($slot['user_name']) ?> · <?= e($slot['site_name']) ?></h2>
     <span class="badge text-bg-<?= e($color) ?> fs-6"><?= e($label) ?></span>
     <?= $slot['unscheduled'] ? '<span class="badge text-bg-light">no programado</span>' : '' ?>
+    <?php if (App\Services\UserAuth::can('rondas', 'editar') && $slot['status'] !== 'anulado'): ?>
+        <span class="ms-auto d-flex gap-2">
+            <a class="btn btn-sm btn-outline-primary" href="<?= e(url('/panel/rondas/turno/' . $slot['uuid'] . '/editar')) ?>">Editar</a>
+            <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#del-slot">Eliminar</button>
+        </span>
+    <?php endif; ?>
 </div>
+<div class="collapse mb-3" id="del-slot">
+    <form method="post" action="<?= e(url('/panel/rondas/turno/' . $slot['uuid'] . '/eliminar')) ?>" class="card card-body border-danger" style="max-width: 640px">
+        <?= csrf_field() ?>
+        <p class="small mb-2">El turno queda <strong>anulado</strong>: no cuenta en las horas trabajadas, no genera avisos y desaparece de la app del guardia.
+            El registro queda con el motivo (no se borra la historia). <?= $slot['status'] === 'en_curso' ? '<strong>El guardia está en turno ahora: se corta.</strong>' : '' ?></p>
+        <div class="d-flex gap-2"><input class="form-control form-control-sm" name="note" required maxlength="500" placeholder="Motivo (ej. cargado por error, cambio de cobertura)">
+            <button class="btn btn-sm btn-danger">Eliminar turno</button></div>
+    </form>
+</div>
+<?php if ($slot['edited_at']): ?>
+    <div class="alert alert-light border small py-2"><?= $slot['status'] === 'anulado' ? 'Anulado' : 'Editado' ?> por <?= e($slot['edited_by_name'] ?? '—') ?> el <?= e(fecha($slot['edited_at'], 'd/m/Y H:i')) ?>
+        <?= $slot['edit_note'] ? '· «' . e($slot['edit_note']) . '»' : '' ?></div>
+<?php endif; ?>
 
 <div class="row g-3 mb-3">
     <div class="col-md-3"><div class="card h-100"><div class="card-body py-2"><div class="small text-body-secondary">Programado</div>

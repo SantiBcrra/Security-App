@@ -854,6 +854,25 @@ return [
         Push::run([$op('round.finish', ['round_uuid' => $round, 'finished_at_device' => gmdate('Y-m-d\\TH:i:s\\Z')])]);
     },
 
+    'rutas y programaciones: eliminar (baja lógica, deja de llegar al celular, anula lo futuro, el historial queda)' => function () use ($setup, &$st) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $rid = Patrols::createRoute(['name' => 'Para borrar', 'description' => '', 'frequency' => '', 'expected_minutes' => 10, 'point_ids' => [$st['p1']], 'user_ids' => [(int) $st['g1']['id']]]);
+        $route = Patrols::route((string) DB::tenant()->query("SELECT uuid FROM patrol_routes WHERE id = {$rid}")->fetchColumn());
+        [$data] = \App\Services\PatrolPlanner::validate(['route' => $route['uuid'], 'mode' => 'fixed', 'times' => '23:59', 'days' => [1, 2, 3, 4, 5, 6, 7], 'max_delay_minutes' => 30]);
+        $sched = \App\Services\PatrolPlanner::save(null, $data);
+        $ctl = new \App\Controllers\Web\Panel\RoundsController();
+        $ctl->routeDelete(new \App\Core\Request('POST', '/'), $route['uuid']);
+        assert_true(Patrols::route($route['uuid'])['deleted_at'] !== null);
+        assert_true(!in_array('Para borrar', array_column(Patrols::routes(), 'name'), true), 'fuera de la lista');
+        assert_same(null, \App\Services\PatrolPlanner::find($sched), 'su programación también');
+        assert_same(0, (int) DB::tenant()->query("SELECT COUNT(*) FROM patrol_slots WHERE route_id = {$rid} AND status = 'pendiente' AND due_at > UTC_TIMESTAMP()")->fetchColumn());
+        UserAuth::setCurrent($st['g1']);
+        $page = \App\Services\Sync\Pull::run(null, 1000);
+        assert_true(in_array($route['uuid'], (array) ($page['deleted']->patrol_routes ?? []), true), 'al celular le llega como baja');
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

@@ -28,6 +28,10 @@ use App\Services\ShiftPlanner;
                         <form method="post" action="<?= e(url('/panel/rondas/turnos/programacion/' . $s['uuid'] . '/estado')) ?>" class="d-inline">
                             <?= csrf_field() ?><button class="btn btn-sm btn-outline-secondary"><?= (int) $s['is_active'] === 1 ? 'Pausar' : 'Activar' ?></button>
                         </form>
+                        <form method="post" action="<?= e(url('/panel/rondas/turnos/programacion/' . $s['uuid'] . '/eliminar')) ?>" class="d-inline"
+                              onsubmit="return confirm('¿Eliminar esta programación? Se anulan sus turnos futuros; los ya hechos quedan en el historial.')">
+                            <?= csrf_field() ?><button class="btn btn-sm btn-outline-danger">Eliminar</button>
+                        </form>
                     <?php endif; ?>
                 </td>
             </tr>

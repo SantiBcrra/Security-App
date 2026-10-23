@@ -108,8 +108,18 @@ final class ShiftPlanner
     /** Los turnos futuros que todavía no empezaron se anulan (baja al celular) y se vuelven a generar con lo nuevo. */
     private static function dropFuture(int $shiftId): void
     {
+        // Los editados a mano por un supervisor se respetan.
         DB::tenant()->prepare("UPDATE guard_shift_slots SET status = 'anulado', updated_at = UTC_TIMESTAMP()
-            WHERE shift_id = ? AND status IN ('programado', 'justificado') AND start_at > UTC_TIMESTAMP()")->execute([$shiftId]);
+            WHERE shift_id = ? AND status IN ('programado', 'justificado') AND start_at > UTC_TIMESTAMP() AND edited_at IS NULL")->execute([$shiftId]);
+    }
+
+    /** Eliminar una programación: deja de generar turnos y se anulan los futuros que no empezaron (lo pasado queda). */
+    public static function delete(array $shift): void
+    {
+        DB::tenant()->prepare('UPDATE guard_shifts SET is_active = 0, deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([(int) $shift['id']]);
+        DB::tenant()->prepare("UPDATE guard_shift_slots SET status = 'anulado', updated_at = UTC_TIMESTAMP()
+            WHERE shift_id = ? AND status IN ('programado', 'justificado') AND start_at > UTC_TIMESTAMP()")->execute([(int) $shift['id']]);
+        Audit::tenant('guard_shift.delete', 'guard_shift', $shift['uuid'], ['nombre' => $shift['name'], 'horario' => self::describe($shift)], null);
     }
 
     public static function find(string $uuid): ?array
@@ -201,12 +211,37 @@ final class ShiftPlanner
         $from = $local->modify('-1 day')->format('Y-m-d');
         $to = $local->modify('+' . self::AHEAD_DAYS . ' days')->format('Y-m-d');
         $db = DB::tenant();
-        // Un turno anulado (se editó la programación) que vuelve a quedar igual se reactiva.
-        $insert = $db->prepare("INSERT INTO guard_shift_slots (uuid, shift_id, user_id, site_id, start_at, end_at, grace_minutes, status, absence_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())
-            ON DUPLICATE KEY UPDATE end_at = IF(status = 'anulado', VALUES(end_at), end_at), grace_minutes = IF(status = 'anulado', VALUES(grace_minutes), grace_minutes),
-                absence_id = IF(status = 'anulado', VALUES(absence_id), absence_id), updated_at = IF(status = 'anulado', UTC_TIMESTAMP(), updated_at),
-                status = IF(status = 'anulado', VALUES(status), status)");
+        // Cada turno recuerda su origen (programación + guardia + hora originales): si un supervisor lo editó (otra hora u otro
+        // guardia) o lo dio de baja a mano, no se vuelve a crear ni se reactiva. Uno anulado por editar la programación que
+        // vuelve a quedar igual, sí se reactiva.
+        $find = $db->prepare('SELECT id, status, edited_at FROM guard_shift_slots WHERE shift_id = ? AND COALESCE(origin_user_id, user_id) = ?
+            AND COALESCE(origin_start_at, start_at) = ? LIMIT 1');
+        $insertRow = $db->prepare("INSERT INTO guard_shift_slots (uuid, shift_id, origin_user_id, origin_start_at, user_id, site_id, start_at, end_at, grace_minutes,
+            status, absence_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
+        $revive = $db->prepare("UPDATE guard_shift_slots SET end_at = ?, grace_minutes = ?, absence_id = ?, status = ?, updated_at = UTC_TIMESTAMP()
+            WHERE id = ? AND status = 'anulado' AND edited_at IS NULL");
+        $insert = new class ($find, $insertRow, $revive) {
+            public int $last = 0;
+            public function __construct(private \PDOStatement $find, private \PDOStatement $insert, private \PDOStatement $revive) {}
+            public function execute(array $v): void
+            {
+                [$uuid, $shift, $user, $site, $start, $end, $grace, $status, $absence] = $v;
+                $this->last = 0;
+                $this->find->execute([$shift, $user, $start]);
+                $row = $this->find->fetch();
+                if ($row === false) {
+                    try {
+                        $this->insert->execute([$uuid, $shift, $user, $start, $user, $site, $start, $end, $grace, $status, $absence]);
+                        $this->last = 1;
+                    } catch (\PDOException) {
+                        // otro turno editado ocupa exactamente ese horario y guardia: no se duplica
+                    }
+                } elseif ($row['status'] === 'anulado' && $row['edited_at'] === null) {
+                    $this->revive->execute([$end, $grace, $absence, $status, (int) $row['id']]);
+                }
+            }
+            public function rowCount(): int { return $this->last; }
+        };
         $created = 0;
         $touched = [];
         $shifts = $db->query('SELECT * FROM guard_shifts WHERE is_active = 1 AND deleted_at IS NULL')->fetchAll();

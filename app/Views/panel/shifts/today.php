@@ -39,6 +39,7 @@ $card = fn (string $title, int $n, string $hint, string $color) => '<div class="
 <?php endif; ?>
 
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <?php if ($canEdit): ?><a class="btn btn-sm btn-primary order-last ms-auto" href="<?= e(url('/panel/rondas/turno/nuevo?fecha=' . $day)) ?>">+ Turno suelto</a><?php endif; ?>
     <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/panel/rondas/turnos?fecha=' . $prev)) ?>">‹</a>
     <form method="get"><input type="date" name="fecha" value="<?= e($day) ?>" class="form-control form-control-sm" onchange="this.form.submit()"></form>
     <a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/panel/rondas/turnos?fecha=' . $next)) ?>">›</a>

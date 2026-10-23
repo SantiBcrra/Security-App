@@ -65,6 +65,15 @@ final class PatrolSchedulesController
         return Response::redirect('/panel/rondas/programacion');
     }
 
+    public function delete(Request $request, string $uuid): Response
+    {
+        if ($schedule = PatrolPlanner::find($uuid)) {
+            PatrolPlanner::delete($schedule);
+            Flash::add('success', 'Programación eliminada: se anularon sus rondas futuras. Lo ya hecho queda.');
+        }
+        return Response::redirect('/panel/rondas/programacion');
+    }
+
     public function toggle(Request $request, string $uuid): Response
     {
         $schedule = PatrolPlanner::find($uuid);

@@ -258,7 +258,13 @@ return static function (Router $r): void {
         $r->post('/libro/{uuid}/recibir', [\App\Controllers\Web\Panel\LogbookController::class, 'receive'], [$can('libro', 'crear')]);
         $r->get('/libro/archivo/{uuid}/{what}', [\App\Controllers\Web\Panel\LogbookController::class, 'file'], [$can('libro', 'ver')]);
         $r->get('/rondas/turnos', [\App\Controllers\Web\Panel\ShiftsController::class, 'today'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/turno/nuevo', [\App\Controllers\Web\Panel\ShiftsController::class, 'slotForm'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turno/nuevo', [\App\Controllers\Web\Panel\ShiftsController::class, 'slotStore'], [$can('rondas', 'editar')]);
         $r->get('/rondas/turno/{uuid}', [\App\Controllers\Web\Panel\ShiftsController::class, 'show'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/turno/{uuid}/editar', [\App\Controllers\Web\Panel\ShiftsController::class, 'slotForm'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turno/{uuid}', [\App\Controllers\Web\Panel\ShiftsController::class, 'slotStore'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turno/{uuid}/eliminar', [\App\Controllers\Web\Panel\ShiftsController::class, 'slotDelete'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turnos/programacion/{uuid}/eliminar', [\App\Controllers\Web\Panel\ShiftsController::class, 'scheduleDelete'], [$can('rondas', 'editar')]);
         $r->get('/rondas/turnos/programacion', [\App\Controllers\Web\Panel\ShiftsController::class, 'schedules'], [$can('rondas', 'ver')]);
         $r->get('/rondas/turnos/programacion/nuevo', [\App\Controllers\Web\Panel\ShiftsController::class, 'form'], [$can('rondas', 'editar')]);
         $r->post('/rondas/turnos/programacion', [\App\Controllers\Web\Panel\ShiftsController::class, 'store'], [$can('rondas', 'editar')]);
@@ -281,6 +287,8 @@ return static function (Router $r): void {
         $r->get('/rondas/programacion/{uuid}', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'form'], [$can('rondas', 'editar')]);
         $r->post('/rondas/programacion/{uuid}', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'store'], [$can('rondas', 'editar')]);
         $r->post('/rondas/programacion/{uuid}/estado', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'toggle'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/programacion/{uuid}/eliminar', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'delete'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/rutas/{uuid}/eliminar', [RoundsController::class, 'routeDelete'], [$can('rondas', 'editar')]);
         $r->get('/rondas/rutas/nueva', [RoundsController::class, 'routeForm'], [$can('rondas', 'crear')]);
         $r->get('/rondas/ronda/{uuid}', [RoundsController::class, 'round'], [$can('rondas', 'ver')]);
         $r->get('/rondas/ronda/{uuid}/vivo', [RoundsController::class, 'roundLive'], [$can('rondas', 'ver')]);

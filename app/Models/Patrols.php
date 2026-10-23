@@ -205,6 +205,20 @@ final class Patrols
     }
 
     /** Edición: datos, puntos en el nuevo orden y guardias. Toca updated_at para que la ruta vuelva a bajar a los celulares. */
+    /**
+     * Eliminar una ruta (baja lógica): deja de verse y baja de los celulares; sus programaciones se eliminan y se anulan las
+     * rondas programadas futuras. Las rondas ya hechas conservan la ruta en su historial. Una ronda en curso puede terminar.
+     */
+    public static function deleteRoute(array $route): void
+    {
+        $db = DB::tenant();
+        $db->prepare('UPDATE patrol_routes SET is_active = 0, deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([(int) $route['id']]);
+        $db->prepare('UPDATE patrol_schedules SET is_active = 0, deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE route_id = ? AND deleted_at IS NULL')
+            ->execute([(int) $route['id']]);
+        $db->prepare("UPDATE patrol_slots SET status = 'anulada', updated_at = UTC_TIMESTAMP() WHERE route_id = ? AND status = 'pendiente' AND due_at > UTC_TIMESTAMP()")
+            ->execute([(int) $route['id']]);
+    }
+
     public static function updateRoute(int $id, array $data): void
     {
         $db = DB::tenant();

@@ -200,6 +200,16 @@ final class RoundsController
         return Response::redirect('/panel/rondas/puntos');
     }
 
+    public function routeDelete(Request $request, string $uuid): Response
+    {
+        $route = Patrols::route($uuid);
+        if (!$route || $route['deleted_at'] !== null) return Response::redirect('/panel/rondas/rutas');
+        Patrols::deleteRoute($route);
+        Audit::tenant('patrol_route.delete', 'patrol_route', $uuid, ['nombre' => $route['name']], null);
+        Flash::add('success', "Ruta «{$route['name']}» eliminada: deja de llegar a los celulares y se anularon sus rondas programadas futuras. Las rondas ya hechas quedan en el historial.");
+        return Response::redirect('/panel/rondas/rutas');
+    }
+
     /** Alta y edición de ruta: puntos en orden (arrastrar o ↑↓, también tocándolos en el mapa), modo de orden y guardias. */
     public function routeForm(Request $request, ?string $uuid = null): Response
     {
