@@ -61,6 +61,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
@@ -312,9 +316,21 @@ private fun HomeBottomBar(selected: String, onHome: () -> Unit, onActivity: () -
             NavigationBarItem(selected = selected == "notices", onClick = onNotices, icon = { Icon(Icons.Filled.Notifications, "Avisos") }, label = { Text("Avisos") }, colors = itemColors)
             NavigationBarItem(selected = selected == "more", onClick = onMore, icon = { Icon(Icons.Filled.Menu, "Más") }, label = { Text("Más") }, colors = itemColors)
         }
-        IconButton(onClick = onScan, modifier = Modifier.align(Alignment.TopCenter).offset(y = 8.dp).size(64.dp).zIndex(2f)) {
-            Icon(painterResource(R.drawable.ic_qr), "Escanear QR", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurface)
+        // Botón central de escaneo: círculo amarillo que sobresale de la barra (borde del color de la barra para el "recorte"),
+        // ícono estándar de escanear QR en blanco y la palabra "Escanear" alineada con las otras pestañas.
+        val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        Box(Modifier.align(Alignment.TopCenter).offset(y = (-26).dp).size(68.dp).zIndex(2f).pressScale(interaction)
+            .shadow(8.dp, androidx.compose.foundation.shape.CircleShape, ambientColor = Color.Black, spotColor = Color.Black)
+            .background(BarBg, androidx.compose.foundation.shape.CircleShape).padding(4.dp)
+            .background(Accent, androidx.compose.foundation.shape.CircleShape)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(color = Color.White), onClick = onScan)
+            .semantics { role = androidx.compose.ui.semantics.Role.Button },
+            contentAlignment = Alignment.Center) {
+            Icon(painterResource(R.drawable.ic_qr_scan), "Escanear QR", Modifier.size(32.dp), tint = Color.White)
         }
+        Text("Escanear", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp).zIndex(2f))
     }
 }
 
