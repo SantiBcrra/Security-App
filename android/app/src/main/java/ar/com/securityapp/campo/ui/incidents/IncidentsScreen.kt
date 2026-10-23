@@ -1,10 +1,12 @@
 package ar.com.securityapp.campo.ui.incidents
 
+import ar.com.securityapp.campo.ui.AppBackHandler
+import ar.com.securityapp.campo.ui.theme.*
+
 import android.app.Application
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,12 +84,6 @@ import ar.com.securityapp.campo.ui.observations.Section
 import ar.com.securityapp.campo.ui.observations.TopBar
 import ar.com.securityapp.campo.ui.observations.hour
 import ar.com.securityapp.campo.ui.rounds.QrScanner
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.Brand
-import ar.com.securityapp.campo.ui.theme.BrandDark
-import ar.com.securityapp.campo.ui.theme.Danger
-import ar.com.securityapp.campo.ui.theme.Muted
-import ar.com.securityapp.campo.ui.theme.Ok
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -177,10 +173,10 @@ fun IncidentesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean
         null -> {}
         else -> { IncidentDetail(vm, p, onBack = { page = null }); return }
     }
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val items by vm.items.collectAsStateWithLifecycle()
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { if (showTopBar) TopBar("Incidentes", onBack) }, floatingActionButton = {
-        if (canCreate) ExtendedFloatingActionButton({ vm.newForm(); page = "nuevo" }, containerColor = Accent, contentColor = BrandDark) {
+        if (canCreate) ExtendedFloatingActionButton({ vm.newForm(); page = "nuevo" }, containerColor = Accent, contentColor = OnAccent) {
             Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Reportar", fontWeight = FontWeight.Bold)
         }
     }) { padding ->
@@ -190,12 +186,12 @@ fun IncidentesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean
                 Text("No reportaste incidentes. Si alguien se lastima o pasa algo que pudo terminar mal, tocá \"Reportar\": funciona sin señal.", color = Muted)
             }
             items(items, key = { it.uuid }) { i ->
-                Card(Modifier.fillMaxWidth().clickable { if (!i.local) page = i.uuid }, colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(Modifier.fillMaxWidth().clickable { if (!i.local) page = i.uuid }, colors = CardDefaults.cardColors(containerColor = CardBg)) {
                     Column(Modifier.padding(14.dp)) {
                         Row {
                             Text(i.code ?: "Nuevo", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
                             Spacer(Modifier.width(8.dp))
-                            Text(i.typeLabel, color = if (INCIDENT_TYPES.firstOrNull { it.key == i.type }?.injured == true) Danger else Brand,
+                            Text(i.typeLabel, color = if (INCIDENT_TYPES.firstOrNull { it.key == i.type }?.injured == true) Danger else Ink,
                                 style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                             Text(hour(i.occurredAt), style = MaterialTheme.typography.labelSmall, color = Muted)
                         }
@@ -203,7 +199,7 @@ fun IncidentesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean
                         when {
                             i.failure != null -> Text("Rechazado: ${i.failure}", color = Danger, style = MaterialTheme.typography.bodySmall)
                             i.local -> Text("Pendiente de enviar (se manda solo con señal)", color = BrandDark, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                            else -> Text(i.statusLabel, color = if (i.status == "cerrado") Ok else Brand, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                            else -> Text(i.statusLabel, color = if (i.status == "cerrado") Ok else Ink, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -216,6 +212,7 @@ fun IncidentesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean
 
 @Composable
 private fun IncidentFormScreen(vm: IncidentsViewModel, onBack: () -> Unit, onSaved: () -> Unit) {
+    val haptics = ar.com.securityapp.campo.ui.rememberHaptics()
     val f by vm.form.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var scanning by remember { mutableStateOf(false) }
@@ -236,7 +233,7 @@ private fun IncidentFormScreen(vm: IncidentsViewModel, onBack: () -> Unit, onSav
         PersonForm(vm, onCancel = { addingPerson = false }, onAdd = { p -> addingPerson = false; vm.update { it.copy(people = it.people + p) } })
         return
     }
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val type = INCIDENT_TYPES.firstOrNull { it.key == f.type }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar("Reportar incidente", onBack)
@@ -245,8 +242,8 @@ private fun IncidentFormScreen(vm: IncidentsViewModel, onBack: () -> Unit, onSav
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     INCIDENT_TYPES.forEach { t ->
                         val on = t.key == f.type
-                        Column(Modifier.fillMaxWidth().background(if (on) (if (t.injured) Danger else Brand) else Color.White, RoundedCornerShape(12.dp))
-                            .border(1.dp, if (on) Color.Transparent else Color(0xFFD5D8E0), RoundedCornerShape(12.dp))
+                        Column(Modifier.fillMaxWidth().background(if (on) (if (t.injured) Danger else Brand) else CardBg, RoundedCornerShape(12.dp))
+                            .border(1.dp, if (on) Color.Transparent else BorderC, RoundedCornerShape(12.dp))
                             .clickable { vm.update { it.copy(type = t.key) } }.padding(horizontal = 14.dp, vertical = 10.dp)) {
                             Text(t.label, fontWeight = FontWeight.Bold, color = if (on) Color.White else MaterialTheme.colorScheme.onSurface)
                             Text(t.hint, style = MaterialTheme.typography.bodySmall, color = if (on) Color(0xFFEDEFF4) else Muted)
@@ -290,7 +287,7 @@ private fun IncidentFormScreen(vm: IncidentsViewModel, onBack: () -> Unit, onSav
             }
             Section("Personas" + if (type?.injured == true) " (indicá quién se lastimó)" else " (opcional)") {
                 f.people.forEach { p ->
-                    Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(10.dp)).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().background(CardBg, RoundedCornerShape(10.dp)).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                             Text(p.label, fontWeight = FontWeight.SemiBold)
                             Text(PERSON_ROLES[p.role] + if (p.employee == null) " · externo" else "", style = MaterialTheme.typography.bodySmall,
@@ -316,9 +313,9 @@ private fun IncidentFormScreen(vm: IncidentsViewModel, onBack: () -> Unit, onSav
             Section("Fotos (${f.photos.size}/6)") { PhotosField(f.photos, 6) { list -> vm.update { it.copy(photos = list) } } }
             Text("No saques fotos de heridas: las fotos las ve cualquiera que vea el incidente. Los datos médicos se cargan en la web.", style = MaterialTheme.typography.bodySmall, color = Muted)
             f.errors.forEach { Text(it, color = Danger) }
-            Button({ vm.save(onSaved) }, Modifier.fillMaxWidth().height(56.dp), enabled = !f.saving,
-                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
-                if (f.saving) CircularProgressIndicator(strokeWidth = 2.dp, color = BrandDark)
+            Button({ haptics.confirm(); vm.save(onSaved) }, Modifier.fillMaxWidth().height(56.dp), enabled = !f.saving,
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
+                if (f.saving) CircularProgressIndicator(strokeWidth = 2.dp, color = OnAccent)
                 else Text("Enviar reporte", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             }
             Text("Si no hay señal queda guardado en el celular y se envía solo al reconectar.", style = MaterialTheme.typography.bodySmall, color = Muted)
@@ -338,7 +335,7 @@ private fun IncidentFormScreen(vm: IncidentsViewModel, onBack: () -> Unit, onSav
 /** Alta de una persona: empleado (buscando en los sincronizados) o externo. */
 @Composable
 private fun PersonForm(vm: IncidentsViewModel, onCancel: () -> Unit, onAdd: (IncidentPerson) -> Unit) {
-    BackHandler(onBack = onCancel)
+    AppBackHandler(onBack = onCancel)
     var p by remember { mutableStateOf(IncidentPerson(role = "lesionado")) }
     var external by remember { mutableStateOf(false) }
     var pickEmployee by remember { mutableStateOf(false) }
@@ -350,8 +347,8 @@ private fun PersonForm(vm: IncidentsViewModel, onCancel: () -> Unit, onAdd: (Inc
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PERSON_ROLES.forEach { (key, label) ->
                         val on = p.role == key
-                        Text(label, Modifier.weight(1f).background(if (on) Brand else Color.White, RoundedCornerShape(12.dp))
-                            .border(1.dp, if (on) Color.Transparent else Color(0xFFD5D8E0), RoundedCornerShape(12.dp))
+                        Text(label, Modifier.weight(1f).background(if (on) Brand else CardBg, RoundedCornerShape(12.dp))
+                            .border(1.dp, if (on) Color.Transparent else BorderC, RoundedCornerShape(12.dp))
                             .clickable { p = p.copy(role = key) }.padding(vertical = 14.dp),
                             color = if (on) Color.White else MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center)
@@ -382,7 +379,7 @@ private fun PersonForm(vm: IncidentsViewModel, onCancel: () -> Unit, onAdd: (Inc
             error?.let { Text(it, color = Danger) }
             Button({
                 if (p.employee == null && p.externalName.trim().length < 3) error = "Elegí el empleado o escribí el nombre." else onAdd(p)
-            }, Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = Brand)) { Text("Agregar", fontWeight = FontWeight.Bold) }
+            }, Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = androidx.compose.ui.graphics.Color.White)) { Text("Agregar", fontWeight = FontWeight.Bold) }
         }
     }
     if (pickEmployee) SearchDialog("Empleado", vm.employees.map { it.uuid to it.name }, onPick = { id ->
@@ -393,7 +390,7 @@ private fun PersonForm(vm: IncidentsViewModel, onCancel: () -> Unit, onAdd: (Inc
 @Composable
 private fun IncidentDetail(vm: IncidentsViewModel, uuid: String, onBack: () -> Unit) {
     LaunchedEffect(uuid) { vm.openDetail(uuid) }
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val d by vm.detail.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar(d?.str("code") ?: "Incidente", onBack)
@@ -401,7 +398,7 @@ private fun IncidentDetail(vm: IncidentsViewModel, uuid: String, onBack: () -> U
         if (data == null) { Text("Cargando… (necesita señal)", Modifier.padding(16.dp), color = Muted); return@Column }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(data.str("type_label"), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Text(data.str("status_label"), color = Brand, fontWeight = FontWeight.SemiBold)
+            Text(data.str("status_label"), color = Ink, fontWeight = FontWeight.SemiBold)
             Text(data.str("description"))
             Info("Cuándo", hour(data.strOrNull("occurred_at")))
             Info("Sector", data.strOrNull("sector")); Info("Equipo", data.strOrNull("equipment")); Info("Lugar", data.strOrNull("location"))

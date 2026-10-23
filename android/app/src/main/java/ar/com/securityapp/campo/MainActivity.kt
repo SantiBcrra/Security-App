@@ -16,7 +16,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        ar.com.securityapp.campo.ui.theme.ThemeMode.value = (application as CampoApp).container.prefs.themeMode
+        // La barra superior de la app siempre es oscura (pizarra): íconos del sistema claros en los dos temas.
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.BLACK),
+        )
         handleIntent(intent)
         setContent {
             SecurityAppTheme {

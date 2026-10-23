@@ -1,8 +1,8 @@
 package ar.com.securityapp.campo.panic
 
+import ar.com.securityapp.campo.ui.AppBackHandler
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -74,7 +74,7 @@ fun PanicButton(onTrigger: () -> Unit) {
 /** Pantalla después de activar el pánico: cómo salió el aviso y botones para llamar. */
 @Composable
 fun PanicScreen(result: PanicManager.Result?, onClose: () -> Unit) {
-    BackHandler(enabled = result != null, onBack = onClose)
+    AppBackHandler(enabled = result != null, onBack = onClose)
     val context = LocalContext.current
     Column(Modifier.fillMaxSize().background(Color(0xFF7A1420)).systemBarsPadding().padding(24.dp), verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally) {

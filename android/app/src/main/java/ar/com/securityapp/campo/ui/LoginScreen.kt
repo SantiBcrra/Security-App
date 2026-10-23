@@ -1,5 +1,7 @@
 package ar.com.securityapp.campo.ui
 
+import ar.com.securityapp.campo.ui.theme.*
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -47,9 +49,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import ar.com.securityapp.campo.BuildConfig
 import ar.com.securityapp.campo.R
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.Brand
-import ar.com.securityapp.campo.ui.theme.BrandDark
 
 @Composable
 fun LoginScreen(vm: SessionViewModel, state: Screen.Login) {
@@ -73,7 +72,7 @@ fun LoginScreen(vm: SessionViewModel, state: Screen.Login) {
             Text("Security App", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("Seguridad e Higiene en planta", color = Color(0xFFB4BACB), style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(24.dp))
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBg)) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Ingresar", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     OutlinedTextField(empresa, { empresa = it.lowercase().trim() }, Modifier.fillMaxWidth(), label = { Text("Empresa") },
@@ -94,7 +93,7 @@ fun LoginScreen(vm: SessionViewModel, state: Screen.Login) {
                         onClick = { vm.setServer(server); vm.login(empresa, usuario, password, totp) },
                         enabled = !state.busy,
                         modifier = Modifier.fillMaxWidth().height(52.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Brand),
+                        colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = androidx.compose.ui.graphics.Color.White),
                     ) {
                         if (state.busy) CircularProgressIndicator(Modifier.size(22.dp), color = Accent, strokeWidth = 2.dp) else Text("Ingresar", fontWeight = FontWeight.SemiBold)
                     }

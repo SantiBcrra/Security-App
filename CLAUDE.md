@@ -154,6 +154,23 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - El logo compartido por la marca se guarda en `android/app/src/main/res/drawable/security_logo.png` y se usa en el ícono adaptable, el ingreso y el encabezado. Se conserva la paleta `Brand`/`Accent` existente; no se agregan librerías ni servicios.
 - Los avisos de pánico que incluyen una URL de Google Maps muestran además el botón `Abrir ubicación`, que lanza la aplicación de mapas o el navegador mediante `ACTION_VIEW`; no hace falta copiar coordenadas manualmente.
 
+### App Android — movimiento y modo oscuro (versión 1.4.0, `versionCode 18`)
+- **Navegación**: `HomeScreen` arma una sola "ruta" (`home`, `avisos`, `settings`, `shifts`, `panic`, `m:{módulo}`) dentro de un
+  único `Scaffold`: las barras superior e inferior quedan fijas y solo el contenido se anima con `AnimatedContent` +
+  `routeTransition` (`ui/Motion.kt`: entrar a un módulo desliza desde la derecha, volver al revés, pestañas con fundido; 150–300 ms,
+  curvas emphasized). Navegar = `leave()` + abrir la ruta (refresca contadores/avisos como antes).
+- **Atrás predictivo**: usar SIEMPRE `AppBackHandler` (no `BackHandler`): con `android:enableOnBackInvokedCallback` la pantalla
+  acompaña el gesto en Android 14+ (`LocalBackProgress` + `Modifier.predictiveBack`); en versiones viejas funciona igual que antes.
+- **Vibración**: `rememberHaptics()` → `confirm()` (empezar/terminar turno o ronda, guardar/enviar), `reject()`, `tick()`.
+  Tarjetas grandes con `Modifier.pressScale`. Inicio y Avisos: deslizar hacia abajo sincroniza / recarga (`PullToRefreshBox`), con
+  aviso abajo ("Todo sincronizado" o el error con "Reintentar"). Pantalla de inicio del sistema (Android 12+, `values-v31`) y carga
+  con el logo.
+- **Modo oscuro** (`ui/theme/Theme.kt`): `ThemeMode.value` = system | light | dark (`Prefs.themeMode`, Ajustes → Apariencia).
+  Los colores de las pantallas son nombres que cambian con el tema: `CardBg`, `WarnBg`, `DangerBg`, `DangerSoft`, `OkBg`,
+  `NeutralBg`, `BorderC`, `BarBg`, `Muted`, `Ink` (texto color marca), `BrandDark` (texto fuerte), `Brand`, `Danger`, `Ok`;
+  `Accent` y `OnAccent` (texto sobre amarillo) son fijos. **No usar `Color.White`/hex para fondos o textos de contenido**; los
+  botones de color propio llevan `contentColor` explícito (en oscuro `onPrimary` es el texto oscuro del amarillo).
+
 ## Rondas de guardias (Etapa 9 adelantada)
 - Puntos de ronda en `patrol_points`, con QR público, coordenadas, radio permitido y marca de punto crítico.
 - Rutas y orden de puntos en `patrol_routes` / `patrol_route_points`; ejecuciones y escaneos en `patrol_rounds` / `patrol_scans`.

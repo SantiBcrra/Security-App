@@ -1,7 +1,9 @@
 package ar.com.securityapp.campo.ui.observations
 
+import ar.com.securityapp.campo.ui.AppBackHandler
+import ar.com.securityapp.campo.ui.theme.*
+
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -77,12 +79,6 @@ import ar.com.securityapp.campo.data.str
 import ar.com.securityapp.campo.data.strOrNull
 import ar.com.securityapp.campo.data.bool
 import ar.com.securityapp.campo.ui.rounds.QrScanner
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.Brand
-import ar.com.securityapp.campo.ui.theme.BrandDark
-import ar.com.securityapp.campo.ui.theme.Danger
-import ar.com.securityapp.campo.ui.theme.Muted
-import ar.com.securityapp.campo.ui.theme.Ok
 import kotlinx.serialization.json.JsonObject
 import java.io.File
 import java.time.Instant
@@ -92,7 +88,7 @@ import java.time.format.DateTimeFormatter
 private val HOUR = DateTimeFormatter.ofPattern("dd/MM HH:mm").withZone(ZoneId.systemDefault())
 internal fun hour(iso: String?): String = iso?.let { runCatching { HOUR.format(Instant.parse(it)) }.getOrNull() ?: it.take(16).replace('T', ' ') } ?: ""
 
-internal fun color(hex: String?): Color = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(Muted)
+internal fun color(hex: String?): Color = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(Color(0xFF8A91A5))
 
 @Composable
 internal fun TopBar(title: String, onBack: () -> Unit, trailing: @Composable () -> Unit = {}) {
@@ -112,10 +108,10 @@ fun ObservacionesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Bool
         null -> {}
         else -> { ObservationDetail(vm, p, onBack = { page = null; vm.reload() }); return }
     }
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val ui by vm.list.collectAsStateWithLifecycle()
     Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { if (showTopBar) TopBar("Observaciones", onBack) }, floatingActionButton = {
-        if (canCreate) ExtendedFloatingActionButton({ vm.newForm(); page = "nueva" }, containerColor = Accent, contentColor = BrandDark) {
+        if (canCreate) ExtendedFloatingActionButton({ vm.newForm(); page = "nueva" }, containerColor = Accent, contentColor = OnAccent) {
             Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Reportar", fontWeight = FontWeight.Bold)
         }
     }) { padding ->
@@ -135,7 +131,7 @@ fun ObservacionesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Bool
 private fun ObsRow(o: Observation, ui: ObsListUi, onClick: () -> Unit) {
     val failure = ui.failures[o.uuid]
     val sev = o.severityUuid?.let { ui.severities[it] }
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = CardBg)) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
             Box(Modifier.padding(top = 4.dp).size(12.dp).background(color(sev?.color), RoundedCornerShape(6.dp)))
             Spacer(Modifier.width(10.dp))
@@ -153,7 +149,7 @@ private fun ObsRow(o: Observation, ui: ObsListUi, onClick: () -> Unit) {
                 when {
                     failure != null -> Text("Rechazada: $failure", color = Danger, style = MaterialTheme.typography.bodySmall)
                     o.local -> Text("Pendiente de enviar (se manda sola con señal)", color = BrandDark, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                    else -> Text(o.statusLabel, color = if (o.status == "cerrada") Ok else Brand, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                    else -> Text(o.statusLabel, color = if (o.status == "cerrada") Ok else Ink, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -165,6 +161,7 @@ private fun ObsRow(o: Observation, ui: ObsListUi, onClick: () -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ObservationForm(vm: ObservationsViewModel, onBack: () -> Unit) {
+    val haptics = ar.com.securityapp.campo.ui.rememberHaptics()
     val f by vm.form.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var scanning by remember { mutableStateOf(false) }
@@ -180,7 +177,7 @@ private fun ObservationForm(vm: ObservationsViewModel, onBack: () -> Unit) {
         }, onClose = { scanning = false })
         return
     }
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar("Reportar observación", onBack)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -217,7 +214,7 @@ private fun ObservationForm(vm: ObservationsViewModel, onBack: () -> Unit) {
                     placeholder = { Text("Describí la situación") })
             }
             Section("Fotos (${f.photos.size}/6)") { PhotosField(f.photos, 6) { list -> vm.update { it.copy(photos = list) } } }
-            Card(colors = CardDefaults.cardColors(containerColor = if (f.imminent) Color(0xFFFDE3E5) else Color.White)) {
+            Card(colors = CardDefaults.cardColors(containerColor = if (f.imminent) DangerBg else CardBg)) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("RIESGO INMINENTE", fontWeight = FontWeight.Bold, color = Danger)
@@ -231,9 +228,9 @@ private fun ObservationForm(vm: ObservationsViewModel, onBack: () -> Unit) {
                 Text("Enviar de forma anónima (no queda tu nombre)")
             }
             f.errors.forEach { Text(it, color = Danger) }
-            Button({ vm.save(onBack) }, Modifier.fillMaxWidth().height(56.dp), enabled = !f.saving,
-                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
-                if (f.saving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = BrandDark)
+            Button({ haptics.confirm(); vm.save(onBack) }, Modifier.fillMaxWidth().height(56.dp), enabled = !f.saving,
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
+                if (f.saving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = OnAccent)
                 else Text("Enviar reporte", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             }
             Text("Si no hay señal queda guardado en el celular y se envía solo al reconectar.", style = MaterialTheme.typography.bodySmall, color = Muted)
@@ -275,8 +272,8 @@ internal fun Chips(items: List<CatalogItem>, selected: String?, colored: Boolean
         items.forEach { item ->
             val on = item.uuid == selected
             val tone = if (colored) color(item.color) else Brand
-            Box(Modifier.heightIn(min = 48.dp).background(if (on) tone else Color.White, RoundedCornerShape(12.dp))
-                .border(1.dp, if (on) tone else Color(0xFFD5D8E0), RoundedCornerShape(12.dp)).clickable { onPick(item.uuid) }
+            Box(Modifier.heightIn(min = 48.dp).background(if (on) tone else CardBg, RoundedCornerShape(12.dp))
+                .border(1.dp, if (on) tone else BorderC, RoundedCornerShape(12.dp)).clickable { onPick(item.uuid) }
                 .padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
                 Text(item.name, color = if (on) Color.White else MaterialTheme.colorScheme.onSurface, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
             }
@@ -326,7 +323,7 @@ private fun PhotoThumb(uri: Uri, onRemove: () -> Unit) {
     }
     Box(Modifier.size(88.dp)) {
         if (bmp != null) Image(bmp.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        else Box(Modifier.fillMaxSize().background(Color(0xFFE8EAF0)))
+        else Box(Modifier.fillMaxSize().background(NeutralBg))
         Box(Modifier.align(Alignment.TopEnd).padding(4.dp).size(24.dp).background(Color(0x99000000), RoundedCornerShape(12.dp)).clickable(onClick = onRemove),
             contentAlignment = Alignment.Center) { Icon(Icons.Filled.Close, "Quitar foto", tint = Color.White, modifier = Modifier.size(16.dp)) }
     }
@@ -354,7 +351,7 @@ internal fun SearchDialog(title: String, options: List<Pair<String, String>>, on
 @Composable
 private fun ObservationDetail(vm: ObservationsViewModel, uuid: String, onBack: () -> Unit) {
     LaunchedEffect(uuid) { vm.openDetail(uuid) }
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val d by vm.detail.collectAsStateWithLifecycle()
     val r = d.remote
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -362,7 +359,7 @@ private fun ObservationDetail(vm: ObservationsViewModel, uuid: String, onBack: (
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
                 r != null -> RemoteDetail(r, d)
-                d.loading -> CircularProgressIndicator(color = Brand)
+                d.loading -> CircularProgressIndicator(color = Ink)
                 d.local != null -> {
                     val o = d.local!!
                     Text(if (d.failure != null) "Rechazada por el servidor" else "Pendiente de enviar", fontWeight = FontWeight.Bold,
@@ -380,10 +377,10 @@ private fun ObservationDetail(vm: ObservationsViewModel, uuid: String, onBack: (
 
 @Composable
 private fun RemoteDetail(r: JsonObject, d: DetailUi) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+    Card(colors = CardDefaults.cardColors(containerColor = CardBg)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(r.str("status_label"), fontWeight = FontWeight.Bold, color = Brand, modifier = Modifier.weight(1f))
+                Text(r.str("status_label"), fontWeight = FontWeight.Bold, color = Ink, modifier = Modifier.weight(1f))
                 if (r.bool("imminent")) Text("INMINENTE", color = Danger, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
             }
             Text(r.str("description"))
@@ -401,7 +398,7 @@ private fun RemoteDetail(r: JsonObject, d: DetailUi) {
     if (events.isNotEmpty()) {
         Text("Línea de tiempo", style = MaterialTheme.typography.titleSmall, color = Muted)
         events.forEach { e ->
-            Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(10.dp)).padding(10.dp)) {
+            Column(Modifier.fillMaxWidth().background(CardBg, RoundedCornerShape(10.dp)).padding(10.dp)) {
                 Text(listOfNotNull(e.strOrNull("to_label") ?: eventLabel(e.str("type")), e.strOrNull("actor")).joinToString(" · "), fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.bodyMedium)
                 e.strOrNull("comment")?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }

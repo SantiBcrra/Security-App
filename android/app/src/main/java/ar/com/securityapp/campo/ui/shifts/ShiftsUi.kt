@@ -1,7 +1,9 @@
 package ar.com.securityapp.campo.ui.shifts
 
+import ar.com.securityapp.campo.ui.AppBackHandler
+import ar.com.securityapp.campo.ui.theme.*
+
 import android.app.Application
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -67,11 +69,6 @@ import ar.com.securityapp.campo.location.Locator
 import ar.com.securityapp.campo.sync.SyncWorker
 import ar.com.securityapp.campo.tracking.ShiftTrackingService
 import ar.com.securityapp.campo.ui.observations.TopBar
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.BrandDark
-import ar.com.securityapp.campo.ui.theme.Danger
-import ar.com.securityapp.campo.ui.theme.Muted
-import ar.com.securityapp.campo.ui.theme.Ok
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -198,6 +195,7 @@ private fun span(s: GuardShift) = "${DAY.format(s.startAt)} · ${HOUR.format(s.s
 /** Tarjeta del inicio: turno en curso o el próximo, con Empezar / Terminar. */
 @Composable
 fun ShiftCard(onOpen: () -> Unit, onLogbook: ((String) -> Unit)? = null, vm: ShiftsViewModel = viewModel()) {
+    val haptics = ar.com.securityapp.campo.ui.rememberHaptics()
     val ui by vm.ui.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { vm.reload(); vm.ensureService() }
     val cfg = ui.settings ?: return
@@ -220,10 +218,10 @@ fun ShiftCard(onOpen: () -> Unit, onLogbook: ((String) -> Unit)? = null, vm: Shi
     }
     val now = Instant.now()
     val bg = when {
-        current != null && ui.openExit != null -> Color(0xFFFBE3E5)
-        current != null -> Color(0xFFE3F3EA)
-        next?.late(now) == true -> Color(0xFFFDF3CF)
-        else -> Color.White
+        current != null && ui.openExit != null -> DangerBg
+        current != null -> OkBg
+        next?.late(now) == true -> WarnBg
+        else -> CardBg
     }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = bg)) {
         Column(Modifier.padding(16.dp)) {
@@ -243,13 +241,13 @@ fun ShiftCard(onOpen: () -> Unit, onLogbook: ((String) -> Unit)? = null, vm: Shi
                     }
                     // Relevo: el guardia anterior cerró el libro y nadie recibió el puesto.
                     if (onLogbook != null && vm.pendingReceive(current.siteUuid)) {
-                        Button({ onLogbook("recibir") }, Modifier.fillMaxWidth().padding(top = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = Ok)) {
+                        Button({ onLogbook("recibir") }, Modifier.fillMaxWidth().padding(top = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = Ok, contentColor = androidx.compose.ui.graphics.Color.White)) {
                             Text("Recibir el puesto (relevo con firma)")
                         }
                     }
                     Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (ui.openExit == null) OutlinedButton({ if (vm.isPreview()) previewWarning = true else emergency = true }, Modifier.weight(1f)) { Text("Salgo por una emergencia") }
-                        Button({ if (vm.isPreview()) previewWarning = true else confirmEnd = true }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = BrandDark)) { Text("Terminar turno") }
+                        Button({ if (vm.isPreview()) previewWarning = true else confirmEnd = true }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = androidx.compose.ui.graphics.Color.White)) { Text("Terminar turno") }
                     }
                 }
                 next != null -> {
@@ -257,8 +255,8 @@ fun ShiftCard(onOpen: () -> Unit, onLogbook: ((String) -> Unit)? = null, vm: Shi
                         fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = if (next.late(now)) Danger else BrandDark)
                     Text("${next.siteName} · ${span(next)}", style = MaterialTheme.typography.bodyMedium)
                     val can = next.canStart(cfg.earlyMinutes, now)
-                    Button({ begin(next, null) }, Modifier.fillMaxWidth().padding(top = 10.dp), enabled = can && !ui.busy,
-                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
+                    Button({ haptics.confirm(); begin(next, null) }, Modifier.fillMaxWidth().padding(top = 10.dp), enabled = can && !ui.busy,
+                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
                         if (ui.busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Empezar turno", fontWeight = FontWeight.Bold)
                     }
                     if (!can) Text("Se puede empezar desde ${cfg.earlyMinutes} min antes (${HOUR.format(next.startAt.minusSeconds(cfg.earlyMinutes * 60L))}).",
@@ -282,7 +280,7 @@ fun ShiftCard(onOpen: () -> Unit, onLogbook: ((String) -> Unit)? = null, vm: Shi
                 else "Se registra la hora de salida y la app deja de usar tu ubicación.") },
             confirmButton = {
                 if (onLogbook != null) TextButton({ confirmEnd = false; onLogbook("cerrar") }) { Text("Cerrar libro y terminar") }
-                else TextButton({ confirmEnd = false; vm.end() }) { Text("Terminar turno") }
+                else TextButton({ haptics.confirm(); confirmEnd = false; vm.end() }) { Text("Terminar turno") }
             },
             dismissButton = {
                 Row {
@@ -353,7 +351,7 @@ private fun SitePicker(sites: List<Site>, onDismiss: () -> Unit, onPick: (Site) 
 /** "Mis turnos y ausencias": próximos, historial con horas (con señal) y pedidos de ausencia. */
 @Composable
 fun ShiftsScreen(onBack: () -> Unit, showTopBar: Boolean = true, vm: ShiftsViewModel = viewModel()) {
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val ui by vm.ui.collectAsStateWithLifecycle()
     var tab by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -377,7 +375,7 @@ private fun Upcoming(ui: ShiftsState) {
     ui.current?.let { Text("En turno ahora: ${it.siteName}, desde las ${it.startedAt?.let { t -> HOUR.format(t) } ?: "—"}", fontWeight = FontWeight.SemiBold, color = Ok) }
     if (ui.upcoming.isEmpty()) Text("No tenés turnos programados en los próximos días.", color = Muted)
     ui.upcoming.forEach { s ->
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBg)) {
             Column(Modifier.padding(12.dp)) {
                 Text(span(s), fontWeight = FontWeight.SemiBold)
                 Text(s.siteName + (s.name?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodySmall, color = Muted)
@@ -394,7 +392,7 @@ private fun History(vm: ShiftsViewModel) {
     error?.let { Text(it, color = Danger); return }
     if (data == null) { CircularProgressIndicator(); return }
     data.obj("totales")?.let { t ->
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBg)) {
             Column(Modifier.padding(12.dp)) {
                 Text("Últimos 30 días", style = MaterialTheme.typography.labelLarge, color = Muted)
                 Text("${t.str("turnos")} turnos · ${t.str("horas")} h trabajadas", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
@@ -406,7 +404,7 @@ private fun History(vm: ShiftsViewModel) {
     val list = data.arr("turnos").mapNotNull { it as? JsonObject }
     if (list.isEmpty()) Text("Sin turnos en el período.", color = Muted)
     list.forEach { s ->
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBg)) {
             Column(Modifier.padding(12.dp)) {
                 val start = s.strOrNull("start_at")?.let { runCatching { Instant.parse(it) }.getOrNull() }
                 Row {
@@ -428,11 +426,11 @@ private fun History(vm: ShiftsViewModel) {
 @Composable
 private fun Absences(ui: ShiftsState, vm: ShiftsViewModel) {
     var form by remember { mutableStateOf(false) }
-    Button({ form = true }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = BrandDark)) { Text("Pedir ausencia") }
+    Button({ form = true }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = androidx.compose.ui.graphics.Color.White)) { Text("Pedir ausencia") }
     Text("Avisá con tiempo si no vas a poder venir. Tu supervisor lo aprueba y ese día no saltan alarmas.", style = MaterialTheme.typography.bodySmall, color = Muted)
     if (ui.absences.isEmpty()) Text("No tenés pedidos.", color = Muted)
     ui.absences.forEach { a ->
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBg)) {
             Column(Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(a.typeLabel, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

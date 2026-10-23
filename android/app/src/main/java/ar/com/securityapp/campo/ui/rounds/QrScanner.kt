@@ -1,8 +1,8 @@
 package ar.com.securityapp.campo.ui.rounds
 
+import ar.com.securityapp.campo.ui.AppBackHandler
 import android.Manifest
 import android.content.pm.PackageManager
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -59,7 +59,7 @@ import java.util.concurrent.Executors
  */
 @Composable
 fun QrScanner(title: String, onResult: (String) -> Unit, onClose: () -> Unit) {
-    BackHandler(onBack = onClose)
+    AppBackHandler(onBack = onClose)
     val context = LocalContext.current
     var granted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }

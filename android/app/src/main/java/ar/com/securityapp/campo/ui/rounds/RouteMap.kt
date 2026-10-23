@@ -1,5 +1,7 @@
 package ar.com.securityapp.campo.ui.rounds
 
+import ar.com.securityapp.campo.ui.theme.*
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -38,7 +40,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import ar.com.securityapp.campo.data.PatrolPoint
 import ar.com.securityapp.campo.data.PatrolRoute
-import ar.com.securityapp.campo.ui.theme.Muted
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapView
@@ -64,7 +65,7 @@ fun RouteMapCard(route: PatrolRoute, points: Map<String, PatrolPoint>, onTouchin
     // Durante la ronda el mapa sigue al guardia; si mueve el mapa con el dedo deja de seguirlo hasta tocar "Seguirme".
     var follow by remember(live?.roundUuid) { mutableStateOf(live != null) }
     // Un poco más ancho que el resto de las tarjetas (≈ 95 % de la pantalla).
-    Card(Modifier.widen(10.dp), colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White)) {
+    Card(Modifier.widen(10.dp), colors = CardDefaults.cardColors(containerColor = CardBg)) {
         Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(if (live != null) "Ronda en curso" else "Mapa de la ruta", modifier = Modifier.weight(1f), color = Muted)

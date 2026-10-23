@@ -1,8 +1,10 @@
 package ar.com.securityapp.campo.ui.logbook
 
+import ar.com.securityapp.campo.ui.AppBackHandler
+import ar.com.securityapp.campo.ui.theme.*
+
 import android.app.Application
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -58,11 +60,6 @@ import ar.com.securityapp.campo.data.Site
 import ar.com.securityapp.campo.sync.SyncWorker
 import ar.com.securityapp.campo.ui.observations.PhotosField
 import ar.com.securityapp.campo.ui.observations.TopBar
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.BrandDark
-import ar.com.securityapp.campo.ui.theme.Danger
-import ar.com.securityapp.campo.ui.theme.Muted
-import ar.com.securityapp.campo.ui.theme.Ok
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -144,7 +141,7 @@ fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = 
     val ui by vm.ui.collectAsStateWithLifecycle()
     var page by remember(startPage) { mutableStateOf(startPage) }
     val endShift = startPage == "cerrar"
-    BackHandler { if (page != null && page != startPage) page = null else onBack() }
+    AppBackHandler { if (page != null && page != startPage) page = null else onBack() }
     when {
         page == "novedad" || page == "persona" || page == "vehiculo" -> { EntryForm(page!!, vm, onDone = { page = null }); return }
         page == "cerrar" -> { CloseForm(ui, endShift, onCancel = { if (startPage == "cerrar") onBack() else page = null },
@@ -167,24 +164,24 @@ fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = 
                 return@Column
             }
             ui.pendingClose?.takeIf { canCreate }?.let { pc ->
-                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F3EA))) {
+                Card(colors = CardDefaults.cardColors(containerColor = OkBg)) {
                     Column(Modifier.padding(12.dp)) {
                         Text("Relevo: ${pc.userName ?: "el guardia anterior"} cerró su turno a las ${HOUR.format(pc.occurredAt)}", fontWeight = FontWeight.SemiBold)
                         pc.text?.let { Text("Dejó anotado: $it", style = MaterialTheme.typography.bodySmall) }
-                        Button({ page = "recibir" }, Modifier.padding(top = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = Ok)) { Text("Recibir el puesto") }
+                        Button({ page = "recibir" }, Modifier.padding(top = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = Ok, contentColor = androidx.compose.ui.graphics.Color.White)) { Text("Recibir el puesto") }
                     }
                 }
             }
             if (canCreate) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("novedad" to "+ Novedad", "persona" to "+ Persona", "vehiculo" to "+ Vehículo").forEach { (k, l) ->
                     Button({ vm.say(null); page = k }, Modifier.weight(1f).height(56.dp), shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) { Text(l, fontWeight = FontWeight.Bold) }
+                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) { Text(l, fontWeight = FontWeight.Bold) }
                 }
             }
             Text("Adentro ahora (${ui.inside.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             if (ui.inside.isEmpty()) Text("No queda nadie adentro.", color = Muted, style = MaterialTheme.typography.bodySmall)
             ui.inside.forEach { e ->
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Card(colors = CardDefaults.cardColors(containerColor = CardBg)) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text((if (e.kind == "vehiculo") "🚗 " else "👤 ") + e.label.ifEmpty { "Sin datos" }, fontWeight = FontWeight.SemiBold)
@@ -217,7 +214,7 @@ fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = 
 
 @Composable
 private fun EntryRow(e: LogEntry, pending: Boolean) {
-    val color = when { e.important -> Color(0xFFFBE3E5); e.kind == "cierre" || e.kind == "recepcion" -> Color(0xFFEFF1F5); else -> Color.White }
+    val color = when { e.important -> DangerBg; e.kind == "cierre" || e.kind == "recepcion" -> NeutralBg; else -> CardBg }
     Card(colors = CardDefaults.cardColors(containerColor = color)) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -319,7 +316,7 @@ private fun Lookup(type: String, value: String, vm: LogbookViewModel, onPick: (K
     val items = remember(value) { vm.lookup(type, value) }
     var picked by remember { mutableStateOf<String?>(null) }
     if (items.isEmpty() || picked == value) return
-    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF3CF))) {
+    Card(colors = CardDefaults.cardColors(containerColor = WarnBg)) {
         Column(Modifier.padding(8.dp)) {
             Text("Ya vino antes:", style = MaterialTheme.typography.labelMedium, color = BrandDark)
             items.forEach { k ->
@@ -349,7 +346,7 @@ private fun CloseForm(ui: LogbookState, endShift: Boolean, onCancel: () -> Unit,
             Button({
                 val data = sig.toDataUrl()
                 if (data == null) error = "Firmá en el recuadro." else onSign(text, data)
-            }, Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = BrandDark)) {
+            }, Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = androidx.compose.ui.graphics.Color.White)) {
                 Text(if (endShift) "Firmar y terminar turno" else "Firmar cierre", fontWeight = FontWeight.Bold)
             }
             Text("Si llega otro guardia, él recibe el puesto con su firma. Si no hay relevo, el cierre queda igual.", style = MaterialTheme.typography.bodySmall, color = Muted)
@@ -376,7 +373,7 @@ private fun ReceiveForm(close: LogEntry, onCancel: () -> Unit, onSign: (String, 
             Button({
                 val data = sig.toDataUrl()
                 if (data == null) error = "Firmá en el recuadro." else onSign(text, data)
-            }, Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = Ok)) { Text("Firmar y recibir el puesto", fontWeight = FontWeight.Bold) }
+            }, Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = Ok, contentColor = androidx.compose.ui.graphics.Color.White)) { Text("Firmar y recibir el puesto", fontWeight = FontWeight.Bold) }
         }
     }
 }

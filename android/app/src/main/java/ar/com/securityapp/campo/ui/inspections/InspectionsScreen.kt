@@ -1,6 +1,8 @@
 package ar.com.securityapp.campo.ui.inspections
 
-import androidx.activity.compose.BackHandler
+import ar.com.securityapp.campo.ui.AppBackHandler
+import ar.com.securityapp.campo.ui.theme.*
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -61,12 +63,6 @@ import ar.com.securityapp.campo.ui.observations.SearchDialog
 import ar.com.securityapp.campo.ui.observations.TopBar
 import ar.com.securityapp.campo.ui.observations.hour
 import ar.com.securityapp.campo.ui.rounds.QrScanner
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.Brand
-import ar.com.securityapp.campo.ui.theme.BrandDark
-import ar.com.securityapp.campo.ui.theme.Danger
-import ar.com.securityapp.campo.ui.theme.Muted
-import ar.com.securityapp.campo.ui.theme.Ok
 import kotlinx.serialization.json.JsonObject
 import java.time.LocalDate
 
@@ -111,13 +107,13 @@ fun InspeccionesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boole
     }
 
     if (page == null) {
-        BackHandler(onBack = onBack)
+        AppBackHandler(onBack = onBack)
         val ui by vm.list.collectAsStateWithLifecycle()
         Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             if (showTopBar) TopBar("Inspecciones", onBack)
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (canCreate) item {
-                    Button({ page = "nueva" }, Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
+                    Button({ page = "nueva" }, Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
                         Text("Hacer una inspección", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                     }
                 }
@@ -127,7 +123,7 @@ fun InspeccionesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boole
                     val today = LocalDate.now().toString()
                     val late = s.dueOn < today
                     Card(Modifier.fillMaxWidth().clickable { if (!vm.beginScheduled(s)) message = "El checklist de esta programada no está en el celular: sincronizá." },
-                        colors = CardDefaults.cardColors(containerColor = if (late) Color(0xFFFDE3E5) else Color.White)) {
+                        colors = CardDefaults.cardColors(containerColor = if (late) DangerBg else CardBg)) {
                         Column(Modifier.padding(14.dp)) {
                             Text(label, fontWeight = FontWeight.SemiBold)
                             Text("${s.program} · ${if (late) "VENCIDA el" else if (s.dueOn == today) "vence HOY" else "vence"} ${day(s.dueOn)}",
@@ -153,7 +149,7 @@ fun InspeccionesScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boole
 
 @Composable
 private fun MineRow(i: MyInspection, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = CardBg)) {
         Column(Modifier.padding(14.dp)) {
             Row {
                 Text(i.code ?: "Nueva", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
@@ -173,13 +169,13 @@ private fun MineRow(i: MyInspection, onClick: () -> Unit) {
 
 @Composable
 private fun NewInspection(vm: InspectionsViewModel, onBack: () -> Unit, onQr: () -> Unit, onPick: (Checklist) -> Unit) {
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val ui by vm.list.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar("Nueva inspección", onBack)
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
-                Button(onQr, Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
+                Button(onQr, Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
                     Text("Escanear QR del equipo", fontWeight = FontWeight.Bold)
                 }
             }
@@ -189,7 +185,7 @@ private fun NewInspection(vm: InspectionsViewModel, onBack: () -> Unit, onQr: ()
                 if (group.isEmpty()) continue
                 item { Text(label, style = MaterialTheme.typography.titleSmall, color = Muted, modifier = Modifier.padding(top = 8.dp)) }
                 items(group, key = { it.uuid }) { cl ->
-                    Card(Modifier.fillMaxWidth().clickable { onPick(cl) }, colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Card(Modifier.fillMaxWidth().clickable { onPick(cl) }, colors = CardDefaults.cardColors(containerColor = CardBg)) {
                         Column(Modifier.padding(14.dp)) {
                             Text(cl.name, fontWeight = FontWeight.SemiBold)
                             Text("${cl.items.size} ítems" + (cl.description?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodySmall, color = Muted,
@@ -221,14 +217,15 @@ private fun TargetDialog(vm: InspectionsViewModel, cl: Checklist, onDismiss: () 
 
 @Composable
 private fun ChecklistForm(vm: InspectionsViewModel, onCancel: () -> Unit, onSaved: (String) -> Unit) {
+    val haptics = ar.com.securityapp.campo.ui.rememberHaptics()
     val f by vm.form.collectAsStateWithLifecycle()
     val form = f ?: return
     var confirmExit by remember { mutableStateOf(false) }
-    BackHandler { if (form.answers.isEmpty()) onCancel() else confirmExit = true }
+    AppBackHandler { if (form.answers.isEmpty()) onCancel() else confirmExit = true }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar(form.checklist.name, { if (form.answers.isEmpty()) onCancel() else confirmExit = true })
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(form.target, fontWeight = FontWeight.SemiBold, color = Brand)
+            Text(form.target, fontWeight = FontWeight.SemiBold, color = Ink)
             for (section in form.checklist.sections) {
                 if (section.title.isNotBlank()) Text(section.title, style = MaterialTheme.typography.titleSmall, color = Muted, modifier = Modifier.padding(top = 6.dp))
                 for (item in section.items) ItemCard(vm, item, form.answers[item.key] ?: ar.com.securityapp.campo.data.Answer(), form.errors[item.key])
@@ -238,9 +235,9 @@ private fun ChecklistForm(vm: InspectionsViewModel, onCancel: () -> Unit, onSave
                 "${ev.fail} ítem(s) no cumplen" + (if (ev.criticalFail > 0) ", ${ev.criticalFail} CRÍTICO(S): se avisa a supervisores y SyH." else ".") +
                     " Se crea una acción correctiva por cada uno.", color = Danger, style = MaterialTheme.typography.bodySmall)
             if (form.errors.isNotEmpty()) Text("Faltan ${form.errors.size} dato(s): revisá los ítems marcados en rojo.", color = Danger, fontWeight = FontWeight.SemiBold)
-            Button({ vm.save(onSaved) }, Modifier.fillMaxWidth().height(56.dp), enabled = !form.saving,
-                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
-                if (form.saving) CircularProgressIndicator(strokeWidth = 2.dp, color = BrandDark)
+            Button({ haptics.confirm(); vm.save(onSaved) }, Modifier.fillMaxWidth().height(56.dp), enabled = !form.saving,
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
+                if (form.saving) CircularProgressIndicator(strokeWidth = 2.dp, color = OnAccent)
                 else Text("Guardar inspección", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             }
         }
@@ -259,7 +256,7 @@ private fun ItemCard(vm: InspectionsViewModel, item: CheckItem, a: ar.com.securi
         else -> false
     }
     Card(Modifier.fillMaxWidth().then(if (error != null) Modifier.border(2.dp, Danger, RoundedCornerShape(14.dp)) else Modifier),
-        colors = CardDefaults.cardColors(containerColor = if (fails) Color(0xFFFFF4F4) else Color.White)) {
+        colors = CardDefaults.cardColors(containerColor = if (fails) DangerSoft else CardBg)) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row {
                 Text(item.text, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
@@ -272,8 +269,8 @@ private fun ItemCard(vm: InspectionsViewModel, item: CheckItem, a: ar.com.securi
                     for ((v, label) in opts) {
                         val on = a.value == v
                         val good = v == "na" || v == item.okWhen
-                        Box(Modifier.weight(1f).height(52.dp).background(if (on) (if (good) Ok else Danger) else Color.White, RoundedCornerShape(12.dp))
-                            .border(1.dp, if (on) Color.Transparent else Color(0xFFD5D8E0), RoundedCornerShape(12.dp))
+                        Box(Modifier.weight(1f).height(52.dp).background(if (on) (if (good) Ok else Danger) else CardBg, RoundedCornerShape(12.dp))
+                            .border(1.dp, if (on) Color.Transparent else BorderC, RoundedCornerShape(12.dp))
                             .clickable { vm.answer(item.key) { it.copy(value = v) } }, contentAlignment = Alignment.Center) {
                             Text(label, color = if (on) Color.White else MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
                         }
@@ -302,7 +299,7 @@ private fun fmt(d: Double) = if (d % 1.0 == 0.0) d.toLong().toString() else d.to
 @Composable
 private fun InspectionDetail(vm: InspectionsViewModel, uuid: String, onBack: () -> Unit) {
     LaunchedEffect(uuid) { vm.openDetail(uuid) }
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val d by vm.detail.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar(d?.str("code") ?: "Inspección", onBack)
@@ -315,13 +312,13 @@ private fun InspectionDetail(vm: InspectionsViewModel, uuid: String, onBack: () 
             Text("${data.str("inspector")} · ${hour(data.strOrNull("done_at"))}", color = Muted, style = MaterialTheme.typography.bodySmall)
             data.arr("answers").mapNotNull { it as? JsonObject }.forEach { a ->
                 val ok = a["ok"]?.toString()
-                Column(Modifier.fillMaxWidth().background(if (ok == "false") Color(0xFFFFF4F4) else Color.White, RoundedCornerShape(10.dp)).padding(10.dp)) {
+                Column(Modifier.fillMaxWidth().background(if (ok == "false") DangerSoft else CardBg, RoundedCornerShape(10.dp)).padding(10.dp)) {
                     Row {
                         Text(a.str("text"), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                         Text(a.str("value"), fontWeight = FontWeight.Bold, color = when (ok) { "true" -> Ok; "false" -> Danger; else -> Muted })
                     }
                     a.strOrNull("comment")?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Muted) }
-                    a.strOrNull("action_code")?.let { Text("Acción $it", style = MaterialTheme.typography.bodySmall, color = Brand, fontWeight = FontWeight.SemiBold) }
+                    a.strOrNull("action_code")?.let { Text("Acción $it", style = MaterialTheme.typography.bodySmall, color = Ink, fontWeight = FontWeight.SemiBold) }
                 }
             }
         }

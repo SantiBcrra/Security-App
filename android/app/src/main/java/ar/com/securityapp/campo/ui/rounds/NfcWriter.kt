@@ -1,6 +1,8 @@
 package ar.com.securityapp.campo.ui.rounds
 
-import androidx.activity.compose.BackHandler
+import ar.com.securityapp.campo.ui.AppBackHandler
+import ar.com.securityapp.campo.ui.theme.*
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,9 +38,6 @@ import ar.com.securityapp.campo.data.PatrolPoint
 import ar.com.securityapp.campo.nfc.NfcListener
 import ar.com.securityapp.campo.nfc.NfcTags
 import ar.com.securityapp.campo.ui.observations.TopBar
-import ar.com.securityapp.campo.ui.theme.Danger
-import ar.com.securityapp.campo.ui.theme.Muted
-import ar.com.securityapp.campo.ui.theme.Ok
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,7 +48,7 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun NfcWriterScreen(points: List<PatrolPoint>, urlOf: (PatrolPoint) -> String, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<PatrolPoint?>(null) }
@@ -95,7 +94,7 @@ fun NfcWriterScreen(points: List<PatrolPoint>, urlOf: (PatrolPoint) -> String, o
             if (points.isEmpty()) item { Text("No hay puntos de ronda sincronizados.", color = Muted) }
             items(points, key = { it.uuid }) { p ->
                 Card(Modifier.fillMaxWidth().clickable(enabled = nfc == NfcTags.State.ON) { selected = p; result = null },
-                    colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    colors = CardDefaults.cardColors(containerColor = CardBg)) {
                     Column(Modifier.padding(14.dp)) {
                         Text("${p.code} · ${p.name}", fontWeight = FontWeight.SemiBold)
                         p.description?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Muted) }

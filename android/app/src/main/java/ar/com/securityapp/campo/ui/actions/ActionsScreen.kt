@@ -1,10 +1,12 @@
 package ar.com.securityapp.campo.ui.actions
 
+import ar.com.securityapp.campo.ui.AppBackHandler
+import ar.com.securityapp.campo.ui.theme.*
+
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -64,12 +66,6 @@ import ar.com.securityapp.campo.ui.observations.PhotosField
 import ar.com.securityapp.campo.ui.observations.Section
 import ar.com.securityapp.campo.ui.observations.TopBar
 import ar.com.securityapp.campo.ui.observations.hour
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.Brand
-import ar.com.securityapp.campo.ui.theme.BrandDark
-import ar.com.securityapp.campo.ui.theme.Danger
-import ar.com.securityapp.campo.ui.theme.Muted
-import ar.com.securityapp.campo.ui.theme.Ok
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -81,6 +77,7 @@ private val DAY = DateTimeFormatter.ofPattern("dd/MM/yyyy")
 internal fun day(iso: String?): String = iso?.let { runCatching { LocalDate.parse(it).format(DAY) }.getOrNull() ?: it } ?: "sin fecha"
 
 private val PRIORITY = mapOf("baja" to "Baja", "media" to "Media", "alta" to "Alta", "critica" to "Crítica")
+@androidx.compose.runtime.Composable
 private fun priorityColor(p: String) = when (p) { "critica" -> Danger; "alta" -> Color(0xFFE8730C); "media" -> Accent; else -> Muted }
 
 data class DetailState(val loading: Boolean = false, val data: JsonObject? = null, val photos: List<Bitmap> = emptyList(), val offline: Boolean = false)
@@ -127,7 +124,7 @@ fun AccionesScreen(onBack: () -> Unit, showTopBar: Boolean = true, vm: ActionsVi
         ActionDetail(vm, uuid, onBack = { open = null; vm.reload() })
         return
     }
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val items by vm.items.collectAsStateWithLifecycle()
     val mine = items.filter { it.mine }
     val others = items.filter { !it.mine }
@@ -147,7 +144,7 @@ fun AccionesScreen(onBack: () -> Unit, showTopBar: Boolean = true, vm: ActionsVi
 
 @Composable
 private fun ActionRow(a: CapaAction, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = CardBg)) {
         Row(Modifier.padding(14.dp)) {
             Box(Modifier.padding(top = 4.dp).size(12.dp).background(priorityColor(a.priority), RoundedCornerShape(6.dp)))
             Spacer(Modifier.width(10.dp))
@@ -172,7 +169,7 @@ private fun StatusLine(a: CapaAction) {
         a.failure != null -> Text("Rechazado: ${a.failure}", color = Danger, style = MaterialTheme.typography.bodySmall)
         a.pending != null -> Text(if (a.pending == "close") "Cierre pendiente de enviar" else "Pendiente de enviar", color = BrandDark,
             style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-        else -> Text(a.statusLabel, color = if (a.status == "verificada") Ok else Brand, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+        else -> Text(a.statusLabel, color = if (a.status == "verificada") Ok else Ink, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -183,7 +180,7 @@ private fun ActionDetail(vm: ActionsViewModel, uuid: String, onBack: () -> Unit)
     var closing by remember { mutableStateOf(false) }
     LaunchedEffect(uuid) { vm.openDetail(uuid) }
     if (a == null) {
-        BackHandler(onBack = onBack)
+        AppBackHandler(onBack = onBack)
         Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             TopBar("Acción", onBack)
             Text("Ya no tenés acceso a esta acción.", Modifier.padding(16.dp), color = Muted)
@@ -191,12 +188,12 @@ private fun ActionDetail(vm: ActionsViewModel, uuid: String, onBack: () -> Unit)
         return
     }
     if (closing) { CloseForm(vm, a, onDone = { closing = false }); return }
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val d by vm.detail.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar(a.code, onBack)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Card(colors = CardDefaults.cardColors(containerColor = CardBg)) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     StatusLine(a)
                     Text(a.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -209,9 +206,9 @@ private fun ActionDetail(vm: ActionsViewModel, uuid: String, onBack: () -> Unit)
                 }
             }
             if (a.canStart && a.pending == null) Button({ vm.start(a) }, Modifier.fillMaxWidth().height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Brand)) { Text("La tomo (empezar)", fontWeight = FontWeight.Bold) }
+                colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = androidx.compose.ui.graphics.Color.White)) { Text("La tomo (empezar)", fontWeight = FontWeight.Bold) }
             if (a.canClose && a.pending != "close") Button({ closing = true }, Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
                 Text("Cerrar con evidencia", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             }
             if (a.pending == "close") Text("Se envía solo con señal: primero suben las fotos y después el cierre.", color = Muted,
@@ -219,7 +216,7 @@ private fun ActionDetail(vm: ActionsViewModel, uuid: String, onBack: () -> Unit)
             if (a.status == "cerrada" && a.pending == null) Text("Cerrada: falta que la verifique otra persona (se hace en la web).", color = Muted,
                 style = MaterialTheme.typography.bodySmall)
             when {
-                d.loading -> CircularProgressIndicator(color = Brand)
+                d.loading -> CircularProgressIndicator(color = Ink)
                 d.offline -> Text("Sin conexión: la línea de tiempo y la evidencia se ven con señal.", color = Muted, style = MaterialTheme.typography.bodySmall)
                 d.data != null -> {
                     if (d.photos.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -228,7 +225,7 @@ private fun ActionDetail(vm: ActionsViewModel, uuid: String, onBack: () -> Unit)
                     val events = d.data!!.arr("events").mapNotNull { it as? JsonObject }
                     if (events.isNotEmpty()) Text("Línea de tiempo", style = MaterialTheme.typography.titleSmall, color = Muted)
                     events.forEach { e ->
-                        Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(10.dp)).padding(10.dp)) {
+                        Column(Modifier.fillMaxWidth().background(CardBg, RoundedCornerShape(10.dp)).padding(10.dp)) {
                             Text(listOfNotNull(e.str("label"), e.strOrNull("actor")).joinToString(" · "), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
                             e.strOrNull("comment")?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                             Text(hour(e.strOrNull("at")), style = MaterialTheme.typography.labelSmall, color = Muted)
@@ -242,7 +239,8 @@ private fun ActionDetail(vm: ActionsViewModel, uuid: String, onBack: () -> Unit)
 
 @Composable
 private fun CloseForm(vm: ActionsViewModel, a: CapaAction, onDone: () -> Unit) {
-    BackHandler(onBack = onDone)
+    val haptics = ar.com.securityapp.campo.ui.rememberHaptics()
+    AppBackHandler(onBack = onDone)
     var text by remember { mutableStateOf("") }
     var photos by remember { mutableStateOf(listOf<Uri>()) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -263,8 +261,8 @@ private fun CloseForm(vm: ActionsViewModel, a: CapaAction, onDone: () -> Unit) {
                     photos.isEmpty() && a.evidence == 0 -> "Agregá al menos una foto de evidencia."
                     else -> null
                 }
-                if (error == null) { saving = true; vm.close(a, text, photos, onDone) }
-            }, Modifier.fillMaxWidth().height(56.dp), enabled = !saving, colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
+                if (error == null) { haptics.confirm(); saving = true; vm.close(a, text, photos, onDone) } else haptics.reject()
+            }, Modifier.fillMaxWidth().height(56.dp), enabled = !saving, colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
                 Text("Cerrar acción", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             }
             Text("Si no hay señal queda guardado y se envía solo al reconectar. Después la verifica otra persona.", color = Muted,

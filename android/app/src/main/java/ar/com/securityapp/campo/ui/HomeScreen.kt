@@ -1,5 +1,7 @@
 package ar.com.securityapp.campo.ui
 
+import ar.com.securityapp.campo.ui.theme.*
+
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -71,13 +73,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ar.com.securityapp.campo.data.Me
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.Brand
-import ar.com.securityapp.campo.ui.theme.BrandDark
-import ar.com.securityapp.campo.ui.theme.Danger
-import ar.com.securityapp.campo.ui.theme.Muted
 import ar.com.securityapp.campo.R
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
 /** Módulo del menú: se muestra solo si el rol tiene el permiso `ver`. Se habilitan de a uno en las próximas entregas. */
 private data class Module(val key: String, val label: String, val hint: String, val icon: ImageVector)
@@ -101,6 +99,13 @@ private val MODULES = listOf(
  * Module("epp", "EPP", "Entregas con firma", Icons.Filled.Face),
  */
 
+/** Profundidad de cada pantalla para elegir la transición: inicio (0), pestañas (1) y módulos (2). */
+private fun routeDepth(route: String): Int = when {
+    route == "home" -> 0
+    route == "avisos" || route == "settings" -> 1
+    else -> 2
+}
+
 @Composable
 fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     val sync by vm.sync.collectAsStateWithLifecycle()
@@ -113,161 +118,163 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
 
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     val unread by vm.unread.collectAsStateWithLifecycle()
     val openAvisos by vm.openAvisos.collectAsStateWithLifecycle()
     val openShift by vm.openShift.collectAsStateWithLifecycle()
+    val panic by vm.panic.collectAsStateWithLifecycle()
+    // La pantalla de pánico que se está yendo sigue visible durante la transición aunque el estado ya sea null.
+    val lastPanic = remember { mutableStateOf<SessionViewModel.PanicState?>(null) }
+    if (panic != null) lastPanic.value = panic
     val nextRound = vm.nextScheduledRound()
     androidx.compose.runtime.LaunchedEffect(openShift) {
         if (openShift) { openModule = null; showSettings = false; showShifts = false; vm.openShift.value = false }
-    }
-    if (showShifts) {
-        HomeWithNavigation(vm, me, selected = "activity", onHome = { showShifts = false }, onActivity = { showShifts = false; openModule = "rondas" },
-            onScan = { showShifts = false; openModule = "rondas"; openScanner = true },
-            onNotices = { showShifts = false; vm.openAvisos.value = true }, onMore = { showShifts = false; showSettings = true }) {
-            ar.com.securityapp.campo.ui.shifts.ShiftsScreen(onBack = { showShifts = false }, showTopBar = false)
-        }
-        return
-    }
-    if (showSettings) {
-        HomeWithNavigation(vm, me, selected = "more", onHome = { showSettings = false }, onActivity = { showSettings = false; openModule = "rondas" },
-            onScan = { showSettings = false; openModule = "rondas"; openScanner = true },
-            onNotices = { showSettings = false; vm.openAvisos.value = true }, onMore = { showSettings = false }) {
-            SettingsScreen(vm, me, onBack = { showSettings = false }, showTopBar = false)
-        }
-        return
     }
     val notifPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         if (android.os.Build.VERSION.SDK_INT >= 33) notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
-    if (openAvisos) {
-        HomeWithNavigation(vm, me, selected = "notices", onHome = { vm.openAvisos.value = false }, onActivity = { vm.openAvisos.value = false; openModule = "rondas" },
-            onScan = { vm.openAvisos.value = false; openModule = "rondas"; openScanner = true },
-            onNotices = { vm.openAvisos.value = false }, onMore = { vm.openAvisos.value = false; showSettings = true }) {
-            AvisosScreen(onBack = { vm.openAvisos.value = false; vm.refreshUnread() }, showTopBar = false)
-        }
-        return
-    }
-    when (openModule) {
-        "rondas" -> {
-            HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null; openScanner = false }, onActivity = { openScanner = false },
-                onScan = { openScanner = true }, onNotices = { openModule = null; openScanner = false; vm.openAvisos.value = true },
-                onMore = { openModule = null; openScanner = false; showSettings = true }) {
-                ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = { openModule = null; openScanner = false; vm.refreshCounts() }, canManagePoints = me.can("rondas", "editar"), initialScan = openScanner, showTopBar = false)
-            }
-            return
-        }
-        "acciones" -> { HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null }, onActivity = { openModule = "rondas" },
-            onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
-            onMore = { openModule = null; showSettings = true }) {
-                ar.com.securityapp.campo.ui.actions.AccionesScreen(onBack = { openModule = null; vm.refreshCounts() }, showTopBar = false)
-            }; return }
-        "inspecciones" -> {
-            HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null }, onActivity = { openModule = "rondas" },
-                onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
-                onMore = { openModule = null; showSettings = true }) {
-                ar.com.securityapp.campo.ui.inspections.InspeccionesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("inspecciones", "crear"), showTopBar = false)
-            }
-            return
-        }
-        "incidentes" -> {
-            HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null }, onActivity = { openModule = "rondas" },
-                onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
-                onMore = { openModule = null; showSettings = true }) {
-                ar.com.securityapp.campo.ui.incidents.IncidentesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("incidentes", "crear"), showTopBar = false)
-            }
-            return
-        }
-        "libro" -> {
-            HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null; logbookPage = null }, onActivity = { openModule = "rondas"; logbookPage = null },
-                onScan = { openModule = "rondas"; openScanner = true; logbookPage = null }, onNotices = { openModule = null; logbookPage = null; vm.openAvisos.value = true },
-                onMore = { openModule = null; logbookPage = null; showSettings = true }) {
-                ar.com.securityapp.campo.ui.logbook.LogbookScreen(onBack = { openModule = null; logbookPage = null; vm.refreshCounts() }, canCreate = me.can("libro", "crear"),
-                    showTopBar = false, startPage = logbookPage, onClosed = { openModule = null; logbookPage = null })
-            }
-            return
-        }
-        "observaciones" -> {
-            HomeWithNavigation(vm, me, selected = "activity", onHome = { openModule = null }, onActivity = { openModule = "rondas" },
-                onScan = { openModule = "rondas"; openScanner = true }, onNotices = { openModule = null; vm.openAvisos.value = true },
-                onMore = { openModule = null; showSettings = true }) {
-                ar.com.securityapp.campo.ui.observations.ObservacionesScreen(onBack = { openModule = null; vm.refreshCounts() }, canCreate = me.can("observaciones", "crear"), showTopBar = false)
-            }
-            return
-        }
-    }
-    // El responsable de una acción la ve aunque su rol no tenga el módulo (como en la web).
-    val modules = MODULES.filter { me.can(it.key) || (it.key == "acciones" && (sync.counts["actions"] ?: 0) > 0) }
-    val panic by vm.panic.collectAsStateWithLifecycle()
-    panic?.let { state ->
-        HomeWithNavigation(vm, me, selected = "home", onHome = { vm.closePanic() }, onActivity = { vm.closePanic(); openModule = "rondas" },
-            onScan = { vm.closePanic(); openModule = "rondas"; openScanner = true },
-            onNotices = { vm.closePanic(); vm.openAvisos.value = true }, onMore = { vm.closePanic(); showSettings = true }) {
-            ar.com.securityapp.campo.panic.PanicScreen((state as? SessionViewModel.PanicState.Done)?.result, onClose = { vm.closePanic() })
-        }
-        return
-    }
 
+    // Una sola "ruta" visible: las barras de arriba y abajo quedan fijas y solo el contenido se anima.
+    val route = when {
+        showShifts -> "shifts"
+        showSettings -> "settings"
+        openAvisos -> "avisos"
+        openModule != null -> "m:$openModule"
+        panic != null -> "panic"
+        else -> "home"
+    }
+    val selected = when (route) { "home", "panic" -> "home"; "avisos" -> "notices"; "settings" -> "more"; else -> "activity" }
+
+    /** Sale de la pantalla actual (con lo que hacía cada una al volver) y deja el inicio. */
+    fun leave() {
+        if (openAvisos) { vm.openAvisos.value = false; vm.refreshUnread() }
+        if (openModule != null) vm.refreshCounts()
+        if (route == "panic") vm.closePanic()
+        openModule = null; showSettings = false; showShifts = false; openScanner = false; logbookPage = null
+    }
+    val goHome = { leave() }
+    val goActivity = { if (route == "m:rondas") openScanner = false else { leave(); openModule = "rondas" } }
+    val goScan = { haptics.tick(); if (route == "m:rondas") openScanner = true else { leave(); openModule = "rondas"; openScanner = true } }
+    val goNotices = { val was = route == "avisos"; leave(); if (!was) vm.openAvisos.value = true }
+    val goMore = { val was = route == "settings"; leave(); if (!was) showSettings = true }
+
+    val back = rememberBackProgress()
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background, topBar = {
-        HomeTopBar(vm, me, unread, sync.running, onNotices = { vm.openAvisos.value = true }, onSettings = { showSettings = true })
+        HomeTopBar(vm, me, unread, sync.running, onNotices = goNotices, onSettings = goMore)
     }, bottomBar = {
-        HomeBottomBar(
-            selected = "home",
-            onHome = { openModule = null; showSettings = false },
-            onActivity = { openModule = "rondas"; openScanner = false },
-            onScan = { openModule = "rondas"; openScanner = true },
-            onNotices = { vm.openAvisos.value = true },
-            onMore = { showSettings = true },
-        )
+        HomeBottomBar(selected = selected, onHome = goHome, onActivity = goActivity, onScan = goScan, onNotices = goNotices, onMore = goMore)
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-        if (me.isPreview) PreviewBanner(me) { vm.exitPreview() }
+            if (me.isPreview) PreviewBanner(me) { vm.exitPreview() }
+            androidx.compose.runtime.CompositionLocalProvider(LocalBackProgress provides back) {
+                androidx.compose.animation.AnimatedContent(
+                    targetState = route,
+                    transitionSpec = { routeTransition(::routeDepth) },
+                    label = "pantalla",
+                    modifier = Modifier.fillMaxWidth().weight(1f).predictiveBack(back),
+                ) { r ->
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                        when (r) {
+                            "shifts" -> ar.com.securityapp.campo.ui.shifts.ShiftsScreen(onBack = goHome, showTopBar = false)
+                            "settings" -> SettingsScreen(vm, me, onBack = goHome, showTopBar = false)
+                            "avisos" -> AvisosScreen(onBack = goHome, showTopBar = false)
+                            "m:rondas" -> ar.com.securityapp.campo.ui.rounds.RondasScreen(onBack = goHome, canManagePoints = me.can("rondas", "editar"), initialScan = openScanner, showTopBar = false)
+                            "m:acciones" -> ar.com.securityapp.campo.ui.actions.AccionesScreen(onBack = goHome, showTopBar = false)
+                            "m:inspecciones" -> ar.com.securityapp.campo.ui.inspections.InspeccionesScreen(onBack = goHome, canCreate = me.can("inspecciones", "crear"), showTopBar = false)
+                            "m:incidentes" -> ar.com.securityapp.campo.ui.incidents.IncidentesScreen(onBack = goHome, canCreate = me.can("incidentes", "crear"), showTopBar = false)
+                            "m:libro" -> ar.com.securityapp.campo.ui.logbook.LogbookScreen(onBack = goHome, canCreate = me.can("libro", "crear"),
+                                showTopBar = false, startPage = logbookPage, onClosed = goHome)
+                            "m:observaciones" -> ar.com.securityapp.campo.ui.observations.ObservacionesScreen(onBack = goHome, canCreate = me.can("observaciones", "crear"), showTopBar = false)
+                            "panic" -> ar.com.securityapp.campo.panic.PanicScreen((lastPanic.value as? SessionViewModel.PanicState.Done)?.result, onClose = { vm.closePanic() })
+                            "home" -> HomeContent(vm, me, sync, update, nextRound, snackbar, openIntent,
+                                onShifts = { showShifts = true }, onLogbook = { page -> logbookPage = page; openModule = "libro" },
+                                onRounds = { openModule = "rondas" }, onModule = { openModule = it })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Inicio: actualización, turno, pánico, próxima ronda, sincronización y módulos. Deslizar hacia abajo sincroniza. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeContent(
+    vm: SessionViewModel, me: Me, sync: SyncState, update: UpdateState, nextRound: SessionViewModel.ScheduledRound?,
+    snackbar: SnackbarHostState, openIntent: (Intent) -> Unit,
+    onShifts: () -> Unit, onLogbook: (String?) -> Unit, onRounds: () -> Unit, onModule: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
+    var pulled by remember { mutableStateOf(false) }
+    // El responsable de una acción la ve aunque su rol no tenga el módulo (como en la web).
+    val modules = MODULES.filter { me.can(it.key) || (it.key == "acciones" && (sync.counts["actions"] ?: 0) > 0) }
+    fun refresh() {
+        haptics.tick()
+        pulled = true
+        scope.launch {
+            vm.syncNow()
+            kotlinx.coroutines.withTimeoutOrNull(2_000) { vm.sync.first { it.running } }
+            val done = vm.sync.first { !it.running }
+            pulled = false
+            if (done.error) {
+                haptics.reject()
+                val r = snackbar.showSnackbar(done.message ?: "No se pudo sincronizar.", actionLabel = "Reintentar",
+                    duration = androidx.compose.material3.SnackbarDuration.Long)
+                if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) refresh()
+            } else {
+                snackbar.showSnackbar(if (done.pending > 0) "Sincronizado · ${done.pending} envío(s) esperando señal" else "Todo sincronizado")
+            }
+        }
+    }
+    Column(Modifier.fillMaxSize()) {
         val previewState by vm.preview.collectAsStateWithLifecycle()
         previewState.notice?.let { n ->
-            Card(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF3CF))) {
+            Card(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp), colors = CardDefaults.cardColors(containerColor = WarnBg)) {
                 Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(n, style = MaterialTheme.typography.bodySmall, color = BrandDark, modifier = Modifier.weight(1f))
                     androidx.compose.material3.TextButton({ vm.clearPreviewNotice() }) { Text("OK") }
                 }
             }
         }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth().weight(1f),
-        ) {
-            update.release?.let { release ->
-                item(span = { GridItemSpan(2) }) { UpdateCard(release.versionName, update, onInstall = { vm.installUpdate(openIntent) }) }
-            }
-            if (me.can("rondas", "crear")) {
-                item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.ui.shifts.ShiftCard(onOpen = { showShifts = true },
-                    onLogbook = if (me.can("libro", "crear")) ({ page -> logbookPage = page; openModule = "libro" }) else null) }
-                item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.panic.PanicButton(onTrigger = { vm.triggerPanic() }) }
-            }
-            if (nextRound != null && me.can("rondas")) {
+        androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = pulled, onRefresh = ::refresh, modifier = Modifier.fillMaxWidth().weight(1f)) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                update.release?.let { release ->
+                    item(span = { GridItemSpan(2) }) { UpdateCard(release.versionName, update, onInstall = { vm.installUpdate(openIntent) }) }
+                }
+                if (me.can("rondas", "crear")) {
+                    item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.ui.shifts.ShiftCard(onOpen = onShifts,
+                        onLogbook = if (me.can("libro", "crear")) ({ page -> onLogbook(page) }) else null) }
+                    item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.panic.PanicButton(onTrigger = { vm.triggerPanic() }) }
+                }
+                if (nextRound != null && me.can("rondas")) {
+                    item(span = { GridItemSpan(2) }) { ScheduledRoundCard(nextRound, onRounds) }
+                }
+                item(span = { GridItemSpan(2) }) { SyncCard(sync) }
                 item(span = { GridItemSpan(2) }) {
-                    ScheduledRoundCard(nextRound) { openModule = "rondas" }
+                    Text("Qué podés hacer", style = MaterialTheme.typography.titleSmall, color = Muted, modifier = Modifier.padding(top = 4.dp))
+                }
+                items(modules, key = { it.key }) { m ->
+                    ModuleTile(m, ready = m.key in READY) {
+                        if (m.key in READY) onModule(m.key)
+                        else scope.launch { snackbar.showSnackbar("${m.label}: llega en la próxima versión de la app.") }
+                    }
+                }
+                if (modules.isEmpty()) {
+                    item(span = { GridItemSpan(2) }) {
+                        Text("Tu rol todavía no tiene módulos habilitados. Consultá con el responsable de Seguridad e Higiene.", color = Muted)
+                    }
                 }
             }
-            item(span = { GridItemSpan(2) }) { SyncCard(sync) }
-            item(span = { GridItemSpan(2) }) {
-                Text("Qué podés hacer", style = MaterialTheme.typography.titleSmall, color = Muted, modifier = Modifier.padding(top = 4.dp))
-            }
-            items(modules, key = { it.key }) { m ->
-                ModuleTile(m, ready = m.key in READY) {
-                    if (m.key in READY) openModule = m.key
-                    else scope.launch { snackbar.showSnackbar("${m.label}: llega en la próxima versión de la app.") }
-                }
-            }
-            if (modules.isEmpty()) {
-                item(span = { GridItemSpan(2) }) {
-                    Text("Tu rol todavía no tiene módulos habilitados. Consultá con el responsable de Seguridad e Higiene.", color = Muted)
-                }
-            }
-        }
         }
     }
 }
@@ -281,7 +288,7 @@ private fun HomeTopBar(vm: SessionViewModel, me: Me, unread: Int, syncing: Boole
             Text(me.role, color = Color(0xFFB4BACB), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onNotices) {
-            androidx.compose.material3.BadgedBox(badge = { if (unread > 0) androidx.compose.material3.Badge(containerColor = Accent, contentColor = BrandDark) { Text(if (unread > 99) "99+" else "$unread") } }) {
+            androidx.compose.material3.BadgedBox(badge = { if (unread > 0) androidx.compose.material3.Badge(containerColor = Accent, contentColor = OnAccent) { Text(if (unread > 99) "99+" else "$unread") } }) {
                 Icon(Icons.Filled.Notifications, "Avisos", tint = Color.White)
             }
         }
@@ -293,42 +300,20 @@ private fun HomeTopBar(vm: SessionViewModel, me: Me, unread: Int, syncing: Boole
 /** Navegación rápida inspirada en billeteras móviles: el QR queda siempre al alcance del pulgar. */
 @Composable
 private fun HomeBottomBar(selected: String, onHome: () -> Unit, onActivity: () -> Unit, onScan: () -> Unit, onNotices: () -> Unit, onMore: () -> Unit) {
+    // Pestaña elegida: píldora amarilla de la marca (se anima sola al cambiar) y texto fuerte; las demás en gris.
+    val itemColors = androidx.compose.material3.NavigationBarItemDefaults.colors(selectedIconColor = OnAccent, indicatorColor = Accent,
+        selectedTextColor = MaterialTheme.colorScheme.onSurface, unselectedIconColor = Muted, unselectedTextColor = Muted)
     Box(Modifier.fillMaxWidth().background(Color.Black).navigationBarsPadding().zIndex(10f)) {
-        NavigationBar(containerColor = Color.White, tonalElevation = 6.dp, windowInsets = WindowInsets(0, 0, 0, 0),
+        NavigationBar(containerColor = BarBg, tonalElevation = 0.dp, windowInsets = WindowInsets(0, 0, 0, 0),
             modifier = Modifier.fillMaxWidth().height(80.dp).align(Alignment.BottomCenter).zIndex(1f)) {
-            NavigationBarItem(selected = selected == "home", onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { Text("Inicio") })
-            NavigationBarItem(selected = selected == "activity", onClick = onActivity, icon = { Icon(Icons.Filled.CheckCircle, "Actividad") }, label = { Text("Actividad") })
+            NavigationBarItem(selected = selected == "home", onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { Text("Inicio") }, colors = itemColors)
+            NavigationBarItem(selected = selected == "activity", onClick = onActivity, icon = { Icon(Icons.Filled.CheckCircle, "Actividad") }, label = { Text("Actividad") }, colors = itemColors)
             Spacer(Modifier.weight(1f))
-            NavigationBarItem(selected = selected == "notices", onClick = onNotices, icon = { Icon(Icons.Filled.Notifications, "Avisos") }, label = { Text("Avisos") })
-            NavigationBarItem(selected = selected == "more", onClick = onMore, icon = { Icon(Icons.Filled.Menu, "Más") }, label = { Text("Más") })
+            NavigationBarItem(selected = selected == "notices", onClick = onNotices, icon = { Icon(Icons.Filled.Notifications, "Avisos") }, label = { Text("Avisos") }, colors = itemColors)
+            NavigationBarItem(selected = selected == "more", onClick = onMore, icon = { Icon(Icons.Filled.Menu, "Más") }, label = { Text("Más") }, colors = itemColors)
         }
         IconButton(onClick = onScan, modifier = Modifier.align(Alignment.TopCenter).offset(y = 8.dp).size(64.dp).zIndex(2f)) {
-            Icon(painterResource(R.drawable.ic_qr), "Escanear QR", Modifier.size(32.dp), tint = BrandDark)
-        }
-    }
-}
-
-/** Contenedor común para que la navegación inferior siga visible al entrar a cualquier módulo. */
-@Composable
-private fun HomeWithNavigation(
-    vm: SessionViewModel,
-    me: Me,
-    selected: String,
-    onHome: () -> Unit,
-    onActivity: () -> Unit,
-    onScan: () -> Unit,
-    onNotices: () -> Unit,
-    onMore: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { HomeTopBar(vm, me, vm.unread.collectAsStateWithLifecycle().value, vm.sync.collectAsStateWithLifecycle().value.running, onNotices, onMore) },
-        bottomBar = { HomeBottomBar(selected, onHome, onActivity, onScan, onNotices, onMore) },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            if (me.isPreview) PreviewBanner(me) { vm.exitPreview() }
-            Box(Modifier.fillMaxSize().weight(1f)) { content() }
+            Icon(painterResource(R.drawable.ic_qr), "Escanear QR", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -338,23 +323,25 @@ private fun HomeWithNavigation(
 private fun PreviewBanner(me: Me, onExit: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(Accent).padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text("VISTA PREVIA · ${me.name}", color = BrandDark, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge,
+            Text("VISTA PREVIA · ${me.name}", color = OnAccent, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("Rol ${me.role}. Solo lectura: las acciones de turnos y rondas están bloqueadas.", color = BrandDark,
+            Text("Rol ${me.role}. Solo lectura: las acciones de turnos y rondas están bloqueadas.", color = OnAccent,
                 style = MaterialTheme.typography.bodySmall)
         }
-        androidx.compose.material3.Button(onExit, colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = BrandDark)) { Text("Salir") }
+        androidx.compose.material3.Button(onExit, colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = OnAccent, contentColor = Color.White)) { Text("Salir") }
     }
 }
 
 @Composable
 private fun ModuleTile(m: Module, ready: Boolean, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().height(128.dp).clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = Color.White),
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Card(Modifier.fillMaxWidth().height(128.dp).pressScale(interaction)
+        .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(), onClick = onClick), colors = CardDefaults.cardColors(containerColor = CardBg),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
         Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(42.dp).background(if (ready) Accent else Color(0xFFE8EAF0), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                    Icon(m.icon, null, tint = if (ready) BrandDark else Muted)
+                Box(Modifier.size(42.dp).background(if (ready) Accent else NeutralBg, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                    Icon(m.icon, null, tint = if (ready) OnAccent else Muted)
                 }
                 Spacer(Modifier.weight(1f))
                 if (!ready) Text("Pronto", style = MaterialTheme.typography.labelSmall, color = Muted)
@@ -369,7 +356,7 @@ private fun ModuleTile(m: Module, ready: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun SyncCard(sync: SyncState) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBg)) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(10.dp).background(if (sync.error) Danger else Color(0xFF2EB872), RoundedCornerShape(5.dp)))
@@ -396,14 +383,14 @@ private fun ScheduledRoundCard(round: SessionViewModel.ScheduledRound, onOpen: (
         minutes < 60 -> "Empieza en $minutes min"
         else -> "Empieza en ${minutes / 60} h ${minutes % 60} min"
     }
-    Card(Modifier.fillMaxWidth().clickable(onClick = onOpen), colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF3CF))) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onOpen), colors = CardDefaults.cardColors(containerColor = WarnBg)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Próxima ronda", style = MaterialTheme.typography.labelLarge, color = BrandDark)
                 Text(round.routeName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(whenText, style = MaterialTheme.typography.bodyMedium, color = BrandDark)
             }
-            Button(onOpen, colors = ButtonDefaults.buttonColors(containerColor = Brand)) { Text("Preparar") }
+            Button(onOpen, colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = androidx.compose.ui.graphics.Color.White)) { Text("Preparar") }
         }
     }
 }
@@ -421,15 +408,15 @@ private fun ago(ms: Long): String {
 
 @Composable
 private fun UpdateCard(versionName: String, update: UpdateState, onInstall: () -> Unit) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF3CF))) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = WarnBg)) {
         Column(Modifier.padding(16.dp)) {
             Text("Hay una versión nueva ($versionName)", fontWeight = FontWeight.SemiBold, color = BrandDark)
             update.release?.notes?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = BrandDark) }
             update.error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Danger, modifier = Modifier.padding(top = 4.dp)) }
             if (update.downloading) {
-                LinearProgressIndicator(progress = { update.progress }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), color = Brand)
+                LinearProgressIndicator(progress = { update.progress }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), color = Ink)
             } else {
-                Button(onInstall, Modifier.padding(top = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = Brand)) { Text("Actualizar") }
+                Button(onInstall, Modifier.padding(top = 8.dp), colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = androidx.compose.ui.graphics.Color.White)) { Text("Actualizar") }
             }
         }
     }

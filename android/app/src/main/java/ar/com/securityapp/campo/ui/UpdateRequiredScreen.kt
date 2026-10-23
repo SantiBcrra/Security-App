@@ -1,5 +1,7 @@
 package ar.com.securityapp.campo.ui
 
+import ar.com.securityapp.campo.ui.theme.*
+
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -23,9 +25,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ar.com.securityapp.campo.BuildConfig
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.Brand
-import ar.com.securityapp.campo.ui.theme.BrandDark
 
 /** Versión obligatoria (min_version_code): la app no deja seguir hasta actualizar. */
 @Composable
@@ -41,7 +40,7 @@ fun UpdateRequiredScreen(vm: SessionViewModel, state: Screen.UpdateRequired, ope
             LinearProgressIndicator(progress = { update.progress }, modifier = Modifier.fillMaxWidth().padding(top = 20.dp), color = Accent)
         } else {
             Button({ vm.installUpdate(openIntent) }, Modifier.fillMaxWidth().padding(top = 20.dp).height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) { Text("Actualizar ahora", fontWeight = FontWeight.Bold) }
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) { Text("Actualizar ahora", fontWeight = FontWeight.Bold) }
         }
     }
 }

@@ -1,6 +1,8 @@
 package ar.com.securityapp.campo.ui.rounds
 
-import androidx.activity.compose.BackHandler
+import ar.com.securityapp.campo.ui.AppBackHandler
+import ar.com.securityapp.campo.ui.theme.*
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,12 +51,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ar.com.securityapp.campo.data.PatrolRound
 import ar.com.securityapp.campo.data.RoundsRepository.ScanResult
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.Brand
-import ar.com.securityapp.campo.ui.theme.BrandDark
-import ar.com.securityapp.campo.ui.theme.Danger
-import ar.com.securityapp.campo.ui.theme.Muted
-import ar.com.securityapp.campo.ui.theme.Ok
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -66,6 +62,7 @@ private fun hour(iso: String?): String = iso?.let { runCatching { HOUR.format(In
 @Composable
 /** @param canManagePoints permiso rondas.editar: ubicar puntos con el GPS y grabar etiquetas NFC */
 fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialScan: Boolean = false, showTopBar: Boolean = true, vm: RoundsViewModel = viewModel()) {
+    val haptics = ar.com.securityapp.campo.ui.rememberHaptics()
     val ui by vm.ui.collectAsStateWithLifecycle()
     val scan by vm.scan.collectAsStateWithLifecycle()
     val autoRoutes by vm.autoRoutes.collectAsStateWithLifecycle()
@@ -106,7 +103,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
         QrScanner("Apuntá al QR del punto de control", onResult = { scanning = false; if (vm.isPreview()) previewWarning = true else vm.onQr(it) }, onClose = { scanning = false })
         return
     }
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (showTopBar) Row(Modifier.fillMaxWidth().background(Brand).statusBarsPadding().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -118,7 +115,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
         var mapTouched by remember { mutableStateOf(false) }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), userScrollEnabled = !mapTouched) {
             if (ui.failed > 0) item {
-                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFDE3E5))) {
+                Card(colors = CardDefaults.cardColors(containerColor = DangerBg)) {
                     Text("${ui.failed} envío(s) rechazado(s) por el servidor. Revisalos en Ajustes.", Modifier.padding(14.dp), color = Danger)
                 }
             }
@@ -161,7 +158,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
                     Text("No tenés rutas asignadas. Podés hacer una ronda libre, escaneando los puntos que recorras.", color = Muted)
                 }
                 items(ui.routes, key = { it.uuid }) { route ->
-                    Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Card(colors = CardDefaults.cardColors(containerColor = CardBg)) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(route.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -171,7 +168,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 TextButton({ mapRoute = if (mapRoute?.uuid == route.uuid) null else route }) { Text(if (mapRoute?.uuid == route.uuid) "Ocultar mapa" else "Ver mapa") }
-                                Button({ begin(route) }, enabled = !ui.busy, colors = ButtonDefaults.buttonColors(containerColor = Brand)) { Text("Iniciar") }
+                                Button({ haptics.confirm(); begin(route) }, enabled = !ui.busy, colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = androidx.compose.ui.graphics.Color.White)) { Text("Iniciar") }
                             }
                         }
                     }
@@ -184,7 +181,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
                     Text("Parate junto al punto y guardá su ubicación actual. El cambio queda en cola si no hay señal.", style = MaterialTheme.typography.bodySmall, color = Muted)
                 }
                 if (canManagePoints && ui.points.isNotEmpty()) items(ui.points.values.sortedBy { it.code }, key = { "loc-${it.uuid}" }) { point ->
-                    Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Card(colors = CardDefaults.cardColors(containerColor = CardBg)) {
                         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) { Text("${point.code} · ${point.name}"); Text(if (point.lat == null || point.lng == null) "Sin coordenadas" else "%.5f, %.5f".format(java.util.Locale.US, point.lat, point.lng), style = MaterialTheme.typography.bodySmall, color = Muted) }
                             OutlinedButton({ locatingPoint = point }, enabled = !ui.busy) { Text("Tomar GPS") }
@@ -192,7 +189,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
                     }
                 }
                 if (canManagePoints) item {
-                    TextButton({ writingTags = true }, Modifier.fillMaxWidth()) { Text("Grabar etiquetas NFC de los puntos", color = Brand) }
+                    TextButton({ writingTags = true }, Modifier.fillMaxWidth()) { Text("Grabar etiquetas NFC de los puntos", color = Ink) }
                 }
                 if (ui.history.isNotEmpty()) {
                     item { Text("Últimas rondas", style = MaterialTheme.typography.titleSmall, color = Muted, modifier = Modifier.padding(top = 8.dp)) }
@@ -217,7 +214,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
             onDismissRequest = { confirmFinish = false },
             title = { Text("¿Finalizar la ronda?") },
             text = { Text(if (missing > 0) "Faltan $missing punto(s) de la ruta: quedan como salteados." else "Se registraron todos los puntos.") },
-            confirmButton = { TextButton({ confirmFinish = false; vm.finish() }) { Text("Finalizar") } },
+            confirmButton = { TextButton({ haptics.confirm(); confirmFinish = false; vm.finish() }) { Text("Finalizar") } },
             dismissButton = { TextButton({ confirmFinish = false }) { Text("Seguir") } },
         )
     }
@@ -259,7 +256,7 @@ fun RondasScreen(onBack: () -> Unit, canManagePoints: Boolean = false, initialSc
 private fun ActiveRoundCard(ui: RoundsUi, round: PatrolRound, onScan: () -> Unit, onFinish: () -> Unit) {
     val total = ui.progress.size
     val done = ui.progress.count { it.done }
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
+    Card(colors = CardDefaults.cardColors(containerColor = CardBg)) {
         Column(Modifier.padding(16.dp)) {
             Text("Ronda en curso", style = MaterialTheme.typography.labelLarge, color = Ok, fontWeight = FontWeight.Bold)
             Text(ui.activeRoute?.name ?: "Ronda libre", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -269,7 +266,7 @@ private fun ActiveRoundCard(ui: RoundsUi, round: PatrolRound, onScan: () -> Unit
                 Text("$done de $total puntos", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
             }
             Button(onScan, Modifier.fillMaxWidth().padding(top = 14.dp).height(60.dp), enabled = !ui.busy,
-                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
                 Text("Escanear punto", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
             NfcHint()
@@ -280,11 +277,11 @@ private fun ActiveRoundCard(ui: RoundsUi, round: PatrolRound, onScan: () -> Unit
 
 @Composable
 private fun ProgressRow(p: ProgressItem) {
-    Row(Modifier.fillMaxWidth().background(if (p.next) Color(0xFFFDF3CF) else Color.Transparent, RoundedCornerShape(10.dp)).padding(10.dp),
+    Row(Modifier.fillMaxWidth().background(if (p.next) WarnBg else Color.Transparent, RoundedCornerShape(10.dp)).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(30.dp).background(if (p.done) Ok else if (p.next) Accent else Color(0xFFE8EAF0), CircleShape), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(30.dp).background(if (p.done) Ok else if (p.next) Accent else NeutralBg, CircleShape), contentAlignment = Alignment.Center) {
             if (p.done) Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(18.dp))
-            else Text("${p.n}", fontWeight = FontWeight.Bold, color = BrandDark)
+            else Text("${p.n}", fontWeight = FontWeight.Bold, color = if (p.next) OnAccent else MaterialTheme.colorScheme.onSurface)
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -377,14 +374,14 @@ private fun SlotRow(slot: ar.com.securityapp.campo.data.PatrolSlot, routeName: S
         slot.canStart(now) -> "Es la hora" to Ok
         else -> "Faltan ${java.time.Duration.between(now, slot.dueAt).toMinutes().let { if (it >= 60) "${it / 60} h ${it % 60} min" else "$it min" }}" to Muted
     }
-    Card(colors = CardDefaults.cardColors(containerColor = if (slot.late(now)) Color(0xFFFDE3E5) else Color.White)) {
+    Card(colors = CardDefaults.cardColors(containerColor = if (slot.late(now)) DangerBg else CardBg)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("${SLOT_HOUR.format(slot.dueAt)} · $dayText", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(routeName + (slot.schedule?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodyMedium)
                 Text(status, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.SemiBold)
             }
-            Button(onStart, enabled = enabled && slot.canStart(now), colors = ButtonDefaults.buttonColors(containerColor = if (slot.late(now)) Danger else Brand)) { Text("Iniciar") }
+            Button(onStart, enabled = enabled && slot.canStart(now), colors = ButtonDefaults.buttonColors(containerColor = if (slot.late(now)) Danger else Brand, contentColor = androidx.compose.ui.graphics.Color.White)) { Text("Iniciar") }
         }
     }
 }
@@ -397,7 +394,7 @@ private fun NextPointGuide(vm: RoundsViewModel, next: ar.com.securityapp.campo.d
     androidx.compose.runtime.LaunchedEffect(next.uuid) {
         while (true) { vm.here()?.let { here = it }; kotlinx.coroutines.delay(15_000) }
     }
-    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF3CF))) {
+    Card(colors = CardDefaults.cardColors(containerColor = WarnBg)) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Próximo punto", style = MaterialTheme.typography.labelMedium, color = BrandDark)

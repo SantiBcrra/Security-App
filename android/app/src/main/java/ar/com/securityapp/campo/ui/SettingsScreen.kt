@@ -1,6 +1,8 @@
 package ar.com.securityapp.campo.ui
+import androidx.compose.material3.SegmentedButton
 
-import androidx.activity.compose.BackHandler
+import ar.com.securityapp.campo.ui.theme.*
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
@@ -38,14 +40,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ar.com.securityapp.campo.BuildConfig
 import ar.com.securityapp.campo.data.Me
-import ar.com.securityapp.campo.ui.theme.Brand
-import ar.com.securityapp.campo.ui.theme.Danger
-import ar.com.securityapp.campo.ui.theme.Muted
 
 @Suppress("DEPRECATION")
 @Composable
 fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit, showTopBar: Boolean = true) {
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     var confirmLogout by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(vm.failedOps()) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -54,7 +53,7 @@ fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit, showTopBar:
             Text("Ajustes", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBg)) {
                 Column(Modifier.padding(16.dp)) {
                     Row2("Usuario", me.name)
                     Row2("Rol", me.role)
@@ -65,6 +64,7 @@ fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit, showTopBar:
                     Row2("Dispositivo", vm.prefs.deviceUuid.take(8) + "…")
                 }
             }
+            AppearanceCard(vm)
             if (vm.canPreview(me)) PreviewCard(vm)
             if (me.can("usuarios", "editar") && !me.isPreview) {
                 // Detalle técnico: solo para administradores (el guardia no lo necesita).
@@ -78,7 +78,7 @@ fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit, showTopBar:
             if (failed.isNotEmpty()) {
                 Text("Envíos rechazados por el servidor", style = MaterialTheme.typography.titleSmall, color = Danger, modifier = Modifier.padding(top = 16.dp))
                 for (op in failed) {
-                    Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = CardBg)) {
                         Column(Modifier.padding(12.dp)) {
                             Text(OP_LABELS[op.type] ?: op.type, fontWeight = FontWeight.SemiBold)
                             Text(op.error ?: "", style = MaterialTheme.typography.bodySmall, color = Danger)
@@ -114,6 +114,30 @@ fun SettingsScreen(vm: SessionViewModel, me: Me, onBack: () -> Unit, showTopBar:
     }
 }
 
+/** Tema: automático (como el celular), claro u oscuro. Cambia en el momento y queda guardado en el celular. */
+@Composable
+private fun AppearanceCard(vm: SessionViewModel) {
+    Card(Modifier.fillMaxWidth().padding(top = 16.dp), colors = CardDefaults.cardColors(containerColor = CardBg)) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Apariencia", fontWeight = FontWeight.SemiBold)
+            Text("El modo oscuro no encandila de noche y gasta menos batería.", style = MaterialTheme.typography.bodySmall, color = Muted,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+            val options = listOf("system" to "Automático", "light" to "Claro", "dark" to "Oscuro")
+            androidx.compose.material3.SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                options.forEachIndexed { i, (key, label) ->
+                    SegmentedButton(
+                        selected = ThemeMode.value == key,
+                        onClick = { ThemeMode.value = key; vm.prefs.themeMode = key },
+                        shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(i, options.size),
+                    ) { Text(label) }
+                }
+            }
+            if (ThemeMode.value == "system") Text("Sigue el tema del celular (claro de día u oscuro si lo tenés activado).",
+                style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 6.dp))
+        }
+    }
+}
+
 /**
  * "Ver como" (típico de los sistemas con roles): el administrador elige un usuario y ve la app exactamente como él,
  * con sus módulos, sus botones y los datos que le bajan a él. Solo lectura.
@@ -124,7 +148,7 @@ private fun PreviewCard(vm: SessionViewModel) {
     var open by remember { mutableStateOf(false) }
     var users by remember { mutableStateOf<List<SessionViewModel.PreviewUser>?>(null) }
     var loadError by remember { mutableStateOf<String?>(null) }
-    Card(Modifier.fillMaxWidth().padding(top = 16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+    Card(Modifier.fillMaxWidth().padding(top = 16.dp), colors = CardDefaults.cardColors(containerColor = CardBg)) {
         Column(Modifier.padding(16.dp)) {
             Text("Ver la app como otro usuario", fontWeight = FontWeight.SemiBold)
             Text("Para saber qué ve exactamente un guardia o un supervisor: sus módulos, sus botones y sus datos. Es solo una vista previa: " +

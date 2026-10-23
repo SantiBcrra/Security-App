@@ -53,6 +53,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("preview_active", false)
         set(value) { sp.edit().putBoolean("preview_active", value).apply() }
 
+    /** Tema de la app: "system" (sigue al celular), "light" u "dark". No se borra al cerrar sesión. */
+    var themeMode: String
+        get() = sp.getString("theme_mode", "system") ?: "system"
+        set(value) { sp.edit().putString("theme_mode", value).apply() }
+
     /** Borra lo de la sesión (al salir o al cambiar de usuario). Conserva el dispositivo, el servidor y la empresa. */
     fun clearSession() {
         sp.edit().remove("me").remove("cursor").remove("last_sync").remove("meta").apply()

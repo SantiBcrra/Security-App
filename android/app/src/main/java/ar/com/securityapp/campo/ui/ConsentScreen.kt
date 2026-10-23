@@ -1,5 +1,7 @@
 package ar.com.securityapp.campo.ui
 
+import ar.com.securityapp.campo.ui.theme.*
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,8 +21,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.BrandDark
 
 /** Consentimiento (celular personal, Ley 25.326): el texto viene del servidor y queda registrada la aceptación. */
 @Composable
@@ -35,7 +35,7 @@ fun ConsentScreen(vm: SessionViewModel, state: Screen.Consent) {
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
         Spacer(Modifier.height(16.dp))
         Button({ vm.acceptConsent() }, Modifier.fillMaxWidth().height(52.dp), enabled = !state.busy,
-            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
+            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
             Text(if (state.busy) "Guardando…" else "Acepto", fontWeight = FontWeight.Bold)
         }
         OutlinedButton({ vm.logout() }, Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("No acepto · salir") }

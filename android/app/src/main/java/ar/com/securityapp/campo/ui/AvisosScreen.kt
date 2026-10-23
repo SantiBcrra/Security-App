@@ -1,12 +1,14 @@
 package ar.com.securityapp.campo.ui
 
+import ar.com.securityapp.campo.ui.theme.*
+
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,11 +47,6 @@ import ar.com.securityapp.campo.data.AppNotification
 import ar.com.securityapp.campo.data.OfflineException
 import ar.com.securityapp.campo.ui.observations.TopBar
 import ar.com.securityapp.campo.ui.observations.hour
-import ar.com.securityapp.campo.ui.theme.Accent
-import ar.com.securityapp.campo.ui.theme.BrandDark
-import ar.com.securityapp.campo.ui.theme.Danger
-import ar.com.securityapp.campo.ui.theme.Muted
-import ar.com.securityapp.campo.ui.theme.Ok
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -91,21 +88,28 @@ class AvisosViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun AvisosScreen(onBack: () -> Unit, showTopBar: Boolean = true, vm: AvisosViewModel = viewModel()) {
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val haptics = rememberHaptics()
     var attending by remember { mutableStateOf<AppNotification?>(null) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (showTopBar) TopBar("Avisos", onBack) { TextButton({ vm.load() }) { Text("Actualizar", color = Color.White) } }
+        // Deslizar hacia abajo vuelve a pedir los avisos.
+        androidx.compose.material3.pulltorefresh.PullToRefreshBox(isRefreshing = ui.loading && ui.items.isNotEmpty(), onRefresh = { haptics.tick(); vm.load() }, modifier = Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ui.error?.let { item { Text(it, color = Danger) } }
             if (ui.loading && ui.items.isEmpty()) item { CircularProgressIndicator() }
             if (!ui.loading && ui.items.isEmpty() && ui.error == null) item { Text("No tenés avisos.", color = Muted) }
             items(ui.items, key = { it.uuid }) { n ->
-                AvisoCard(n, acked = n.alertAcked || n.uuid in ui.acked, busy = ui.busy == n.uuid,
-                    onAck = { if (n.panicUuid != null) attending = n else vm.ack(n) })
+                Box(Modifier.animateItem()) {
+                    AvisoCard(n, acked = n.alertAcked || n.uuid in ui.acked, busy = ui.busy == n.uuid,
+                        onAck = { haptics.confirm(); if (n.panicUuid != null) attending = n else vm.ack(n) })
+                }
             }
+        }
         }
     }
     attending?.let { n ->
@@ -125,9 +129,9 @@ private fun AvisoCard(n: AppNotification, acked: Boolean, busy: Boolean, onAck: 
     val context = LocalContext.current
     val mapUrl = remember(n.body) { Regex("https?://maps\\.google\\.com/\\?q=[^\\s)]+", RegexOption.IGNORE_CASE).find(n.body)?.value?.trimEnd('.', ',', ')') }
     val bg = when {
-        n.critical && !acked && (n.alertUuid != null || n.panicUuid != null) -> Color(0xFFFDE3E5)
-        !n.read -> Color(0xFFFDF3CF)
-        else -> Color.White
+        n.critical && !acked && (n.alertUuid != null || n.panicUuid != null) -> DangerBg
+        !n.read -> WarnBg
+        else -> CardBg
     }
     Card(colors = CardDefaults.cardColors(containerColor = bg)) {
         Column(Modifier.padding(14.dp)) {
@@ -146,7 +150,7 @@ private fun AvisoCard(n: AppNotification, acked: Boolean, busy: Boolean, onAck: 
                 if (acked) Text((if (n.panicUuid != null) "Atendida" else "Recibido") + (n.alertAckedBy?.let { " por $it" } ?: ""), color = Ok,
                     fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
                 else Button(onAck, Modifier.padding(top = 8.dp), enabled = !busy,
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BrandDark)) {
+                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
                     Text(if (busy) "Enviando…" else if (n.panicUuid != null) "Atendido" else "Recibido", fontWeight = FontWeight.Bold)
                 }
             }
