@@ -606,7 +606,18 @@ return [
             'userUuids' => [], 'defaultGrace' => 15, 'old' => null], null);
         assert_true(str_contains($html, 'Celular compartido del puesto') && str_contains($html, 'selected'), 'formulario por puesto');
         // Al terminar la franja (y cerrarse el último tramo) queda cubierta en parte.
+        // RRHH (casilla de email) recibe el reporte de fin de turno de la franja al cerrarse.
+        $rule = array_values(array_filter(\App\Models\NotificationRules::all(), fn ($r) => $r['event'] === 'guard.shift_report'))[0];
+        DB::tenant()->prepare('UPDATE notification_rules SET recipients = ? WHERE id = ?')->execute([json_encode([['type' => 'email', 'value' => 'rrhh@sh.test']]), (int) $rule['id']]);
+        \App\Services\Logbook::create(['site_uuid' => $st['site']['uuid'], 'kind' => 'persona', 'person_name' => 'Ana Visita', 'company' => 'Gas SA']);
         ShiftService::run(strtotime($c['end_at'] . ' UTC') + (ShiftService::autoEndMinutes() + 5) * 60);
+        $mails = DB::tenant()->query("SELECT * FROM notification_queue WHERE event = 'guard.shift_report' AND to_address = 'rrhh@sh.test'")->fetchAll();
+        assert_same(1, count($mails), 'un reporte por franja');
+        foreach (['Reporte de turno · Portería', 'Guardia1', 'Llegó el dueño', 'Ana Visita', 'SIGUE ADENTRO', 'INCIDENTES Y ACCIDENTES: no hubo'] as $needle) {
+            assert_true(str_contains($mails[0]['subject'] . $mails[0]['body_text'], $needle), "el reporte dice «{$needle}»");
+        }
+        ShiftService::run(strtotime($c['end_at'] . ' UTC') + (ShiftService::autoEndMinutes() + 10) * 60);
+        assert_same(1, (int) DB::tenant()->query("SELECT COUNT(*) FROM notification_queue WHERE event = 'guard.shift_report'")->fetchColumn(), 'una sola vez');
         assert_same('parcial', DB::tenant()->query("SELECT status FROM guard_post_coverage WHERE id = {$cov['id']}")->fetchColumn());
         // Editar la programación a "por persona" anula las franjas futuras.
         ShiftPlanner::delete(ShiftPlanner::find($shiftUuid));

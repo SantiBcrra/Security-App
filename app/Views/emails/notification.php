@@ -7,14 +7,15 @@
     <tr><td style="background:<?= $m['critical'] ? '#dc3545' : '#212529' ?>;color:#ffffff;padding:14px 20px;font-size:13px">
         <?= e(config('app.name')) ?><?= ($t = App\Core\Tenant::current()) ? ' · ' . e($t['name']) : '' ?></td></tr>
     <tr><td style="padding:20px">
-        <p style="margin:0 0 6px;font-size:13px;color:#6c757d">Hola, <?= e(explode(' ', $user['name'])[0]) ?></p>
+        <?php if (($user['name'] ?? '') !== ''): ?><p style="margin:0 0 6px;font-size:13px;color:#6c757d">Hola, <?= e(explode(' ', $user['name'])[0]) ?></p><?php endif; ?>
         <h1 style="margin:0 0 12px;font-size:19px;<?= $m['critical'] ? 'color:#dc3545' : '' ?>"><?= e($m['title']) ?></h1>
         <p style="margin:0 0 18px;font-size:14px;line-height:1.5;white-space:pre-line"><?= e($m['body']) ?></p>
-        <a href="<?= e($link) ?>" style="display:inline-block;background:<?= $m['critical'] ? '#dc3545' : '#0d6efd' ?>;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:6px;font-size:14px">
-            <?= $m['critical'] ? 'Ver y confirmar "Recibido"' : 'Ver en el sistema' ?></a>
+        <?php if (empty($user['external'])): ?><a href="<?= e($link) ?>" style="display:inline-block;background:<?= $m['critical'] ? '#dc3545' : '#0d6efd' ?>;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:6px;font-size:14px">
+            <?= $m['critical'] ? 'Ver y confirmar "Recibido"' : 'Ver en el sistema' ?></a><?php endif; ?>
     </td></tr>
     <tr><td style="padding:12px 20px;font-size:11px;color:#868e96;border-top:1px solid #e9ecef">
-        Aviso automático. Podés elegir qué avisos no críticos recibir en "Mi perfil".</td></tr>
+        <?= empty($user['external']) ? 'Aviso automático. Podés elegir qué avisos no críticos recibir en "Mi perfil".'
+            : 'Aviso automático. Esta casilla está cargada en una regla de avisos de la empresa; para dejar de recibirlo, pedile al responsable de Seguridad e Higiene que la quite.' ?></td></tr>
 </table>
 </td></tr></table>
 </body>

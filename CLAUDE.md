@@ -315,6 +315,22 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - App 1.5.1 (`versionCode 21`): `ui/FitText.kt` = texto de una línea que se achica en vez de cortarse (celulares angostos o letra
   grande); lo usan las pestañas de abajo y los botones + Novedad / Persona / Vehículo del libro ("+" arriba, nombre abajo).
 
+## Reporte de fin de turno y condición insegura (RRHH) — decisión del usuario 26/10/2026
+- **Casillas de email fijas** en las reglas de aviso (recipiente `{type: email, value}`; Configuración → Notificaciones y alertas →
+  "Casillas de email (sin usuario en el sistema)"): reciben solo por email, con todo el contenido (sin botón "Ver en el sistema"
+  ni saludo); `Recipients::emails()` + `Notifier` (cola con `user_id` NULL). Ej.: RRHH.
+- **Reporte de fin de turno por franja del puesto** (`Services\ShiftEndReport`, evento `guard.shift_report`): al cerrarse la
+  franja (`PostCoverage::run`, una vez por franja con `NotificationMarks`) se manda quién cubrió y en qué horario (relevos, sin
+  persona con motivo, huecos sin guardia, % cubierto), cada entrada y salida de personas y vehículos (y quién sigue adentro),
+  novedades del libro, incidentes y observaciones del predio ("no hubo" si no hubo), rondas y pánicos. Asunto con ⚠ si hubo
+  incidentes, condición insegura o puesto sin guardia. Regla por defecto (tenant 0080): SyH por email; la casilla de RRHH se
+  agrega en la regla.
+- **Condición insegura en el libro**: categoría `riesgo` ("Condición insegura / riesgo", primera en la app y la web). Siempre
+  importante; dispara `logbook.unsafe` (**CRÍTICO**: no se silencia y sale en el mismo request; regla por defecto SyH +
+  supervisores por app, notificación y email; agregar la casilla de RRHH) y abre una **observación** "Condición insegura" de
+  severidad máxima en el primer sector del predio (`Logbook::unsafeObservation`; si falta catálogo o sector, solo el aviso y
+  queda en el log). App 1.5.2 (`versionCode 22`): chip rojo y aviso "se avisa al instante".
+
 ## Libro de guardia — diseño en `docs/design/libro-de-guardia.md`
 - Decisiones del usuario: guardias de **empresa contratada** (su libro rubricado en papel es responsabilidad de ellos; este es
   el libro de Indumor), datos de visitantes **optativos**, **ingreso libre**, **cierre de turno con firma siempre** y

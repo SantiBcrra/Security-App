@@ -82,6 +82,20 @@ final class Recipients
         return $ids;
     }
 
+    /**
+     * Casillas de email fijas de la regla (tipo `email`, p. ej. RRHH): no son usuarios del sistema y solo reciben por email.
+     * @return list<string>
+     */
+    public static function emails(array $recipients): array
+    {
+        $out = [];
+        foreach ($recipients as $r) {
+            $mail = strtolower(trim((string) ($r['value'] ?? '')));
+            if (($r['type'] ?? '') === 'email' && filter_var($mail, FILTER_VALIDATE_EMAIL)) $out[$mail] = true;
+        }
+        return array_keys($out);
+    }
+
     /** Todos los responsables SyH y administradores (escalamiento, resúmenes). */
     public static function managers(): array
     {

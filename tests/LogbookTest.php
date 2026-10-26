@@ -120,6 +120,45 @@ return [
         assert_same('Juan Pérez', Logbook::lookup('persona', '3011')[0]['name']);
     },
 
+    'libro: condición insegura avisa al instante (crítico, también a la casilla de RRHH) y abre una observación' => function () use ($setup, &$st, $count) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        \App\Services\IndustryTemplates::apply('metalurgica'); // categorías y severidades
+        \App\Models\Sectors::create(['site_id' => (int) $st['site']['id'], 'parent_id' => null, 'name' => 'Depósito 2']);
+        $rule = \App\Models\NotificationRules::all();
+        $unsafe = array_values(array_filter($rule, fn ($r) => $r['event'] === 'logbook.unsafe'));
+        assert_true($unsafe !== [], 'regla por defecto (migración 0080)');
+        // RRHH como casilla de email en la regla
+        DB::tenant()->prepare('UPDATE notification_rules SET recipients = ? WHERE id = ?')->execute([json_encode(array_merge($unsafe[0]['recipients'], [['type' => 'email', 'value' => 'rrhh@lb.test']])), (int) $unsafe[0]['id']]);
+        UserAuth::setCurrent($st['g1']);
+        $before = $count('logbook.unsafe');
+        $r = Logbook::create(['site_uuid' => $st['site']['uuid'], 'kind' => 'novedad', 'category' => 'riesgo', 'text' => 'Cable pelado en el tablero del depósito 2']);
+        assert_same(1, (int) $r['entry']['important'], 'lo inseguro siempre es importante');
+        assert_true($count('logbook.unsafe') >= $before + 2, 'aviso en la app a SyH y supervisor');
+        $mail = DB::tenant()->query("SELECT * FROM notification_queue WHERE event = 'logbook.unsafe' AND to_address = 'rrhh@lb.test'")->fetch();
+        assert_true($mail !== false && (int) $mail['is_critical'] === 1 && $mail['user_id'] === null, 'email a la casilla de RRHH, crítico');
+        assert_true(str_contains($mail['body_html'], 'Cable pelado') && !str_contains($mail['body_html'], 'Hola,'), 'el email lleva el contenido y no saluda a un usuario');
+        $obs = DB::tenant()->query("SELECT * FROM observations ORDER BY id DESC LIMIT 1")->fetch();
+        assert_true($obs !== false && str_contains($obs['description'], 'Cable pelado'), 'se abrió la observación para SyH');
+        // Formulario de reglas: la casilla se ve y se guarda
+        $admin = Users::findById(Users::create(['name' => 'Admin', 'email' => 'admin@lb.test', 'role_id' => (int) Roles::findBySlug('admin_empresa')['id'],
+            'password_hash' => password_hash('clave-larga-123', PASSWORD_DEFAULT)]));
+        $_SESSION = [\App\Services\Impersonation::TENANT_KEY => $st['a']['uuid'], UserAuth::USER_KEY => $admin['uuid'], '_csrf_token' => 't'];
+        $router = new App\Core\Router();
+        (require BASE_PATH . '/app/routes.php')($router);
+        $res = $router->dispatch(new App\Core\Request('POST', '/panel/configuracion/notificaciones', [], ['csrf_token' => 't', 'name' => 'Reporte RRHH', 'event' => 'guard.shift_report',
+            'channels' => ['email'], 'emails' => 'rrhh@lb.test, mal-email']));
+        assert_same(302, $res->status);
+        assert_same(0, (int) DB::tenant()->query("SELECT COUNT(*) FROM notification_rules WHERE name = 'Reporte RRHH'")->fetchColumn(), 'email inválido: no guarda');
+        $router->dispatch(new App\Core\Request('POST', '/panel/configuracion/notificaciones', [], ['csrf_token' => 't', 'name' => 'Reporte RRHH', 'event' => 'guard.shift_report',
+            'channels' => ['email'], 'emails' => 'RRHH@lb.test']));
+        $saved = DB::tenant()->query("SELECT recipients FROM notification_rules WHERE name = 'Reporte RRHH'")->fetchColumn();
+        assert_same([['type' => 'email', 'value' => 'rrhh@lb.test']], json_decode((string) $saved, true));
+        $_SESSION = [];
+        UserAuth::setCurrent($st['hys']);
+    },
+
     'libro: adentro ahora, salida (una sola vez) y corrección sin tocar la original' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['a']);

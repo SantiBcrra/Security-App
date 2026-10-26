@@ -22,7 +22,8 @@ final class Logbook
     public const MODULE = 'libro';
     public const KINDS = ['novedad' => 'Novedad', 'persona' => 'Ingreso de persona', 'vehiculo' => 'Ingreso de vehículo', 'salida' => 'Salida',
         'correccion' => 'Corrección', 'cierre' => 'Cierre de turno', 'recepcion' => 'Recepción del puesto'];
-    public const CATEGORIES = ['rutina' => 'Rutina / sin novedad', 'incidente' => 'Incidente', 'alarma' => 'Alarma', 'mantenimiento' => 'Mantenimiento / falla',
+    /** "riesgo" = condición insegura (cable pelado, fuga de gas…): avisa al instante (crítico) y abre una observación para SyH. */
+    public const CATEGORIES = ['rutina' => 'Rutina / sin novedad', 'riesgo' => 'Condición insegura / riesgo', 'incidente' => 'Incidente', 'alarma' => 'Alarma', 'mantenimiento' => 'Mantenimiento / falla',
         'llamada' => 'Llamada / aviso', 'entrega' => 'Entrega / paquete', 'otro' => 'Otro'];
     public const VEHICLE_TYPES = ['auto' => 'Auto', 'camioneta' => 'Camioneta', 'camion' => 'Camión', 'utilitario' => 'Utilitario', 'moto' => 'Moto', 'otro' => 'Otro'];
     /** Campos que entran en la huella (en este orden). */
@@ -179,7 +180,7 @@ final class Logbook
         if ($kind === 'novedad') {
             $row['category'] = isset(self::CATEGORIES[$in['category'] ?? '']) ? (string) $in['category'] : 'otro';
             $row['text'] = self::str($in, 'text', 5000) ?? throw new UserError('Escribí la novedad.');
-            $row['important'] = !empty($in['important']) ? 1 : 0;
+            $row['important'] = !empty($in['important']) || $row['category'] === 'riesgo' ? 1 : 0; // lo inseguro es siempre importante
         } elseif ($kind === 'persona') {
             $row += ['person_name' => self::str($in, 'person_name', 150), 'person_doc' => self::doc($in['person_doc'] ?? null), 'company' => self::str($in, 'company', 150),
                 'visiting' => self::str($in, 'visiting', 150), 'reason' => self::str($in, 'reason', 255), 'badge' => self::str($in, 'badge', 50),
@@ -198,8 +199,46 @@ final class Logbook
         $entry = self::insert($row);
         self::remember($entry);
         Audit::tenant('logbook.create', 'logbook_entry', $entry['uuid'], null, ['predio' => $site['name'], 'folio' => (int) $entry['folio'], 'tipo' => $kind]);
-        if ($kind === 'novedad' && $entry['important']) Notifier::dispatch('logbook.important', self::subject($entry));
+        if ($kind === 'novedad' && $entry['category'] === 'riesgo') {
+            $obs = self::unsafeObservation($entry, $site);
+            Notifier::dispatch('logbook.unsafe', self::subject($entry) + ['observation_number' => $obs ? \App\Models\Observations::format((int) $obs['number']) : null]);
+        } elseif ($kind === 'novedad' && $entry['important']) {
+            Notifier::dispatch('logbook.important', self::subject($entry));
+        }
         return ['entry' => $entry, 'duplicate' => false];
+    }
+
+    /**
+     * Condición insegura anotada en el libro → observación "Condición insegura" de severidad máxima en el primer sector del
+     * predio, para que SyH le dé seguimiento (acción correctiva). Si a la empresa le falta el catálogo o el sector, no se crea
+     * (el aviso inmediato sale igual) y queda en el log. Nunca rompe la anotación.
+     */
+    private static function unsafeObservation(array $entry, array $site): ?array
+    {
+        try {
+            $db = DB::tenant();
+            $cat = $db->query("SELECT uuid FROM catalog_items WHERE catalog = 'categoria' AND is_active = 1 AND deleted_at IS NULL
+                ORDER BY (name LIKE 'Condici%') DESC, sort_order, id LIMIT 1")->fetchColumn();
+            $sev = $db->query("SELECT uuid FROM catalog_items WHERE catalog = 'severidad' AND is_active = 1 AND deleted_at IS NULL ORDER BY level DESC, id LIMIT 1")->fetchColumn();
+            $sec = $db->prepare('SELECT uuid FROM sectors WHERE site_id = ? AND is_active = 1 AND deleted_at IS NULL ORDER BY path LIMIT 1');
+            $sec->execute([(int) $site['id']]);
+            $sector = $sec->fetchColumn();
+            if (!$cat || !$sev || !$sector) {
+                \App\Core\Logger::warning('Libro: condición insegura sin observación (falta categoría, severidad o sector del predio)', ['folio' => $entry['folio']]);
+                return null;
+            }
+            [$data, $people, $errors] = \App\Services\ObservationInput::validate(['category' => $cat, 'severity' => $sev, 'sector' => $sector,
+                'description' => 'Condición insegura anotada en el libro de guardia (' . $site['name'] . ', folio ' . (int) $entry['folio'] . '): ' . $entry['text'],
+                'created_at_device' => str_replace(' ', 'T', (string) $entry['occurred_at']) . 'Z', 'location_text' => $site['name']]);
+            if ($errors) {
+                \App\Core\Logger::warning('Libro: condición insegura sin observación', ['errores' => $errors]);
+                return null;
+            }
+            return \App\Services\ObservationService::create($data, $people, [])['observation'];
+        } catch (\Throwable $e) {
+            \App\Core\Logger::error('Libro: no se pudo crear la observación de la condición insegura', ['error' => $e->getMessage()]);
+            return null;
+        }
     }
 
     /** Salida de una persona o un vehículo que estaba adentro (una sola vez). */

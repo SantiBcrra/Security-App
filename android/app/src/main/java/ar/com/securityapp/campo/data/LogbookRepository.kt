@@ -31,7 +31,8 @@ class LogbookRepository(private val db: LocalDb, private val outbox: Outbox, pri
 
     companion object {
         const val ENTITY = "logbook_entries"
-        val CATEGORIES = listOf("rutina" to "Rutina / sin novedad", "incidente" to "Incidente", "alarma" to "Alarma", "mantenimiento" to "Mantenimiento / falla",
+        /** "riesgo" = condición insegura (cable pelado, fuga de gas…): el servidor avisa al instante y abre una observación. */
+        val CATEGORIES = listOf("riesgo" to "⚠ Condición insegura / riesgo", "rutina" to "Rutina / sin novedad", "incidente" to "Incidente", "alarma" to "Alarma", "mantenimiento" to "Mantenimiento / falla",
             "llamada" to "Llamada / aviso", "entrega" to "Entrega / paquete", "otro" to "Otro")
         val VEHICLE_TYPES = listOf("auto" to "Auto", "camioneta" to "Camioneta", "camion" to "Camión", "utilitario" to "Utilitario", "moto" to "Moto", "otro" to "Otro")
         val KINDS = mapOf("novedad" to "Novedad", "persona" to "Ingreso de persona", "vehiculo" to "Ingreso de vehículo", "salida" to "Salida",

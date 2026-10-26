@@ -67,6 +67,8 @@ final class Messages
         'guard.absence_requested'  => 'Pedido de ausencia de un guardia',
         'guard.absence_decided'    => 'Respuesta a un pedido de ausencia',
         'logbook.important'        => 'Libro de guardia: novedad importante',
+        'logbook.unsafe'           => 'Libro de guardia: condición insegura (aviso inmediato)',
+        'guard.shift_report'       => 'Reporte de fin de turno (franja del puesto)',
         'logbook.inside_at_close'  => 'Libro de guardia: personas o vehículos adentro al cerrar el turno',
         'logbook.inside_long'      => 'Libro de guardia: adentro hace muchas horas',
         'ppe.due_soon' => 'EPP por vencer', 'ppe.overdue' => 'EPP vencido', 'ppe.missing' => 'EPP pendiente',
@@ -76,7 +78,7 @@ final class Messages
     public const INTERNAL = ['observation.escalated'];
 
     /** Eventos críticos: llegan siempre (no se pueden silenciar) y se envían en el momento. */
-    public const CRITICAL = ['observation.imminent', 'observation.escalated', 'incident.serious', 'permit.gas_alarm', 'guard.panic'];
+    public const CRITICAL = ['observation.imminent', 'observation.escalated', 'incident.serious', 'permit.gas_alarm', 'guard.panic', 'logbook.unsafe'];
 
     /** @return array{title:string, body:string, url:string, critical:bool} */
     public static function for(string $event, array $obs, array $extra = []): array
@@ -251,6 +253,7 @@ Llamalo y marcá la alerta como atendida.",
                 . ': la franja de ' . $span() . ' empezó a las ' . fecha($r['start_at'], 'H:i') . ' y ya pasó la tolerancia. Comunicate con la empresa de seguridad.'],
             'guard.shift_relief_missing' => ["Relevo que no llegó · {$site}", ($r['user_name'] ?? 'El guardia') . " terminó su turno en {$site} a las " . fecha($r['ended_at'] ?? null, 'H:i')
                 . ' y nadie lo relevó: el puesto está sin guardia (la franja sigue hasta el ' . fecha($r['end_at'] ?? null, 'd/m H:i') . ').'],
+            'guard.shift_report' => [(string) ($r['report_title'] ?? 'Reporte de turno'), (string) ($r['report_body'] ?? '')],
             'guard.shift_long' => ["Muchas horas seguidas · {$who}", "{$who} lleva " . (int) ($r['hours'] ?? 0) . " h seguidas de turno en {$site} (desde el "
                 . fecha($r['started_at'] ?? null, 'd/m H:i') . '). Revisá si corresponde un relevo.'],
             'guard.absence_requested' => ["Pedido de ausencia · {$who}", "{$who} pide ausencia (" . ($r['type_label'] ?? '') . ') del ' . date('d/m', strtotime((string) $r['date_from']))
@@ -271,6 +274,10 @@ Llamalo y marcá la alerta como atendida.",
         [$title, $body] = match ($event) {
             'logbook.important' => ['⚠ Novedad importante · ' . $site, ($e['user_name'] ?? 'El guardia') . ' anotó a las ' . fecha($e['occurred_at'] ?? null, 'H:i')
                 . ' (' . (\App\Services\Logbook::CATEGORIES[$e['category'] ?? ''] ?? 'Novedad') . '): ' . mb_strimwidth((string) ($e['text'] ?? ''), 0, 300, '…')],
+            'logbook.unsafe' => ['⚠ CONDICIÓN INSEGURA · ' . $site, ($e['user_name'] ?? 'El guardia') . ' anotó en el libro de guardia a las '
+                . fecha($e['occurred_at'] ?? null, 'H:i') . ":\n«" . mb_strimwidth((string) ($e['text'] ?? ''), 0, 600, '…') . '»'
+                . (!empty($e['observation_number']) ? "\nSe abrió la observación {$e['observation_number']} para el seguimiento." : '')
+                . "\nVerificá que la zona esté señalizada y aislada."],
             'logbook.inside_at_close' => ['Quedaron adentro al cerrar el turno · ' . $site, ($e['user_name'] ?? 'El guardia') . ' cerró su turno a las '
                 . fecha($e['occurred_at'] ?? null, 'H:i') . ' con ' . count($e['inside'] ?? []) . ' persona(s) o vehículo(s) sin salida: '
                 . implode('; ', array_map(fn ($i) => $i['que'], array_slice($e['inside'] ?? [], 0, 6))) . (count($e['inside'] ?? []) > 6 ? '…' : '') . '.'],
@@ -279,7 +286,7 @@ Llamalo y marcá la alerta como atendida.",
                 . fecha($e['oldest'] ?? null, 'd/m H:i') . '). Revisá si se olvidó anotar la salida.'],
             default => [self::EVENTS[$event] ?? $event, ''],
         };
-        return ['title' => $title, 'body' => $body, 'url' => $url, 'critical' => false];
+        return ['title' => $title, 'body' => $body, 'url' => $url, 'critical' => $event === 'logbook.unsafe'];
     }
 
     private static function forPpe(string $event, array $e, array $extra): array

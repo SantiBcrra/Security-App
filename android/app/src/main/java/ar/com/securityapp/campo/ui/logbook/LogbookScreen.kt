@@ -263,10 +263,22 @@ private fun EntryForm(kind: String, vm: LogbookViewModel, onDone: () -> Unit) {
                 "novedad" -> {
                     Text("Tipo", style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        LogbookRepository.CATEGORIES.forEach { (k, l) -> FilterChip(f["category"] == k, { f["category"] = k }, label = { Text(l) }) }
+                        LogbookRepository.CATEGORIES.forEach { (k, l) ->
+                            FilterChip(f["category"] == k, { f["category"] = k }, label = { Text(l, fontWeight = if (k == "riesgo") FontWeight.Bold else null) },
+                                colors = if (k == "riesgo") androidx.compose.material3.FilterChipDefaults.filterChipColors(selectedContainerColor = Danger,
+                                    selectedLabelColor = androidx.compose.ui.graphics.Color.White, labelColor = Danger) else androidx.compose.material3.FilterChipDefaults.filterChipColors())
+                        }
+                    }
+                    if (f["category"] == "riesgo") {
+                        // Lo inseguro avisa siempre al instante: no depende de marcar "Importante".
+                        Card(colors = CardDefaults.cardColors(containerColor = DangerBg)) {
+                            Text("Se avisa AL INSTANTE a RRHH, Seguridad e Higiene y supervisores, y se abre una observación para corregirlo. " +
+                                "Contá qué y dónde (ej.: \"cable pelado en el tablero del depósito 2\", \"fuga de gas en el tubo de la cocina\").",
+                                style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp))
+                        }
                     }
                     Field("text", "¿Qué pasó? (hora, lugar, quién, qué se hizo)", lines = 5)
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { f["important"] = if (f["important"] == "1") "0" else "1" }) {
+                    if (f["category"] != "riesgo") Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { f["important"] = if (f["important"] == "1") "0" else "1" }) {
                         Checkbox(f["important"] == "1", { f["important"] = if (it) "1" else "0" }); Text("Importante: avisar al supervisor")
                     }
                 }

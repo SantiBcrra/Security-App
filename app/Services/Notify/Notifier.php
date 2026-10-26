@@ -43,6 +43,7 @@ final class Notifier
         $obs = self::subject($event, $obs); // siempre con los nombres actualizados
         $message = Messages::for($event, $obs, $extra);
         $targets = []; // user_id => [user, canales]
+        $external = []; // casillas de email fijas de las reglas (RRHH…): solo email
         if ($forceRecipients !== null) {
             foreach ($forceRecipients as $id => $user) {
                 $targets[$id] = [$user, $forceChannels ?? ['app', 'email', 'push', 'whatsapp']];
@@ -55,6 +56,7 @@ final class Notifier
                 foreach (Recipients::resolve($rule['recipients'], $obs) as $id => $user) {
                     $targets[$id] = [$user, array_values(array_unique(array_merge($targets[$id][1] ?? [], $rule['channels'])))];
                 }
+                foreach (Recipients::emails($rule['recipients']) as $mail) $external[$mail] = true;
             }
         }
         // Quien hizo la acción no necesita que se le avise (salvo críticos: igual les llega a los demás).
@@ -85,6 +87,18 @@ final class Notifier
                     ]);
                 }
             }
+        }
+        // Casillas fijas: el email lleva todo el contenido (no tienen usuario para entrar al sistema).
+        $known = array_map(fn ($t) => strtolower((string) ($t[0]['email'] ?? '')), $targets);
+        foreach (array_keys($external) as $mail) {
+            if (in_array($mail, $known, true) || !Channels::enabled('email')) continue;
+            $guest = ['id' => 0, 'name' => '', 'email' => $mail, 'external' => true];
+            $queued[] = NotificationQueue::add([
+                'channel' => 'email', 'user_id' => null, 'to_address' => $mail,
+                'subject' => $message['title'], 'body_text' => $message['body'], 'body_html' => self::html($message, $guest),
+                'payload' => json_encode(['url' => $message['url'], 'event' => $event, $obs['_type'] => $obs['uuid'], 'app_url' => absolute_url('/panel')]),
+                'event' => $event, 'entity_uuid' => $obs['uuid'], 'is_critical' => $message['critical'] ? 1 : 0,
+            ]);
         }
         if ($message['critical'] && $queued) {
             QueueRunner::run(20, 15, $queued); // en el mismo request, con timeouts cortos

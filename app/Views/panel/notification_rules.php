@@ -11,6 +11,7 @@ $recipientLabel = function (array $r) use ($roles, $users): string {
         'reporter' => 'Quien reportó / creó',
         'verifiers' => 'Quienes verifican acciones',
         'approvers' => 'Quienes autorizan permisos de trabajo',
+        'email' => 'Email: ' . ($r['value'] ?? ''),
         default => $r['type'],
     };
 };
@@ -54,7 +55,11 @@ $has = fn (string $type, ?string $value = null) => $form && (bool) array_filter(
                 <label class="form-label small mt-2 mb-0">Usuarios puntuales</label>
                 <select class="form-select form-select-sm" name="users[]" multiple size="3">
                     <?php foreach ($users as $u): if ((int) $u['is_active'] !== 1) continue; ?><option value="<?= e($u['uuid']) ?>" <?= $has('user', $u['uuid']) ? 'selected' : '' ?>><?= e($u['name']) ?></option><?php endforeach; ?>
-                </select></div>
+                </select>
+                <label class="form-label small mt-2 mb-0">Casillas de email (sin usuario en el sistema)</label>
+                <input class="form-control form-control-sm" name="emails" placeholder="rrhh@empresa.com, gerencia@empresa.com"
+                       value="<?= e(implode(', ', array_map(fn ($r) => $r['value'], array_filter($form['recipients'], fn ($r) => $r['type'] === 'email')))) ?>">
+                <div class="form-text">Por ejemplo RRHH. Reciben solo por email, con todo el contenido en el mensaje.</div></div>
             <div class="col-md-6"><label class="form-label d-block">Canales</label>
                 <?php foreach (Channels::LABELS as $k => $l): ?>
                     <div class="form-check"><input class="form-check-input" type="checkbox" name="channels[]" value="<?= e($k) ?>" id="ch_<?= e($k) ?>" <?= in_array($k, $form['channels'], true) ? 'checked' : '' ?>>

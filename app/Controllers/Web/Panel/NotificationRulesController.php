@@ -83,6 +83,12 @@ final class NotificationRulesController
             }
         }
         $errors = [];
+        // Casillas de email fijas (RRHH, gerencia…): separadas por coma, espacio o renglón.
+        foreach (preg_split('/[\s,;]+/', trim((string) $request->input('emails', '')), -1, PREG_SPLIT_NO_EMPTY) as $mail) {
+            $mail = strtolower($mail);
+            if (filter_var($mail, FILTER_VALIDATE_EMAIL)) $recipients[] = ['type' => 'email', 'value' => $mail];
+            else $errors[] = "«{$mail}» no es un email válido.";
+        }
         if (!isset(Messages::EVENTS[$event]) || in_array($event, Messages::INTERNAL, true)) {
             $errors[] = 'Elegí el evento.';
         }

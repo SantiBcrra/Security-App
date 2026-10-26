@@ -218,6 +218,8 @@ final class PostCoverage
                 $db->prepare('UPDATE guard_post_coverage SET status = ?, covered_seconds = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?')
                     ->execute([$status, $covered, (int) $c['id']]);
                 $out['closed']++;
+                // Reporte de fin de turno (RRHH y quien diga la regla `guard.shift_report`), una vez por franja.
+                if ($notify) ShiftEndReport::send(self::findById((int) $c['id']));
                 continue;
             }
             $subject = $c + ['_post' => true, 'uuid' => $c['uuid']];
