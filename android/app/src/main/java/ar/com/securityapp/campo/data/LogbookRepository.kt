@@ -14,7 +14,7 @@ import java.util.UUID
 data class LogEntry(val uuid: String, val siteUuid: String, val folio: Int?, val kind: String, val category: String?, val text: String?, val important: Boolean,
                     val label: String, val personName: String?, val personDoc: String?, val company: String?, val visiting: String?, val plate: String?,
                     val occurredAt: Instant, val userName: String?, val exitedAt: Instant?, val refUuid: String?, val received: Boolean, val mine: Boolean,
-                    val local: Boolean, val data: JsonObject?) {
+                    val local: Boolean, val data: JsonObject?, val authStatus: String? = null) {
     val isEntry get() = kind == "persona" || kind == "vehiculo"
 }
 
@@ -38,6 +38,8 @@ class LogbookRepository(private val db: LocalDb, private val outbox: Outbox, pri
         val KINDS = mapOf("novedad" to "Novedad", "persona" to "Ingreso de persona", "vehiculo" to "Ingreso de vehículo", "salida" to "Salida",
             "correccion" to "Corrección", "cierre" to "Cierre de turno", "recepcion" to "Recepción del puesto")
 
+        val AUTH_LABELS = mapOf("autorizado" to "Autorizado", "fuera_horario" to "Fuera del día u horario autorizado",
+            "vencido" to "Autorización vencida o todavía no vigente", "no_autorizado" to "No está en la lista de autorizados")
         fun plate(v: String?): String? = v?.uppercase()?.filter { it.isLetterOrDigit() }?.take(15)?.ifEmpty { null }
         fun doc(v: String?): String? = v?.uppercase()?.filter { it.isLetterOrDigit() }?.take(30)?.ifEmpty { null }
     }
@@ -49,8 +51,55 @@ class LogbookRepository(private val db: LocalDb, private val outbox: Outbox, pri
         LogEntry(o.str("uuid"), o.str("site_uuid"), (o["folio"] as? JsonPrimitive)?.content?.toIntOrNull(), o.str("kind"), o.strOrNull("category"), o.strOrNull("text"),
             o.bool("important"), o.strOrNull("label") ?: "", o.strOrNull("person_name"), o.strOrNull("person_doc"), o.strOrNull("company"), o.strOrNull("visiting"),
             o.strOrNull("plate"), instant(o, "occurred_at")!!, o.strOrNull("user_name"), instant(o, "exited_at"), o.strOrNull("ref_uuid"), o.bool("received"),
-            o.bool("mine"), o.bool("local"), o.obj("data"))
+            o.bool("mine"), o.bool("local"), o.obj("data"), o.strOrNull("auth_status"))
     }.getOrNull()
+
+    // ── Lista de autorizados (baja con la sincronización; el control es el mismo del servidor) ──
+
+    data class AuthResult(val status: String, val who: String?, val window: String?) {
+        val ok get() = status == "autorizado"
+        val label get() = AUTH_LABELS[status] ?: status
+    }
+
+    /**
+     * ¿Está autorizado este ingreso ahora? null = el predio no tiene a nadie de ese tipo en la lista (no se controla) o todavía
+     * no se escribió nada. Mismas reglas que `LogbookAuthorized::check` (DNI, o nombre exacto si no tiene DNI; patente; predio o
+     * todos; vigencia; días; horario).
+     */
+    fun checkAuth(siteUuid: String, kind: String, doc: String?, name: String?, plate: String?, now: java.time.ZonedDateTime = java.time.ZonedDateTime.now()): AuthResult? {
+        val list = db.all("logbook_authorized").mapNotNull { parse(it) }
+            .filter { it.str("kind") == kind && (it.strOrNull("site_uuid") == null || it.strOrNull("site_uuid") == siteUuid) }
+        if (list.isEmpty()) return null
+        val d = doc(doc); val p = plate(plate); val n = name?.trim()?.takeIf { it.isNotEmpty() }
+        if ((kind == "vehiculo" && p == null) || (kind != "vehiculo" && d == null && n == null)) return null
+        val cand = if (kind == "vehiculo") list.filter { it.strOrNull("plate") == p }
+            else list.filter { d != null && it.strOrNull("person_doc") == d }
+                .ifEmpty { list.filter { n != null && it.strOrNull("person_doc") == null && it.strOrNull("person_name").equals(n, ignoreCase = true) } }
+        if (cand.isEmpty()) return AuthResult("no_autorizado", null, null)
+        val day = now.toLocalDate().toString()
+        val wd = now.dayOfWeek.value
+        val hm = "%02d:%02d".format(now.hour, now.minute)
+        var best: AuthResult? = null
+        for (a in cand) {
+            val days = a.arr("days").mapNotNull { (it as? JsonPrimitive)?.content?.toIntOrNull() }
+            val from = a.strOrNull("valid_from"); val until = a.strOrNull("valid_until")
+            val tf = a.strOrNull("time_from"); val tt = a.strOrNull("time_to")
+            val status = when {
+                (from != null && day < from) || (until != null && day > until) -> "vencido"
+                days.isNotEmpty() && wd !in days -> "fuera_horario"
+                tf != null && tt != null && !(if (tf <= tt) hm in tf..tt else hm >= tf || hm <= tt) -> "fuera_horario"
+                else -> "autorizado"
+            }
+            val who = listOfNotNull(a.strOrNull("person_name") ?: a.strOrNull("plate"), a.strOrNull("company")).joinToString(" · ")
+            val window = listOfNotNull(
+                days.takeIf { it.isNotEmpty() && it.size < 7 }?.joinToString(", ") { listOf("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")[it - 1] },
+                tf?.let { "$it a $tt" }, until?.let { "hasta ${it.substring(8, 10)}/${it.substring(5, 7)}/${it.substring(0, 4)}" }).joinToString(" · ").ifEmpty { "siempre" }
+            val r = AuthResult(status, who, window)
+            if (r.ok) return r
+            if (best == null) best = r
+        }
+        return best
+    }
 
     fun all(siteUuid: String): List<LogEntry> = db.all(ENTITY).mapNotNull { parse(it)?.let(::entry) }.filter { it.siteUuid == siteUuid }
         .sortedByDescending { it.occurredAt }

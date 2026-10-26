@@ -369,6 +369,19 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   terminar" (firma y termina el turno) o "Terminar sin libro"; con un cierre de otro guardia sin recibir, "Mi turno" muestra
   "Recibir el puesto".
 
+### Lista de autorizados (libro de guardia, 26/10/2026)
+- `logbook_authorized` (tenant 0081): persona (DNI, o nombre exacto si no hay DNI) o vehículo (patente), predio o todos
+  (`site_id` NULL), vigencia `valid_from/until`, `days` (1..7, vacío = todos), `time_from/to` (cruza la medianoche), motivo,
+  quién autorizó. Baja lógica; suspender = `is_active 0`. Servicio `Services\LogbookAuthorized` (`check`, `validate`, `save`,
+  `import` de Excel/CSV por títulos con alias, `window`, `shape`). La administra `libro.editar` (admin y SyH).
+- Al anotar persona/vehículo, `Logbook::create` guarda `auth_status` (autorizado | fuera_horario | vencido | no_autorizado; NULL si
+  el predio no tiene a nadie de ese tipo en la lista = no se controla) y `auth_id` — **fuera de la huella** (`HASHED` no cambia).
+  No autorizado → se anota igual + `logbook.unauthorized` (SyH + supervisores, app y notificación; regla en 0081).
+- Panel `/panel/libro/autorizados` (lista con filtros, alta/edición, suspender, quitar, importar, planilla de ejemplo
+  `/planilla`), botón "Lista de autorizados" en el libro, marcas ✅/⚠ en las anotaciones y en "Adentro ahora", aviso al anotar.
+- Sync: pull `logbook_authorized` (a quien anota, `libro.crear`). App 1.5.3 (`versionCode 23`): `LogbookRepository.checkAuth`
+  (mismas reglas que el servidor, sin señal) muestra al escribir DNI o patente "✅ Autorizado" / "⚠ …" y la marca en cada ingreso.
+
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`
   (solo inserción) y `action_attachments` (evidencia inmutable, fotos o PDF, por `cycle`).

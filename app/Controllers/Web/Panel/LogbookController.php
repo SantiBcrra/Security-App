@@ -64,7 +64,12 @@ final class LogbookController
                 $meta = \App\Services\ImageProcessor::store(Tenant::current()['uuid'], $photo['tmp_name'], $photo['name'] ?? null, true, (int) UserAuth::user()['id'], 'logbook');
                 Logbook::addAttachment((int) $r['entry']['id'], $meta);
             }
-            Flash::add('success', 'Anotado (folio ' . $r['entry']['folio'] . ').');
+            $auth = $r['entry']['auth_status'] ?? null;
+            if ($auth !== null && $auth !== 'autorizado') {
+                Flash::add('warning', 'Anotado (folio ' . $r['entry']['folio'] . '). ⚠ ' . \App\Services\LogbookAuthorized::STATUS[$auth][0] . ': se avisó al supervisor.');
+            } else {
+                Flash::add('success', 'Anotado (folio ' . $r['entry']['folio'] . ').' . ($auth === 'autorizado' ? ' ✅ Está en la lista de autorizados.' : ''));
+            }
         } catch (UserError | \DomainException $e) {
             Flash::add('danger', $e->getMessage());
             Flash::withInput(array_diff_key($request->post, ['csrf_token' => 1]));

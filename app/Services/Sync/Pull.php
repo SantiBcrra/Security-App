@@ -23,7 +23,7 @@ use App\Services\UserAuth;
  */
 final class Pull
 {
-    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'patrol_slots', 'guard_shift_slots', 'guard_absences', 'logbook_entries', 'logbook_known', 'actions', 'inspection_templates', 'inspection_schedule', 'incidents', 'work_permits', 'ppe_items', 'ppe_matrix', 'ppe_deliveries'];
+    public const ENTITIES = ['catalog_items', 'sites', 'sectors', 'equipment', 'employees', 'observations', 'patrol_points', 'patrol_routes', 'patrol_rounds', 'patrol_scans', 'patrol_slots', 'guard_shift_slots', 'guard_absences', 'logbook_entries', 'logbook_known', 'logbook_authorized', 'actions', 'inspection_templates', 'inspection_schedule', 'incidents', 'work_permits', 'ppe_items', 'ppe_matrix', 'ppe_deliveries'];
     private const OVERLAP_SECONDS = 5;
     private const OBS_HISTORY_DAYS = 180;
 
@@ -69,6 +69,7 @@ final class Pull
                     || ($entity === 'logbook_entries' && (!UserAuth::can('libro', 'ver') || ($row['occurred_at'] < gmdate('Y-m-d H:i:s', time() - 48 * 3600)
                         && !(in_array($row['kind'], ['persona', 'vehiculo'], true) && $row['exited_at'] === null))))
                     || ($entity === 'logbook_known' && !UserAuth::can('libro', 'crear'))
+                    || ($entity === 'logbook_authorized' && !UserAuth::can('libro', 'crear')) // lista de autorizados: a quien anota ingresos
                     // Incidentes: al celular solo llegan los que reportó el usuario (sin datos de salud).
                     || ($entity === 'incidents' && (int) $row['reported_by'] !== (int) (UserAuth::user()['id'] ?? 0))
                     // Permisos de trabajo: los que el usuario puede ver según su alcance (solicitante, autorizante o sector).
@@ -232,6 +233,8 @@ final class Pull
                     WHERE {$after} AND (t.occurred_at > UTC_TIMESTAMP() - INTERVAL 3 DAY OR (t.kind IN ('persona','vehiculo') AND t.exited_at IS NULL)){$order}", $params];
             case 'logbook_known':
                 return ["SELECT t.* FROM logbook_known t WHERE {$after}{$order}", $params];
+            case 'logbook_authorized':
+                return ["SELECT t.*, s.uuid AS site_uuid FROM logbook_authorized t LEFT JOIN sites s ON s.id = t.site_id WHERE {$after}{$order}", $params];
             case 'patrol_points':
                 return ["SELECT t.* FROM patrol_points t WHERE {$after}{$order}", $params];
             case 'patrol_routes':
@@ -310,6 +313,7 @@ final class Pull
                 'deadline_at' => str_replace(' ', 'T', $r['deadline_at']) . 'Z'],
             'guard_shift_slots' => \App\Services\ShiftService::shape($r),
             'logbook_entries' => \App\Services\Logbook::shape($r),
+            'logbook_authorized' => \App\Services\LogbookAuthorized::shape($r),
             'logbook_known' => (fn (array $d) => ['uuid' => $r['uuid'], 'type' => $r['type'], 'key' => $r['lookup_key'], 'visits' => (int) $r['visits'],
                 'last_seen_at' => str_replace(' ', 'T', $r['last_seen_at']) . 'Z', 'vehicle_type' => $d['type'] ?? null] + array_diff_key($d, ['type' => 1]))(
                 json_decode((string) $r['data'], true) ?: []),

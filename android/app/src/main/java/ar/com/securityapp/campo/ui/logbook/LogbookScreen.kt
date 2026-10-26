@@ -104,6 +104,12 @@ class LogbookViewModel(app: Application) : AndroidViewModel(app) {
     fun lookup(type: String, prefix: String): List<KnownVisitor> = repo.lookup(type, prefix)
     fun pending(e: LogEntry) = e.local || repo.pending(e.uuid)
 
+    /** Lista de autorizados: cómo da este ingreso ahora (null = sin lista para el predio o sin datos todavía). */
+    fun checkAuth(kind: String, f: Map<String, String?>): ar.com.securityapp.campo.data.LogbookRepository.AuthResult? {
+        val site = _ui.value.site ?: return null
+        return repo.checkAuth(site.uuid, kind, f["person_doc"], f["person_name"], f["plate"])
+    }
+
     suspend fun create(kind: String, fields: Map<String, String?>, photos: List<Uri>): String? {
         val site = _ui.value.site ?: return "Elegí el predio."
         val error = repo.create(site.uuid, kind, fields, photos)
@@ -223,6 +229,29 @@ fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = 
         confirmButton = { TextButton({ pickSite = false }) { Text("Cancelar") } })
 }
 
+/** Resultado de la lista de autorizados mientras el guardia escribe el DNI o la patente (también sin señal). */
+@Composable
+private fun AuthBanner(r: ar.com.securityapp.campo.data.LogbookRepository.AuthResult?) {
+    r ?: return
+    Card(colors = CardDefaults.cardColors(containerColor = if (r.ok) OkBg else if (r.status == "no_autorizado") DangerBg else WarnBg)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            Text((if (r.ok) "✅ " else "⚠ ") + r.label, fontWeight = FontWeight.Bold, color = if (r.ok) Ok else if (r.status == "no_autorizado") Danger else BrandDark)
+            r.who?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            r.window?.takeIf { !r.ok }?.let { Text("Autorizado: $it", style = MaterialTheme.typography.bodySmall) }
+            if (!r.ok) Text("Podés anotarlo igual: se avisa al supervisor. Si corresponde, consultá antes de dejarlo pasar.",
+                style = MaterialTheme.typography.bodySmall, color = Muted)
+        }
+    }
+}
+
+@Composable
+private fun AuthTag(status: String?) {
+    status ?: return
+    val ok = status == "autorizado"
+    Text((if (ok) "✅ " else "⚠ ") + (ar.com.securityapp.campo.data.LogbookRepository.AUTH_LABELS[status] ?: status), style = MaterialTheme.typography.labelMedium,
+        color = if (ok) Ok else if (status == "no_autorizado") Danger else BrandDark, fontWeight = FontWeight.SemiBold)
+}
+
 @Composable
 private fun EntryRow(e: LogEntry, pending: Boolean) {
     val color = when { e.important -> DangerBg; e.kind == "cierre" || e.kind == "recepcion" -> NeutralBg; else -> CardBg }
@@ -235,6 +264,7 @@ private fun EntryRow(e: LogEntry, pending: Boolean) {
             Text(LogbookRepository.KINDS[e.kind] ?: e.kind, fontWeight = FontWeight.SemiBold, color = if (e.important) Danger else BrandDark)
             if (e.isEntry) {
                 Text(e.label.ifEmpty { "Sin datos" })
+                AuthTag(e.authStatus)
                 Text(if (e.exitedAt != null) "Salió ${DAY_HOUR.format(e.exitedAt)}" else "Sigue adentro", style = MaterialTheme.typography.bodySmall,
                     color = if (e.exitedAt != null) Ok else BrandDark)
             }
@@ -288,6 +318,7 @@ private fun EntryForm(kind: String, vm: LogbookViewModel, onDone: () -> Unit) {
                     }
                     OutlinedTextField(f["person_doc"] ?: "", { f["person_doc"] = it }, Modifier.fillMaxWidth(), label = { Text("DNI (completa si ya vino)") }, singleLine = true)
                     Field("person_name", "Nombre y apellido")
+                    AuthBanner(vm.checkAuth("persona", f))
                     Field("company", "Empresa")
                     Field("visiting", "A quién visita / sector")
                     Field("reason", "Motivo")
@@ -304,6 +335,7 @@ private fun EntryForm(kind: String, vm: LogbookViewModel, onDone: () -> Unit) {
                     }
                     OutlinedTextField(f["plate"] ?: "", { f["plate"] = it.uppercase() }, Modifier.fillMaxWidth(), label = { Text("Patente *") }, singleLine = true,
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters))
+                    AuthBanner(vm.checkAuth("vehiculo", f))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         LogbookRepository.VEHICLE_TYPES.forEach { (k, l) -> FilterChip(f["vehicle_type"] == k, { f["vehicle_type"] = k }, label = { Text(l) }) }
                     }

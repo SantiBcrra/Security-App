@@ -14,6 +14,12 @@ $since = function (string $at): string {
     $m = intdiv(max(0, time() - strtotime($at . ' UTC')), 60);
     return $m < 60 ? "{$m} min" : intdiv($m, 60) . ' h ' . ($m % 60) . ' min';
 };
+// Cómo dio el ingreso contra la lista de autorizados (sin lista para el predio = nada).
+$authBadge = function (array $e): string {
+    $st = App\Services\LogbookAuthorized::STATUS[$e['auth_status'] ?? ''] ?? null;
+    if ($st === null) return '';
+    return '<span class="badge text-bg-' . $st[1] . '" title="' . e($st[0]) . '">' . ($e['auth_status'] === 'autorizado' ? '✅ Autorizado' : '⚠ ' . e($st[0])) . '</span>';
+};
 ?>
 <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-3">
     <div>
@@ -21,6 +27,7 @@ $since = function (string $at): string {
         <div class="text-body-secondary small">Novedades, ingreso y egreso de personas y vehículos, y relevo de turno. Nada se borra: las correcciones quedan como anotaciones nuevas.</div>
     </div>
     <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/panel/libro/autorizados')) ?>">Lista de autorizados</a>
         <a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/panel/libro/buscar')) ?>">Buscar</a>
         <?php if ($site): ?><a class="btn btn-outline-secondary btn-sm" target="_blank" href="<?= e(url('/panel/libro/imprimir' . $q(['fecha' => $day]))) ?>">Parte diario</a><?php endif; ?>
         <?php if ($canExport && $site): ?><a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/panel/libro/exportar' . $q(['desde' => $day, 'hasta' => $day]))) ?>">CSV</a><?php endif; ?>
@@ -125,7 +132,7 @@ $since = function (string $at): string {
             <ul class="list-group list-group-flush">
                 <?php foreach ($inside as $e): ?>
                     <li class="list-group-item d-flex justify-content-between align-items-center gap-2">
-                        <span class="small"><?= $e['kind'] === 'vehiculo' ? '🚗' : '👤' ?> <strong><?= e(Logbook::label($e)) ?></strong>
+                        <span class="small"><?= $e['kind'] === 'vehiculo' ? '🚗' : '👤' ?> <strong><?= e(Logbook::label($e)) ?></strong> <?= $authBadge($e) ?>
                             <br><span class="text-body-secondary">desde <?= e(fecha($e['occurred_at'], 'd/m H:i')) ?> (<?= e($since($e['occurred_at'])) ?>)</span></span>
                         <?php if ($canCreate): ?><form method="post" action="<?= e(url('/panel/libro/' . $e['uuid'] . '/salida' . $q())) ?>"><?= csrf_field() ?><button class="btn btn-sm btn-outline-primary">Salió</button></form><?php endif; ?>
                     </li>
@@ -175,7 +182,7 @@ $since = function (string $at): string {
                         </div>
                         <div class="mt-1">
                             <?php if (in_array($e['kind'], ['persona', 'vehiculo'], true)): ?>
-                                <strong><?= e(Logbook::label($e)) ?></strong>
+                                <strong><?= e(Logbook::label($e)) ?></strong> <?= $authBadge($e) ?>
                                 <?= $e['visiting'] ? ' → ' . e($e['visiting']) : '' ?><?= $e['reason'] ? ' · ' . e($e['reason']) : '' ?>
                                 <?= $e['badge'] ? ' · tarjeta ' . e($e['badge']) : '' ?><?= $e['kind'] === 'persona' && $e['plate'] ? ' · patente ' . e($e['plate']) : '' ?>
                                 <?= $e['load_note'] ? ' · carga: ' . e($e['load_note']) : '' ?>

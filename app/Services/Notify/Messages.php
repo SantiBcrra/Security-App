@@ -67,6 +67,7 @@ final class Messages
         'guard.absence_requested'  => 'Pedido de ausencia de un guardia',
         'guard.absence_decided'    => 'Respuesta a un pedido de ausencia',
         'logbook.important'        => 'Libro de guardia: novedad importante',
+        'logbook.unauthorized'     => 'Libro de guardia: ingreso que no está en la lista de autorizados',
         'logbook.unsafe'           => 'Libro de guardia: condición insegura (aviso inmediato)',
         'guard.shift_report'       => 'Reporte de fin de turno (franja del puesto)',
         'logbook.inside_at_close'  => 'Libro de guardia: personas o vehículos adentro al cerrar el turno',
@@ -274,6 +275,9 @@ Llamalo y marcá la alerta como atendida.",
         [$title, $body] = match ($event) {
             'logbook.important' => ['⚠ Novedad importante · ' . $site, ($e['user_name'] ?? 'El guardia') . ' anotó a las ' . fecha($e['occurred_at'] ?? null, 'H:i')
                 . ' (' . (\App\Services\Logbook::CATEGORIES[$e['category'] ?? ''] ?? 'Novedad') . '): ' . mb_strimwidth((string) ($e['text'] ?? ''), 0, 300, '…')],
+            'logbook.unauthorized' => ['Ingreso no autorizado · ' . $site, ($e['user_name'] ?? 'El guardia') . ' anotó a las ' . fecha($e['occurred_at'] ?? null, 'H:i')
+                . ' el ingreso de ' . ($e['label'] ?? '') . ': ' . mb_strtolower((string) ($e['auth_label'] ?? 'no autorizado'))
+                . (!empty($e['auth_window']) ? ' (autorizado: ' . $e['auth_window'] . ')' : '') . '. Se registró igual; revisá si corresponde.'],
             'logbook.unsafe' => ['⚠ CONDICIÓN INSEGURA · ' . $site, ($e['user_name'] ?? 'El guardia') . ' anotó en el libro de guardia a las '
                 . fecha($e['occurred_at'] ?? null, 'H:i') . ":\n«" . mb_strimwidth((string) ($e['text'] ?? ''), 0, 600, '…') . '»'
                 . (!empty($e['observation_number']) ? "\nSe abrió la observación {$e['observation_number']} para el seguimiento." : '')

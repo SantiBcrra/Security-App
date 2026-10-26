@@ -159,6 +159,78 @@ return [
         UserAuth::setCurrent($st['hys']);
     },
 
+    'libro: lista de autorizados (DNI, patente, días, horario, vigencia), aviso si no está, importación y celular' => function () use ($setup, &$st, $count) {
+        $setup();
+        Tenant::activate($st['a']);
+        $A = \App\Services\LogbookAuthorized::class;
+        UserAuth::setCurrent($st['g1']);
+        assert_true(!$A::canManage(), 'el guardia no la edita');
+        UserAuth::setCurrent($st['hys']);
+        assert_true($A::canManage());
+        $siteId = (int) $st['site']['id'];
+        // Sin nadie en la lista: no se controla
+        assert_same(null, $A::check($siteId, 'persona', '30111222', null, null, gmdate('Y-m-d H:i:s')));
+        [$p, $e] = $A::validate(['kind' => 'persona', 'person_name' => 'Juan Pérez', 'person_doc' => '30.111.222', 'company' => 'Gas SA', 'site' => $st['site']['uuid'],
+            'days' => [1, 2, 3, 4, 5], 'time_from' => '08:00', 'time_to' => '17:00', 'valid_from' => '2026-01-01', 'valid_until' => '2030-12-31']);
+        assert_same([], $e);
+        $A::save(null, $p);
+        [$v] = $A::validate(['kind' => 'vehiculo', 'plate' => 'ab 123 cd', 'company' => 'Transportes Sur']);
+        $A::save(null, $v);
+        [$old] = $A::validate(['kind' => 'persona', 'person_name' => 'Vencido', 'person_doc' => '20999888', 'valid_until' => '2020-01-01']);
+        $A::save(null, $old);
+        [, $bad] = $A::validate(['kind' => 'vehiculo', 'plate' => '', 'time_from' => '08:00']);
+        assert_true(isset($bad['plate'], $bad['time_from']));
+        // Hora local de Buenos Aires (UTC−3): miércoles 07/10/2026 10:00 = 13:00 UTC; sábado 10/10 10:00; miércoles 20:00
+        assert_same('autorizado', $A::check($siteId, 'persona', '30111222', null, null, '2026-10-07 13:00:00')['status']);
+        assert_same('fuera_horario', $A::check($siteId, 'persona', '30111222', null, null, '2026-10-10 13:00:00')['status'], 'sábado');
+        assert_same('fuera_horario', $A::check($siteId, 'persona', '30111222', null, null, '2026-10-07 23:00:00')['status'], '20 h');
+        assert_same('vencido', $A::check($siteId, 'persona', '20999888', null, null, '2026-10-07 13:00:00')['status']);
+        assert_same('no_autorizado', $A::check($siteId, 'persona', '11111111', 'Nadie', null, '2026-10-07 13:00:00')['status']);
+        assert_same('autorizado', $A::check((int) $st['site2']['id'], 'vehiculo', null, null, 'AB-123-CD', '2026-10-07 13:00:00')['status'], 'vehículo para todos los predios');
+        // Anotar un ingreso: queda marcado (fuera de la huella) y si no está autorizado avisa
+        UserAuth::setCurrent($st['g1']);
+        $before = $count('logbook.unauthorized');
+        $r = Logbook::create(['site_uuid' => $st['site']['uuid'], 'kind' => 'persona', 'person_name' => 'Desconocido', 'person_doc' => '44.555.666']);
+        assert_same('no_autorizado', $r['entry']['auth_status']);
+        Logbook::exit($r['entry']['uuid'], []); // que no quede adentro para los otros tests
+        assert_true($count('logbook.unauthorized') >= $before + 2, 'avisa a SyH y supervisor');
+        $r = Logbook::create(['site_uuid' => $st['site']['uuid'], 'kind' => 'vehiculo', 'plate' => 'AB123CD']);
+        assert_same('autorizado', $r['entry']['auth_status']);
+        assert_same('autorizado', Logbook::shape(Logbook::find($r['entry']['uuid']))['auth_status']);
+        Logbook::exit($r['entry']['uuid'], []);
+        assert_true(Logbook::verify((int) $st['site']['id'])['ok'] ?? true, 'la huella del libro sigue íntegra');
+        // Importación (CSV con ";")
+        UserAuth::setCurrent($st['hys']);
+        $csv = tempnam(sys_get_temp_dir(), 'aut') . '.csv';
+        file_put_contents($csv, "tipo;nombre;dni;empresa;patente;predio;desde;hasta;dias;hora_desde;hora_hasta;motivo\n"
+            . "persona;Ana Gómez;27.333.444;Limpieza SRL;;Planta Norte;01/11/2026;30/11/2026;lun a vie;07:00;15:00;Limpieza\n"
+            . "vehiculo;;;Fletes;cc 999 dd;;;;;;;Fletes\n"
+            . "persona;Sin predio;1;;;Inexistente;;;;;;\n");
+        $res = $A::import($csv, 'lista.csv');
+        assert_same([2, 0, 1], [$res['created'], $res['updated'], count($res['errors'])]);
+        $res = $A::import($csv, 'lista.csv');
+        assert_same([0, 2], [$res['created'], $res['updated']], 'reimportar actualiza, no duplica');
+        $ana = array_values(array_filter($A::list(['q' => '27333444', 'estado' => 'todas']), fn ($x) => $x['person_doc'] === '27333444'))[0];
+        assert_same(['1,2,3,4,5', '07:00', '2026-11-30', $st['site']['uuid']], [$ana['days'], $ana['time_from'], $ana['valid_until'], $ana['site_uuid']]);
+        @unlink($csv);
+        // Al celular le baja la lista
+        UserAuth::setCurrent($st['g1']);
+        $pulled = (array) (App\Services\Sync\Pull::run(null, 1000)['changes']->logbook_authorized ?? []);
+        assert_true(in_array('AB123CD', array_column($pulled, 'plate'), true) && in_array('30111222', array_column($pulled, 'person_doc'), true));
+        // Pantallas
+        UserAuth::setCurrent($st['hys']);
+        $html = \App\Core\View::render('panel/logbook/authorized', ['rows' => $A::list(['estado' => 'todas']), 'filters' => ['q' => '', 'kind' => '', 'estado' => 'todas', 'predio' => ''],
+            'sites' => \App\Models\Sites::list(), 'canManage' => true], null);
+        assert_true(str_contains($html, 'Juan Pérez') && str_contains($html, 'Lun a Vie · 08:00 a 17:00') && str_contains($html, 'Vencido'));
+        $html = \App\Core\View::render('panel/logbook/authorized_form', ['row' => $A::find($ana['uuid']), 'old' => null, 'sites' => \App\Models\Sites::list(), 'kind' => 'persona'], null);
+        assert_true(str_contains($html, 'Ana Gómez') && str_contains($html, 'Cuándo puede entrar'));
+        // Suspender y quitar
+        $A::setActive($A::find($ana['uuid']), false);
+        assert_same('no_autorizado', $A::check($siteId, 'persona', '27333444', null, null, '2026-11-04 13:00:00')['status'], 'suspendido = no autorizado');
+        $A::delete($A::find($ana['uuid']));
+        assert_same(null, $A::find($ana['uuid']));
+    },
+
     'libro: adentro ahora, salida (una sola vez) y corrección sin tocar la original' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['a']);

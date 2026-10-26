@@ -196,9 +196,19 @@ final class Logbook
         } else {
             throw new UserError('Tipo de anotación inválido.');
         }
+        $auth = null;
+        if ($kind === 'persona' || $kind === 'vehiculo') { // lista de autorizados (fuera de la huella: no cambia el libro)
+            $auth = LogbookAuthorized::check((int) $site['id'], $kind, $row['person_doc'], $row['person_name'] ?? null, $row['plate'], (string) $row['occurred_at']);
+            $row['auth_status'] = $auth['status'] ?? null;
+            $row['auth_id'] = isset($auth['row']['id']) ? (int) $auth['row']['id'] : null;
+        }
         $entry = self::insert($row);
         self::remember($entry);
         Audit::tenant('logbook.create', 'logbook_entry', $entry['uuid'], null, ['predio' => $site['name'], 'folio' => (int) $entry['folio'], 'tipo' => $kind]);
+        if ($auth !== null && $auth['status'] !== 'autorizado') {
+            Notifier::dispatch('logbook.unauthorized', self::subject($entry) + ['auth_label' => LogbookAuthorized::STATUS[$auth['status']][0],
+                'auth_window' => $auth['row'] ? LogbookAuthorized::window($auth['row']) : null]);
+        }
         if ($kind === 'novedad' && $entry['category'] === 'riesgo') {
             $obs = self::unsafeObservation($entry, $site);
             Notifier::dispatch('logbook.unsafe', self::subject($entry) + ['observation_number' => $obs ? \App\Models\Observations::format((int) $obs['number']) : null]);
@@ -530,6 +540,7 @@ final class Logbook
             'vehicle_type' => $e['vehicle_type'], 'driver' => $e['driver'], 'load_note' => $e['load_note'], 'ref_uuid' => $e['ref_uuid'],
             'occurred_at' => $iso($e['occurred_at']), 'user_name' => $e['user_name'], 'exited_at' => $iso($e['exited_at']),
             'received' => $e['received_entry_id'] !== null, 'data' => $e['data'] ? json_decode((string) $e['data'], true) : null,
-            'mine' => (int) $e['user_id'] === (int) (UserAuth::user()['id'] ?? 0), 'label' => self::label($e), 'photos' => (int) $e['photos']];
+            'mine' => (int) $e['user_id'] === (int) (UserAuth::user()['id'] ?? 0), 'label' => self::label($e), 'photos' => (int) $e['photos'],
+            'auth_status' => $e['auth_status'] ?? null];
     }
 }

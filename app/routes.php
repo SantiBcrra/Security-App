@@ -253,6 +253,15 @@ return static function (Router $r): void {
         $r->get('/libro', [\App\Controllers\Web\Panel\LogbookController::class, 'index'], [$can('libro', 'ver')]);
         $r->post('/libro/anotar', [\App\Controllers\Web\Panel\LogbookController::class, 'store'], [$can('libro', 'crear')]);
         $r->post('/libro/cierre', [\App\Controllers\Web\Panel\LogbookController::class, 'close'], [$can('libro', 'crear')]);
+        $r->get('/libro/autorizados', [\App\Controllers\Web\Panel\AuthorizedController::class, 'index'], [$can('libro', 'ver')]);
+        $r->get('/libro/autorizados/nuevo', [\App\Controllers\Web\Panel\AuthorizedController::class, 'form'], [$can('libro', 'editar')]);
+        $r->get('/libro/autorizados/planilla', [\App\Controllers\Web\Panel\AuthorizedController::class, 'template'], [$can('libro', 'editar')]);
+        $r->post('/libro/autorizados/importar', [\App\Controllers\Web\Panel\AuthorizedController::class, 'import'], [$can('libro', 'editar')]);
+        $r->post('/libro/autorizados', [\App\Controllers\Web\Panel\AuthorizedController::class, 'store'], [$can('libro', 'editar')]);
+        $r->get('/libro/autorizados/{uuid}', [\App\Controllers\Web\Panel\AuthorizedController::class, 'form'], [$can('libro', 'editar')]);
+        $r->post('/libro/autorizados/{uuid}', [\App\Controllers\Web\Panel\AuthorizedController::class, 'store'], [$can('libro', 'editar')]);
+        $r->post('/libro/autorizados/{uuid}/estado', [\App\Controllers\Web\Panel\AuthorizedController::class, 'toggle'], [$can('libro', 'editar')]);
+        $r->post('/libro/autorizados/{uuid}/eliminar', [\App\Controllers\Web\Panel\AuthorizedController::class, 'delete'], [$can('libro', 'editar')]);
         $r->get('/libro/buscar', [\App\Controllers\Web\Panel\LogbookController::class, 'search'], [$can('libro', 'ver')]);
         $r->get('/libro/autocompletar', [\App\Controllers\Web\Panel\LogbookController::class, 'lookup'], [$can('libro', 'crear')]);
         $r->get('/libro/imprimir', [\App\Controllers\Web\Panel\LogbookController::class, 'printable'], [$can('libro', 'ver')]);
