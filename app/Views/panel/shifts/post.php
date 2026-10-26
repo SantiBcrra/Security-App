@@ -1,5 +1,5 @@
 <?php
-/** Franja de un puesto: tramos (quién, desde/hasta, cómo terminó), huecos y cobertura. @var array $c (PostCoverage::detail) */
+/** Franja de un puesto: tramos (quién, desde/hasta, cómo terminó), huecos y cobertura. @var array $c (PostCoverage::detail) @var ?array $report @var bool $canSend */
 use App\Services\PostCoverage;
 use App\Services\ShiftService;
 [$label, $color] = PostCoverage::STATUS[$c['status']] ?? [$c['status'], 'light'];
@@ -13,6 +13,30 @@ $endLabel = ['relevo' => 'Lo relevaron', 'sin_persona' => 'Dejó el puesto sin p
     <span class="badge text-bg-<?= e($color) ?>"><?= e($label) ?></span>
 </div>
 <p class="text-body-secondary"><?= e($c['site_name']) ?> · franja del <?= e(fecha($c['start_at'], 'd/m H:i')) ?> al <?= e(fecha($c['end_at'], 'd/m H:i')) ?></p>
+
+<?php if (!empty($report)): $partial = strtotime($c['end_at'] . ' UTC') > time(); ?>
+<div class="card shadow-sm mb-3">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span><strong>Reporte de fin de turno</strong> <span class="small text-body-secondary">· <?= $partial
+            ? 'la franja no terminó: se manda solo al terminar (o cuando el último guardia toca "Terminar turno" en la última hora)'
+            : 'se mandó solo al cerrarse la franja' ?></span></span>
+        <span class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#report-preview">Ver reporte</button>
+            <?php if (!empty($canSend)): ?>
+            <form method="post" action="<?= e(url('/panel/rondas/turnos/puesto/' . $c['uuid'] . '/reporte')) ?>"
+                  onsubmit="return confirm('<?= $partial ? '¿Enviar ahora el reporte con lo que pasó hasta el momento? (le llega a los destinatarios de la regla, por ejemplo RRHH)' : '¿Reenviar el reporte a los destinatarios de la regla?' ?>')">
+                <?= csrf_field() ?><button class="btn btn-sm btn-primary"><?= $partial ? 'Enviar reporte ahora (parcial)' : 'Reenviar reporte' ?></button>
+            </form>
+            <?php endif; ?>
+        </span>
+    </div>
+    <div class="collapse" id="report-preview"><div class="card-body">
+        <div class="fw-semibold mb-2"><?= e($report['title']) ?></div>
+        <pre class="small mb-0" style="white-space: pre-wrap; font-family: inherit"><?= e($report['body']) ?></pre>
+        <div class="form-text mt-2">Destinatarios: los de la regla "Reporte de fin de turno (RRHH)" en Configuración → Notificaciones y alertas.</div>
+    </div></div>
+</div>
+<?php endif; ?>
 
 <div class="row g-2 mb-3">
     <div class="col-6 col-lg-3"><div class="card h-100"><div class="card-body py-2"><div class="small text-body-secondary">Cubierto</div>

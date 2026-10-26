@@ -111,6 +111,25 @@ final class ShiftEndReport
                 'observations' => count($observations), 'rounds' => $rounds['total'], 'panics' => $panics]];
     }
 
+    /**
+     * Envío a mano desde el panel (probar el email o reenviarlo): no cuenta como el envío automático. Si la franja todavía no
+     * terminó, el reporte llega con lo que pasó hasta ahora y el asunto lo aclara.
+     * @return int destinos encolados (usuarios + casillas)
+     */
+    public static function sendNow(array $c): int
+    {
+        $r = self::build($c);
+        $partial = strtotime($c['end_at'] . ' UTC') > time();
+        $title = ($partial ? '[Parcial, hasta las ' . fecha(gmdate('Y-m-d H:i:s'), 'H:i') . '] ' : '[Reenvío] ') . $r['title'];
+        $q = DB::tenant()->prepare("SELECT COUNT(*) FROM notification_queue WHERE event = 'guard.shift_report'");
+        $q->execute();
+        $before = (int) $q->fetchColumn();
+        Notifier::dispatch('guard.shift_report', $c + ['_post' => true, 'report_title' => $title, 'report_body' => $r['body'], 'user_id' => null]);
+        $q->execute();
+        Audit::tenant('shift.report_send', 'guard_post_coverage', $c['uuid'], null, ['parcial' => $partial]);
+        return (int) $q->fetchColumn() - $before;
+    }
+
     /** Manda el reporte de la franja (una sola vez). */
     public static function send(array $c): void
     {

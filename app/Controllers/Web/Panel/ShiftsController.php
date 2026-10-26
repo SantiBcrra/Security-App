@@ -76,7 +76,20 @@ final class ShiftsController
         if ($c === null || $this->onlyUser() !== null) return new Response('', 404);
         return Response::html(View::render('panel/shifts/post', [
             'title' => 'Puesto ' . ($c['shift_name'] ?: $c['site_name']), 'c' => \App\Services\PostCoverage::detail($c),
+            'report' => \App\Services\ShiftEndReport::build($c), 'canSend' => UserAuth::can('rondas', 'editar'),
         ], 'layouts/app'));
+    }
+
+    /** Reporte de fin de turno de una franja: enviarlo ahora (para probar el email o reenviarlo a RRHH). */
+    public function postReport(Request $request, string $uuid): Response
+    {
+        $c = \App\Services\PostCoverage::find($uuid);
+        if ($c === null) return new Response('', 404);
+        $n = \App\Services\ShiftEndReport::sendNow($c);
+        Flash::add($n > 0 ? 'success' : 'warning', $n > 0
+            ? "Reporte enviado por email a {$n} destino(s). Revisá la bandeja (y spam). El estado de cada envío está en la cola de envíos."
+            : 'No salió ningún email: la regla "Reporte de fin de turno (RRHH)" no tiene destinatarios con email, o está desactivada. Revisala en Configuración → Notificaciones y alertas.');
+        return Response::redirect('/panel/rondas/turnos/puesto/' . $uuid);
     }
 
     /** Reporte de cobertura de los puestos (horas a cubrir vs. cubiertas, huecos). */

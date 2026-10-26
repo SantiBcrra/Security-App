@@ -285,6 +285,7 @@ return static function (Router $r): void {
         $r->post('/rondas/turnos/ausencias/{uuid}/cancelar', [\App\Controllers\Web\Panel\ShiftsController::class, 'cancelAbsence'], [$can('rondas', 'ver')]);
         $r->post('/rondas/turnos/sin-servicio', [\App\Controllers\Web\Panel\ShiftsController::class, 'storeClosure'], [$can('rondas', 'editar')]);
         $r->post('/rondas/turnos/sin-servicio/{uuid}/borrar', [\App\Controllers\Web\Panel\ShiftsController::class, 'deleteClosure'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turnos/puesto/{uuid}/reporte', [\App\Controllers\Web\Panel\ShiftsController::class, 'postReport'], [$can('rondas', 'editar')]);
         $r->get('/rondas/turnos/puesto/{uuid}', [\App\Controllers\Web\Panel\ShiftsController::class, 'post'], [$can('rondas', 'ver')]);
         $r->get('/rondas/turnos/cobertura', [\App\Controllers\Web\Panel\ShiftsController::class, 'coverage'], [$can('rondas', 'ver')]);
         $r->get('/rondas/turnos/horas', [\App\Controllers\Web\Panel\ShiftsController::class, 'hours'], [$can('rondas', 'ver')]);

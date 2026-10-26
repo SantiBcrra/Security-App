@@ -327,6 +327,8 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   agrega en la regla. **Sin depender del cron**: `PostCoverage::closeIfDone()` cierra la franja y manda el reporte cuando el último
   guardia toca "Terminar turno" en la última hora de la franja o después (`REPORT_ON_END_MINUTES` 60), o cuando el de la franja
   siguiente lo releva; si no, lo hace el cron. Franjas de programaciones pausadas o eliminadas no toman turnos ni avisan.
+  Detalle de la franja (`/panel/rondas/turnos/puesto/{uuid}`): **"Ver reporte"** (vista previa) y **"Enviar reporte ahora"**
+  (`POST …/reporte`, `rondas.editar`, `ShiftEndReport::sendNow`: asunto "[Parcial…]" o "[Reenvío]", no cuenta como el automático).
 - **Cron sin cupo en el hosting**: el respaldo `CronRunner::lazy()` (cada 5 min, después de responder) ahora lo disparan también
   las llamadas de la app (sincronización cada 15 min por celular) y funciona con PHP-FPM **o LiteSpeed**
   (`CronRunner::finisher()`; `/admin/tareas` dice si está disponible en el servidor). Lo recomendado igual es un cron externo

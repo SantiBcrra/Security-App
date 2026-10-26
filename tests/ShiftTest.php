@@ -683,13 +683,22 @@ return [
         $s = Uuid::v4();
         Push::run([$op('shift.start', ['uuid' => $s, 'site_uuid' => $st['site']['uuid'], 'started_at_device' => $iso(0)]) + ['as_user' => $st['g1']['uuid']]]);
         assert_same(0, $reports(), 'en turno: todavía no');
+        // Botón "Enviar reporte ahora" del panel: parcial, no cuenta como el automático.
+        UserAuth::setCurrent($st['hys']);
+        assert_same(1, \App\Services\ShiftEndReport::sendNow(\App\Services\PostCoverage::findById((int) $cov['id'])));
+        $manual = DB::tenant()->query("SELECT subject FROM notification_queue WHERE event = 'guard.shift_report' ORDER BY id DESC LIMIT 1")->fetchColumn();
+        assert_true(str_starts_with((string) $manual, '[Parcial'), 'el asunto aclara que es parcial');
+        $html = \App\Core\View::render('panel/shifts/post', ['c' => \App\Services\PostCoverage::detail(\App\Services\PostCoverage::findById((int) $cov['id'])),
+            'report' => \App\Services\ShiftEndReport::build(\App\Services\PostCoverage::findById((int) $cov['id'])), 'canSend' => true], null);
+        assert_true(str_contains($html, 'Enviar reporte ahora (parcial)') && str_contains($html, 'Ver reporte'), 'botones en el detalle');
+        UserAuth::setCurrent($device);
         $r = Push::run([$op('shift.end', ['slot_uuid' => $s, 'ended_at_device' => $iso(1)]) + ['as_user' => $st['g1']['uuid']]]);
         assert_same('ok', $r[0]['status'], json_encode($r));
-        assert_same(1, $reports(), 'terminó en la última hora: el reporte sale en el momento');
+        assert_same(2, $reports(), 'terminó en la última hora: el automático sale igual en el momento');
         assert_true(in_array(DB::tenant()->query("SELECT status FROM guard_post_coverage WHERE id = {$cov['id']}")->fetchColumn(), ['parcial', 'sin_cubrir', 'cubierta'], true));
         UserAuth::setCurrent($st['hys']);
         ShiftService::run(strtotime($cov['end_at'] . ' UTC') + 3 * 3600);
-        assert_same(1, $reports(), 'el cron no lo repite');
+        assert_same(2, $reports(), 'el cron no lo repite');
         // Antes de la última hora no se adelanta
         assert_true(!\App\Services\PostCoverage::closeIfDone((int) $cov['id']), 'ya cerrada');
         ShiftPlanner::delete(ShiftPlanner::find($shiftUuid));
