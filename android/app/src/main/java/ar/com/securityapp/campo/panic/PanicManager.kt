@@ -48,7 +48,9 @@ class PanicManager(private val context: Context, private val c: AppContainer) {
             c.rounds.active()?.let { put("round_uuid", it.uuid) }
         }
         val opId = c.outbox.enqueue("guard.panic", data)
-        val delivered = withTimeoutOrNull(15_000) { runCatching { c.api.post("/panic", data) }.isSuccess } == true
+        // Celular compartido del puesto: el pánico va a nombre del guardia de turno.
+        val direct = c.prefs.dutyGuardUuid?.let { kotlinx.serialization.json.JsonObject(data + ("as_user" to kotlinx.serialization.json.JsonPrimitive(it))) } ?: data
+        val delivered = withTimeoutOrNull(15_000) { runCatching { c.api.post("/panic", direct) }.isSuccess } == true
         if (delivered) {
             c.outbox.discard(c.db.ops("pending").first { it.opId == opId }) // ya llegó: la cola no hace falta
             return Result(true, emptyList(), fix != null, null, phones())

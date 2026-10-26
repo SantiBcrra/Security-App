@@ -63,7 +63,9 @@ final class AppController
     public function panic(Request $request): Response
     {
         try {
-            $r = \App\Services\GuardSafety::panic($request->post, 'datos');
+            // Celular compartido del puesto: el pánico va a nombre del guardia de turno.
+            $guard = \App\Services\ActingGuard::resolve(isset($request->post['as_user']) ? (string) $request->post['as_user'] : null);
+            $r = \App\Services\ActingGuard::run($guard, fn () => \App\Services\GuardSafety::panic($request->post, 'datos'));
         } catch (\App\Core\UserError $e) {
             return Response::jsonError($e->getMessage(), 422);
         }

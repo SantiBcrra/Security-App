@@ -53,7 +53,8 @@ final class ShiftService
     // ── consultas ─────────────────────────────────────────────────
 
     private const SELECT = 'SELECT t.*, u.name AS user_name, u.uuid AS user_uuid, s.uuid AS site_uuid, s.name AS site_name, s.lat AS site_lat,
-            s.lng AS site_lng, s.geofence_radius_m AS site_radius, g.uuid AS shift_uuid, g.name AS shift_name,
+            s.lng AS site_lng, s.geofence_radius_m AS site_radius, g.uuid AS shift_uuid, g.name AS shift_name, g.mode AS shift_mode,
+            (SELECT c.uuid FROM guard_post_coverage c WHERE c.id = t.coverage_id) AS coverage_uuid,
             (SELECT name FROM users eu WHERE eu.id = t.edited_by) AS edited_by_name,
             (SELECT COUNT(*) FROM guard_shift_exits e WHERE e.slot_id = t.id) AS exits_count,
             (SELECT e.uuid FROM guard_shift_exits e WHERE e.slot_id = t.id AND e.returned_at IS NULL ORDER BY e.left_at DESC LIMIT 1) AS open_exit_uuid
@@ -123,7 +124,8 @@ final class ShiftService
         return match (true) {
             $s['status'] === 'en_curso' && $s['open_exit_uuid'] => ['FUERA del predio', 'danger'],
             $s['status'] === 'en_curso' => ['En turno', 'success'],
-            $s['status'] === 'cumplido' => [$s['end_mode'] === 'auto' ? 'Cumplido (sin marcar el fin)' : 'Cumplido', 'secondary'],
+            $s['status'] === 'cumplido' => [match ($s['end_mode']) { 'auto' => 'Cumplido (sin marcar el fin)', 'relevo' => 'Cumplido (relevado)',
+                'sin_persona' => 'Dejó el puesto sin persona', default => 'Cumplido' }, 'secondary'],
             $s['status'] === 'ausente' => ['No vino', 'danger'],
             $s['status'] === 'justificado' => ['Ausencia justificada', 'info'],
             $s['status'] === 'anulado' => ['Anulado', 'light'],
@@ -243,7 +245,8 @@ final class ShiftService
     private static function mySlot(string $uuid): array
     {
         $slot = self::find(strtolower($uuid));
-        if ($slot === null || (int) $slot['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('No se encontró tu turno.');
+        // En el celular compartido del puesto otro guardia del grupo puede terminar un turno que quedó abierto.
+        if ($slot === null || !ActingGuard::canActFor((int) $slot['user_id'])) throw new UserError('No se encontró tu turno.');
         return $slot;
     }
 
@@ -260,7 +263,20 @@ final class ShiftService
         $current = self::current($me);
         if ($current !== null && $current['uuid'] !== $uuid) throw new UserError('Ya tenés un turno en curso: terminalo antes de empezar otro.');
         $db = DB::tenant();
-        if ($existing !== null) { // turno programado
+        $coverage = $existing === null ? PostCoverage::forStart($me, $d, $at) : null;
+        if ($coverage !== null) { // turno por puesto: el guardia del grupo que llega toma la franja y releva al que estaba
+            $relieved = PostCoverage::onDuty((int) $coverage['shift_id']);
+            if ($relieved !== null && (int) $relieved['user_id'] !== $me) {
+                self::close($relieved, max($at, (string) $relieved['started_at']), 'relevo');
+                Audit::tenant('guard_shift.relief', 'guard_shift_slot', $relieved['uuid'], null, ['relevado_por' => UserAuth::user()['name']]);
+            }
+            $db->prepare("INSERT INTO guard_shift_slots (uuid, shift_id, coverage_id, user_id, site_id, start_at, end_at, grace_minutes, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'programado', UTC_TIMESTAMP(), UTC_TIMESTAMP())")
+                ->execute([$uuid, (int) $coverage['shift_id'], (int) $coverage['id'], $me, (int) $coverage['site_id'], $at,
+                    $coverage['end_at'], (int) $coverage['grace_minutes']]);
+            PostCoverage::markStarted($coverage, $at);
+            $slot = self::find($uuid);
+        } elseif ($existing !== null) { // turno programado
             $slot = self::mySlot($uuid);
             $ts = strtotime($at . ' UTC');
             if ($ts < strtotime($slot['start_at'] . ' UTC') - self::EARLY_MINUTES * 60) throw new UserError('Todavía es temprano: el turno se puede empezar desde ' . self::EARLY_MINUTES . ' min antes.');
@@ -289,6 +305,10 @@ final class ShiftService
         return self::shape($slot);
     }
 
+    /**
+     * Terminar el turno. En un puesto, `leave_empty` + `note` = "Dejar el puesto sin persona" (viene el encargado, el dueño…):
+     * el hueco hasta el próximo guardia queda justificado y no avisa "relevo que no llegó".
+     */
     public static function end(array $d): array
     {
         $slot = self::mySlot((string) ($d['slot_uuid'] ?? $d['uuid'] ?? ''));
@@ -296,19 +316,22 @@ final class ShiftService
         if ($slot['status'] !== 'en_curso') throw new UserError('El turno no está en curso.');
         $at = self::deviceTime($d['ended_at_device'] ?? null, 'fin');
         if ($at < $slot['started_at']) $at = $slot['started_at'];
-        self::close($slot, $at, 'manual');
-        Audit::tenant('guard_shift.end', 'guard_shift_slot', $slot['uuid']);
+        $empty = !empty($d['leave_empty']);
+        $note = mb_substr(trim((string) ($d['note'] ?? '')), 0, 255);
+        if ($empty && mb_strlen($note) < 3) throw new UserError('Contá por qué el puesto queda sin persona (por ejemplo: "Llegó el encargado").');
+        self::close($slot, $at, $empty ? 'sin_persona' : 'manual', $empty ? $note : null);
+        Audit::tenant('guard_shift.end', 'guard_shift_slot', $slot['uuid'], null, $empty ? ['sin_persona' => $note] : null);
         return self::shape(self::findById((int) $slot['id']));
     }
 
-    private static function close(array $slot, string $at, string $mode): void
+    private static function close(array $slot, string $at, string $mode, ?string $note = null): void
     {
         $db = DB::tenant();
         foreach (self::exits((int) $slot['id']) as $e) { // salida abierta: termina con el turno
             if ($e['returned_at'] === null) self::closeExit($e, max($at, $e['left_at']));
         }
-        $db->prepare("UPDATE guard_shift_slots SET status = 'cumplido', ended_at = ?, end_mode = ?, updated_at = UTC_TIMESTAMP() WHERE id = ? AND status = 'en_curso'")
-            ->execute([$at, $mode, (int) $slot['id']]);
+        $db->prepare("UPDATE guard_shift_slots SET status = 'cumplido', ended_at = ?, end_mode = ?, end_note = ?, updated_at = UTC_TIMESTAMP() WHERE id = ? AND status = 'en_curso'")
+            ->execute([$at, $mode, $note, (int) $slot['id']]);
     }
 
     private static function closeExit(array $e, string $at): void
@@ -421,7 +444,9 @@ final class ShiftService
             'site_radius_m' => (int) ($s['site_radius'] ?: 200), 'start_at' => $iso($s['start_at']), 'end_at' => $iso($s['end_at']),
             'grace_minutes' => (int) $s['grace_minutes'], 'started_at' => $iso($s['started_at']), 'ended_at' => $iso($s['ended_at']),
             'start_inside' => $s['start_inside'] === null ? null : (bool) $s['start_inside'], 'unscheduled' => (bool) $s['unscheduled'],
-            'name' => $s['shift_name'], 'open_exit_uuid' => $s['open_exit_uuid'] ?? null];
+            'name' => $s['shift_name'], 'open_exit_uuid' => $s['open_exit_uuid'] ?? null,
+            'user_uuid' => $s['user_uuid'] ?? null, 'user_name' => $s['user_name'] ?? null, 'coverage_uuid' => $s['coverage_uuid'] ?? null,
+            'end_mode' => $s['end_mode'] ?? null];
     }
 
     // ── cron ──────────────────────────────────────────────────────
@@ -481,6 +506,7 @@ final class ShiftService
                     if ($notify) Notifier::dispatch('guard.shift_silent', $s + ['since' => $device['gps_off_since'], '_kind' => 'gps']);
                 }
             }
+            $out += PostCoverage::run($now);
             $out['purged'] = self::purge($now);
         } finally {
             UserAuth::setCurrent($previous);

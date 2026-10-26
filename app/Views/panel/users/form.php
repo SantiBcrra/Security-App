@@ -108,6 +108,24 @@ foreach ($roles as $r) { if ($r['slug'] === Permissions::AUDITOR_ROLE) { $audito
             <?php endif; ?>
         </div>
 
+        <div class="card shadow-sm mb-3" id="pin">
+            <div class="card-header"><strong>PIN para el celular compartido</strong></div>
+            <div class="card-body small">
+                <p class="text-body-secondary mb-2">Para guardias que usan el celular del puesto (uno para todos): al empezar el turno eligen su nombre y ponen este
+                    PIN, así las rondas, el libro y el pánico quedan a su nombre. No es la contraseña de la cuenta.</p>
+                <p class="mb-2"><?= $user['pin_hash'] ? 'PIN cargado el ' . e(fecha($user['pin_set_at'], 'd/m/Y')) . '.' : '<span class="text-warning-emphasis">Sin PIN.</span>' ?></p>
+                <?php if ($canEdit): ?>
+                <form method="post" action="<?= e(url('/panel/usuarios/' . $user['uuid'] . '/pin')) ?>" class="d-flex flex-wrap gap-2 align-items-start">
+                    <?= csrf_field() ?>
+                    <input class="form-control form-control-sm" name="pin" inputmode="numeric" pattern="\d{4,6}" maxlength="6" autocomplete="off" placeholder="4 a 6 números" style="max-width: 140px">
+                    <button class="btn btn-sm btn-outline-primary"><?= $user['pin_hash'] ? 'Cambiar PIN' : 'Cargar PIN' ?></button>
+                    <?php if ($user['pin_hash']): ?><button class="btn btn-sm btn-link text-danger" name="quitar" value="1" formnovalidate>Quitar</button><?php endif; ?>
+                </form>
+                <div class="form-text">Decíselo al guardia en persona (o que lo elija él con vos). Al cambiarlo, el celular lo toma en la próxima sincronización.</div>
+                <?php endif; ?>
+            </div>
+        </div>
+
         <div class="card shadow-sm">
             <div class="card-header"><strong>Dispositivos (app móvil)</strong></div>
             <?php if (!$devices): ?>

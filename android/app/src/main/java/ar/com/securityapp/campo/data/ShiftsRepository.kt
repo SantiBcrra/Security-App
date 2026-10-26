@@ -136,6 +136,37 @@ class ShiftsRepository(private val db: LocalDb, private val outbox: Outbox, priv
         outbox.enqueue("shift.end", buildJsonObject { put("slot_uuid", shift.uuid); put("ended_at_device", now.toString()) })
     }
 
+    /** Marca el turno como terminado en el celular (lo que confirma el servidor llega con el próximo pull). */
+    fun markEnded(shift: GuardShift, at: Instant) {
+        openExit()?.let { if (it.slotUuid == shift.uuid) returned(it, at) }
+        db.get("guard_shift_slots", shift.uuid)?.let(::parse)?.let { o ->
+            db.upsert("guard_shift_slots", listOf(shift.uuid to JsonObject(o + mapOf("status" to JsonPrimitive("cumplido"), "ended_at" to JsonPrimitive(at.toString()))).toString()))
+        }
+    }
+
+    /**
+     * Turno en un puesto del celular compartido (lo arma `PostRepository`): queda local y se encola `shift.start` con el
+     * predio y la franja; va a nombre del guardia de turno (Outbox agrega `as_user`).
+     */
+    fun startLocal(uuid: String, site: Site?, spanEnd: Instant?, fix: Fix?, coverageUuid: String?, userUuid: String, userName: String): GuardShift {
+        val now = Instant.now()
+        val row = buildJsonObject {
+            put("uuid", uuid); put("status", "en_curso"); put("started_at", now.toString()); put("local", true)
+            put("start_at", now.toString()); put("end_at", (spanEnd ?: now.plusSeconds(12 * 3600L)).toString()); put("grace_minutes", settings().graceMinutes)
+            put("unscheduled", coverageUuid == null); put("user_uuid", userUuid); put("user_name", userName)
+            coverageUuid?.let { put("coverage_uuid", it) }
+            site?.let { put("site_uuid", it.uuid); put("site_name", it.name); it.lat?.let { v -> put("site_lat", v) }; it.lng?.let { v -> put("site_lng", v) }; put("site_radius_m", it.radiusM) }
+        }
+        db.upsert("guard_shift_slots", listOf(uuid to row.toString()))
+        outbox.enqueue("shift.start", buildJsonObject {
+            put("uuid", uuid); put("started_at_device", now.toString())
+            site?.let { put("site_uuid", it.uuid) }
+            coverageUuid?.let { put("coverage_uuid", it) }
+            fix?.let { put("lat", it.lat); put("lng", it.lng); put("accuracy_m", it.accuracyM.toDouble()); if (it.mock) put("mock", 1) }
+        })
+        return shift(row)!!
+    }
+
     // ── salidas del predio ────────────────────────────────────────
 
     private fun exit(o: JsonObject): ShiftExit? = runCatching {

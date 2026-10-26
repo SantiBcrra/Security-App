@@ -13,6 +13,8 @@ data class Me(
     val consentAccepted: Boolean,
     /** "Ver como": nombre del administrador que está mirando la app como este usuario (null = uso normal). */
     val previewBy: String? = null,
+    /** Celular compartido del puesto: varios guardias usan este celular y cada uno se identifica con su PIN al empezar el turno. */
+    val sharedDevice: Boolean = false,
 ) {
     val isPreview: Boolean get() = previewBy != null
 
@@ -31,6 +33,7 @@ data class Me(
                 name = user.str("nombre"), role = user.obj("rol")?.str("nombre") ?: "",
                 companyName = company.str("nombre"), companySlug = company.str("slug"),
                 permissions = perms, consentVersion = consent.str("version"), consentAccepted = consent.bool("aceptado") || previewBy != null, previewBy = previewBy,
+                sharedDevice = o.bool("celular_puesto"),
             )
         }
     }

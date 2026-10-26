@@ -36,6 +36,9 @@ final class Pull
         $hasMore = false;
         $newPositions = [];
         $sectorLabels = null;
+        // Celular compartido del puesto: "yo" incluye a los guardias del grupo (rondas y turnos en curso de cualquiera de ellos).
+        $self = \App\Services\ActingGuard::selfIds();
+        $me = (int) (UserAuth::user()['id'] ?? 0);
 
         foreach (self::ENTITIES as $entity) {
             [$ts, $id] = $positions[$entity] ?? ['1970-01-01 00:00:00', 0];
@@ -58,8 +61,9 @@ final class Pull
                     || ($entity === 'patrol_slots' && ($row['status'] !== 'pendiente'
                         || !in_array((int) (UserAuth::user()['id'] ?? 0), \App\Services\PatrolPlanner::assignees((int) $row['schedule_id']), true)))
                     // Turnos y ausencias: solo los propios (turnos pendientes o en curso; los terminados viven en "Mis turnos").
-                    || ($entity === 'guard_shift_slots' && ((int) $row['user_id'] !== (int) (UserAuth::user()['id'] ?? 0)
-                        || !in_array($row['status'], ['programado', 'en_curso', 'justificado'], true)))
+                    || ($entity === 'guard_shift_slots' && (!in_array((int) $row['user_id'], $self, true)
+                        || !in_array($row['status'], ['programado', 'en_curso', 'justificado'], true)
+                        || ((int) $row['user_id'] !== $me && ($row['status'] !== 'en_curso' || $row['coverage_id'] === null))))
                     || ($entity === 'guard_absences' && (int) $row['user_id'] !== (int) (UserAuth::user()['id'] ?? 0))
                     // Libro de guardia: las últimas 48 h y lo que sigue adentro (lo viejo lo borra el celular); el padrón, a quien anota.
                     || ($entity === 'logbook_entries' && (!UserAuth::can('libro', 'ver') || ($row['occurred_at'] < gmdate('Y-m-d H:i:s', time() - 48 * 3600)
@@ -105,6 +109,7 @@ final class Pull
                 'turnos'            => \App\Services\ShiftService::meta(),
                 'gases'             => \App\Services\WorkPermitControls::gasLimits() + ['vigencia_min' => \App\Services\WorkPermitControls::MEASUREMENT_VALID_MINUTES],
                 'usuario'           => $user ? ['uuid' => $user['uuid'], 'nombre' => $user['name'], 'rol' => $user['role_name']] : null,
+                'puesto'            => $user ? \App\Services\ActingGuard::meta((int) $user['id']) : null,
             ],
         ];
     }
@@ -214,8 +219,9 @@ final class Pull
                     JOIN patrol_schedules sc ON sc.id = t.schedule_id WHERE {$after} AND t.due_at > UTC_TIMESTAMP() - INTERVAL 2 DAY{$order}", $params];
             case 'guard_shift_slots':
                 return ["SELECT t.*, s.uuid AS site_uuid, s.name AS site_name, s.lat AS site_lat, s.lng AS site_lng, s.geofence_radius_m AS site_radius,
-                        g.name AS shift_name, NULL AS open_exit_uuid FROM guard_shift_slots t JOIN sites s ON s.id = t.site_id
-                        LEFT JOIN guard_shifts g ON g.id = t.shift_id WHERE {$after} AND t.end_at > UTC_TIMESTAMP() - INTERVAL 1 DAY{$order}", $params];
+                        g.name AS shift_name, NULL AS open_exit_uuid, u.uuid AS user_uuid, u.name AS user_name, c.uuid AS coverage_uuid
+                        FROM guard_shift_slots t JOIN sites s ON s.id = t.site_id JOIN users u ON u.id = t.user_id
+                        LEFT JOIN guard_shifts g ON g.id = t.shift_id LEFT JOIN guard_post_coverage c ON c.id = t.coverage_id WHERE {$after} AND t.end_at > UTC_TIMESTAMP() - INTERVAL 1 DAY{$order}", $params];
             case 'guard_absences':
                 return ["SELECT t.* FROM guard_absences t WHERE {$after} AND t.date_to >= CURDATE() - INTERVAL 60 DAY{$order}", $params];
             case 'logbook_entries':
@@ -239,11 +245,11 @@ final class Pull
                     FROM patrol_routes t WHERE {$after}{$order}", array_merge([$all, (int) (UserAuth::user()['id'] ?? 0)], $params)];
             case 'patrol_rounds':
                 $join = 'SELECT t.*, pr.uuid AS route_uuid FROM patrol_rounds t LEFT JOIN patrol_routes pr ON pr.id=t.route_id WHERE ';
-                if (UserAuth::scope('rondas') === 'propios') { $params[] = (int) UserAuth::user()['id']; return [$join . "{$after} AND t.user_id=?{$order}", $params]; }
+                if (UserAuth::scope('rondas') === 'propios') return [$join . "{$after} AND t.user_id IN (" . implode(',', \App\Services\ActingGuard::selfIds()) . "){$order}", $params];
                 return [$join . $after . $order, $params];
             case 'patrol_scans':
                 $join = 'SELECT t.*, pr.uuid AS round_uuid, pp.uuid AS point_uuid FROM patrol_scans t JOIN patrol_rounds pr ON pr.id=t.round_id JOIN patrol_points pp ON pp.id=t.point_id WHERE ';
-                if (UserAuth::scope('rondas') === 'propios') { $params[] = (int) UserAuth::user()['id']; return [$join . "{$after} AND t.user_id=?{$order}", $params]; }
+                if (UserAuth::scope('rondas') === 'propios') return [$join . "{$after} AND t.user_id IN (" . implode(',', \App\Services\ActingGuard::selfIds()) . "){$order}", $params];
                 return [$join . $after . $order, $params];
         }
         throw new \InvalidArgumentException($entity);
@@ -314,7 +320,7 @@ final class Pull
             'patrol_routes' => ['uuid' => $r['uuid'], 'name' => $r['name'], 'description' => $r['description'], 'frequency' => $r['frequency'],
                 'expected_minutes' => $r['expected_minutes'] !== null ? (int) $r['expected_minutes'] : null, 'order_mode' => $r['order_mode'] ?? 'libre',
                 'points' => Patrols::routePointUuids((int) $r['id'])],
-            'patrol_rounds' => ['uuid' => $r['uuid'], 'route_uuid' => $r['route_uuid'], 'mine' => (int) $r['user_id'] === (int) (UserAuth::user()['id'] ?? 0), 'status' => $r['status'], 'started_at' => str_replace(' ', 'T', $r['started_at']) . 'Z', 'finished_at' => $r['finished_at'] ? str_replace(' ', 'T', $r['finished_at']) . 'Z' : null,
+            'patrol_rounds' => ['uuid' => $r['uuid'], 'route_uuid' => $r['route_uuid'], 'mine' => \App\Services\ActingGuard::canActFor((int) $r['user_id']), 'status' => $r['status'], 'started_at' => str_replace(' ', 'T', $r['started_at']) . 'Z', 'finished_at' => $r['finished_at'] ? str_replace(' ', 'T', $r['finished_at']) . 'Z' : null,
                 'point_order' => json_decode((string) ($r['point_order'] ?? ''), true) ?: null],
             'patrol_scans' => ['uuid' => $r['uuid'], 'round_uuid' => $r['round_uuid'], 'point_uuid' => $r['point_uuid'], 'scanned_at_device' => str_replace(' ', 'T', $r['scanned_at_device']) . 'Z', 'lat' => $r['lat'] !== null ? (float) $r['lat'] : null, 'lng' => $r['lng'] !== null ? (float) $r['lng'] : null, 'accuracy_m' => $r['accuracy_m'] !== null ? (float) $r['accuracy_m'] : null, 'distance_m' => $r['distance_m'] !== null ? (float) $r['distance_m'] : null, 'within_radius' => (bool) $r['within_radius'], 'note' => $r['note'], 'method' => $r['method'] ?? null, 'location_status' => $r['location_status'] ?? null,
                 'out_of_order' => isset($r['out_of_order']) ? (bool) $r['out_of_order'] : null],

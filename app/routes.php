@@ -128,6 +128,7 @@ return static function (Router $r): void {
         $r->post('/usuarios/{uuid}', [UsersController::class, 'update'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/eliminar', [UsersController::class, 'delete'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/estado', [UsersController::class, 'toggle'], [$can('usuarios', 'editar')]);
+        $r->post('/usuarios/{uuid}/pin', [UsersController::class, 'pin'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/invitacion', [UsersController::class, 'invite'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/dispositivos/{device}/revocar', [UsersController::class, 'revokeDevice'], [$can('usuarios', 'editar')]);
 
@@ -284,6 +285,8 @@ return static function (Router $r): void {
         $r->post('/rondas/turnos/ausencias/{uuid}/cancelar', [\App\Controllers\Web\Panel\ShiftsController::class, 'cancelAbsence'], [$can('rondas', 'ver')]);
         $r->post('/rondas/turnos/sin-servicio', [\App\Controllers\Web\Panel\ShiftsController::class, 'storeClosure'], [$can('rondas', 'editar')]);
         $r->post('/rondas/turnos/sin-servicio/{uuid}/borrar', [\App\Controllers\Web\Panel\ShiftsController::class, 'deleteClosure'], [$can('rondas', 'editar')]);
+        $r->get('/rondas/turnos/puesto/{uuid}', [\App\Controllers\Web\Panel\ShiftsController::class, 'post'], [$can('rondas', 'ver')]);
+        $r->get('/rondas/turnos/cobertura', [\App\Controllers\Web\Panel\ShiftsController::class, 'coverage'], [$can('rondas', 'ver')]);
         $r->get('/rondas/turnos/horas', [\App\Controllers\Web\Panel\ShiftsController::class, 'hours'], [$can('rondas', 'ver')]);
         $r->get('/rondas/turnos/horas/exportar', [\App\Controllers\Web\Panel\ShiftsController::class, 'export'], [$can('rondas', 'exportar')]);
         $r->get('/rondas/programacion', [\App\Controllers\Web\Panel\PatrolSchedulesController::class, 'index'], [$can('rondas', 'ver')]);

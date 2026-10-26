@@ -326,13 +326,16 @@ final class Patrols
             $r = self::route($routeUuid);
             if (!$r || (int) $r['is_active'] !== 1 || $r['deleted_at'] !== null) throw new UserError('La ruta no existe o está desactivada.');
             $userId = (int) UserAuth::user()['id'];
-            if (UserAuth::scope('rondas') !== 'todo' && !self::isAssigned((int) $r['id'], $userId)) throw new UserError('Esta ruta no está asignada a tu usuario.');
+            // Celular compartido del puesto: vale la asignación de la cuenta del puesto.
+            $device = \App\Services\ActingGuard::device();
+            if (UserAuth::scope('rondas') !== 'todo' && !self::isAssigned((int) $r['id'], $userId)
+                && !($device !== null && self::isAssigned((int) $r['id'], (int) $device['id']))) throw new UserError('Esta ruta no está asignada a tu usuario.');
             $routeId = (int) $r['id'];
         }
         if ($roundUuid !== null && $roundUuid !== '' && !Uuid::isValid($roundUuid)) throw new UserError('Identificador de ronda inválido.');
         $uuid = $roundUuid ?: Uuid::v4();
         if ($existing = self::round($uuid)) { // reenvío del celular: misma ronda, no se duplica
-            if ((int) $existing['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('La ronda no está disponible.');
+            if (!\App\Services\ActingGuard::canActFor((int) $existing['user_id'])) throw new UserError('La ronda no está disponible.');
             return $existing;
         }
         DB::tenant()->prepare('INSERT INTO patrol_rounds (uuid,route_id,point_order,user_id,status,started_at,started_lat,started_lng,created_at,updated_at) VALUES (?,?,?,?,\'en_curso\',?,?,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')
@@ -412,7 +415,7 @@ final class Patrols
         $point = self::point((string) ($data['point_uuid'] ?? ''));
         if (!$point || (int) $point['is_active'] !== 1 || $point['deleted_at'] !== null) throw new UserError('El QR no corresponde a un punto activo.');
         $round = self::round((string) ($data['round_uuid'] ?? ''));
-        if (!$round || (int) $round['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('La ronda no está disponible.');
+        if (!$round || !\App\Services\ActingGuard::canActFor((int) $round['user_id'])) throw new UserError('La ronda no está disponible.');
         $at = self::deviceTime($data['scanned_at_device'] ?? null);
         // Sin señal el escaneo puede llegar después del fin de la ronda (reintento): vale si se hizo antes de terminarla.
         if ($round['status'] === 'anulada') throw new UserError('La ronda fue anulada por un supervisor.');
@@ -499,7 +502,7 @@ final class Patrols
     public static function finish(string $uuid, ?string $finishedAt = null): array
     {
         $round = self::round($uuid);
-        if (!$round || (int) $round['user_id'] !== (int) UserAuth::user()['id']) throw new UserError('La ronda no existe.');
+        if (!$round || !\App\Services\ActingGuard::canActFor((int) $round['user_id'])) throw new UserError('La ronda no existe.');
         $status = $round['route_id'] !== null && self::missingPoints((int) $round['id'], (int) $round['route_id']) > 0 ? 'incompleta' : 'completa';
         $at = max(self::deviceTime($finishedAt), (string) $round['started_at']); // nunca antes de empezar
         DB::tenant()->prepare("UPDATE patrol_rounds SET status=?, finished_at=?, updated_at=UTC_TIMESTAMP() WHERE id=? AND status='en_curso'")->execute([$status, $at, (int) $round['id']]);

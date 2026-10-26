@@ -60,6 +60,8 @@ final class AuthController
             'dispositivo' => ApiAuth::device()['uuid'] ?? null,
             'vista_previa' => \App\Services\AppPreview::active() ? ['por' => \App\Services\AppPreview::viewer()['name']] : null,
             'consentimiento' => ['version' => \App\Services\Consent::VERSION, 'aceptado' => \App\Services\Consent::accepted((int) $user['id'])],
+            // Celular compartido del puesto: la app pide el guardia (con PIN) al empezar cada turno.
+            'celular_puesto' => \App\Services\ActingGuard::isDevice((int) $user['id']),
         ]);
     }
 

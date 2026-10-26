@@ -2,6 +2,7 @@ package ar.com.securityapp.campo.data
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -13,13 +14,19 @@ import java.util.UUID
  * manda cuando hay señal. Cada operación tiene su op_id: reenviarla nunca duplica (el servidor recuerda la respuesta).
  * Un rechazo del servidor (validación) no se reintenta solo: queda visible en Ajustes con el motivo.
  */
-class Outbox(private val api: ApiClient, private val db: LocalDb) {
+/**
+ * @param actingGuard guardia de turno en el celular compartido del puesto: cada operación se encola con su uuid (`_as_user`
+ *   dentro de los datos; al enviar viaja como `as_user`) y el servidor la registra a su nombre.
+ */
+class Outbox(private val api: ApiClient, private val db: LocalDb, private val actingGuard: () -> String? = { null }) {
 
     data class PushResult(val sent: Int, val failed: Int)
 
-    fun enqueue(type: String, data: JsonObject): String {
+    /** @param asUser guardia a cuyo nombre va (por defecto, el de turno en el celular compartido; el estado del celular nunca) */
+    fun enqueue(type: String, data: JsonObject, asUser: String? = actingGuard()): String {
         val opId = UUID.randomUUID().toString()
-        db.addOp(LocalDb.Op(opId, type, data.toString(), "pending", 0, null, System.currentTimeMillis()))
+        val payload = if (asUser != null && type != "device.status") JsonObject(data + ("_as_user" to JsonPrimitive(asUser))) else data
+        db.addOp(LocalDb.Op(opId, type, payload.toString(), "pending", 0, null, System.currentTimeMillis()))
         return opId
     }
 
@@ -57,9 +64,11 @@ class Outbox(private val api: ApiClient, private val db: LocalDb) {
             val body = buildJsonObject {
                 put("operations", buildJsonArray {
                     for (op in batch) add(buildJsonObject {
+                        val data = api.json.parseToJsonElement(op.data).jsonObject
                         put("op_id", op.opId)
                         put("type", op.type)
-                        put("data", api.json.parseToJsonElement(op.data))
+                        data.strOrNull("_as_user")?.let { put("as_user", it) }
+                        put("data", JsonObject(data - "_as_user"))
                     })
                 })
             }

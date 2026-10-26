@@ -270,7 +270,9 @@ final class PatrolPlanner
         $candidates = $q->fetchAll();
         if ($slotUuid) usort($candidates, fn ($a, $b) => ($b['uuid'] === $slotUuid) <=> ($a['uuid'] === $slotUuid));
         foreach ($candidates as $slot) {
-            if (!in_array((int) $round['user_id'], self::assignees((int) $slot['schedule_id']), true)) continue;
+            $assignees = self::assignees((int) $slot['schedule_id']);
+            $device = ActingGuard::device(); // celular compartido: la ronda programada está a cargo de la cuenta del puesto
+            if (!in_array((int) $round['user_id'], $assignees, true) && !($device !== null && in_array((int) $device['id'], $assignees, true))) continue;
             $onTime = $started <= strtotime($slot['due_at'] . ' UTC') + (int) $slot['grace_minutes'] * 60;
             DB::tenant()->prepare("UPDATE patrol_slots SET status = 'realizada', round_id = ?, started_at = ?, on_time = ?, updated_at = UTC_TIMESTAMP() WHERE id = ? AND status = 'pendiente'")
                 ->execute([(int) $round['id'], $round['started_at'], $onTime ? 1 : 0, (int) $slot['id']]);

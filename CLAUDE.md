@@ -281,6 +281,38 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   detalle `/panel/rondas/turno/{uuid}` (línea de tiempo + mapa con el predio y las salidas). Ajustes: Configuración →
   notificaciones → "Turnos de guardias" (`section=turnos`).
 
+## Turnos por puesto y celular compartido — diseño en `docs/design/turnos-guardias.md` → "Turnos por puesto"
+- Decisión del usuario (25/10/2026): los guardias son **tercerizados y se organizan solos** (Indumor sabe el horario, no quién
+  viene) y la empresa de seguridad tiene **UN celular para todos**. Solución definitiva, no "turno no programado".
+- Programación `guard_shifts.mode` = `personal` (como siempre) | **`puesto`**: horario a cubrir + **grupo** (`user_ids`) +
+  celular compartido opcional (`device_user_id`, tenant 0078). Por puesto NO se generan turnos por persona: el cron arma
+  **franjas** `guard_post_coverage` (tenant 0077; pendiente → en_curso → cubierta | parcial | sin_cubrir; `PostCoverage::generate`,
+  idempotente, anula las futuras sin empezar al editar/pausar/eliminar). Cada guardia que empieza abre un **tramo**
+  (`guard_shift_slots.coverage_id`, `ShiftService::start` vía `PostCoverage::forStart`, solo si es del grupo); el que llega
+  **releva** al que estaba (`end_mode = relevo`). Terminar: `manual` (el puesto queda vacío) o **`sin_persona`** con motivo
+  obligatorio (`leave_empty` + `note` → `end_note`): ese hueco queda justificado.
+- Avisos (`PostCoverage::run` dentro de `ShiftService::run`): `guard.shift_post_uncovered` (nadie empezó a la hora + 2×tolerancia),
+  `guard.shift_relief_missing` (terminó sin relevo y nadie empezó en `turnos.minutos_relevo`, 15), `guard.shift_long` (más de
+  `turnos.horas_maximas` seguidas, 24; 0 = no). Una vez por franja / hueco / tramo (`NotificationMarks`). Nada de "no vino" ni ausencias.
+- **Celular compartido** (`Services\ActingGuard`): el celular queda abierto con la cuenta del puesto (`/me.celular_puesto`); cada
+  guardia tiene **PIN** de 4 a 6 números (`users.pin_hash` = `pbkdf2$iter$sal$hash`, ficha del usuario → "PIN para el celular
+  compartido", auditado sin el PIN) que verifica el celular sin señal (`meta.puesto.guardias[].pin`). Las operaciones viajan con
+  **`as_user`** (push y `POST /panic`): `ActingGuard::resolve()` exige cuenta de puesto + guardia activo de su grupo y
+  `ActingGuard::run()` las ejecuta a su nombre. `ActingGuard::canActFor()` / `selfIds()`: el siguiente guardia del mismo celular
+  puede seguir la ronda o cerrar el turno del anterior; la ruta asignada a la cuenta del puesto vale para el guardia (Patrols /
+  PatrolPlanner). Pull para el celular: `meta.puesto` (puestos, guardias con PIN y consentimiento, franjas −12 h/+36 h, de turno,
+  texto del consentimiento) y los tramos en curso del grupo. Consentimiento por guardia: op `consent.accept` con `as_user`.
+- Panel: Hoy → "Puestos" (barra de tiempo: verde con guardia, rojo sin guardia, gris sin persona con motivo), detalle
+  `/panel/rondas/turnos/puesto/{uuid}` (tramos, relevos, huecos y motivos), Reportes → **Cobertura de puestos**
+  `/panel/rondas/turnos/cobertura` (horas a cubrir vs. cubiertas, huecos justificados / sin justificar, CSV). Ajustes en
+  Configuración → notificaciones → Turnos (minutos de relevo, horas máximas).
+- App Android 1.5.0 (`versionCode 20`): con `celular_puesto` el inicio muestra `PostDutyCard` (`ui/shifts/PostDutyUi.kt`) en lugar
+  de "Mi turno": quién está de turno, **Empezar mi turno** (elegir nombre → PIN con teclado grande, 5 errores = 1 min de espera →
+  consentimiento la primera vez → GPS), **Cambio de guardia** (el que llega pone su PIN), **Terminar mi turno** (llegó el otro /
+  **Dejar el puesto sin persona** con motivo / terminar con el puesto vacío). `PostRepository` (PBKDF2 igual al servidor),
+  `Prefs.duty*` = guardia de turno; `Outbox` agrega `_as_user` a cada operación (sale como `as_user`; nunca a `device.status`).
+  Encabezado con el guardia de turno; Rondas, Libro y Escanear piden que alguien empiece su turno.
+
 ## Libro de guardia — diseño en `docs/design/libro-de-guardia.md`
 - Decisiones del usuario: guardias de **empresa contratada** (su libro rubricado en papel es responsabilidad de ellos; este es
   el libro de Indumor), datos de visitantes **optativos**, **ingreso libre**, **cierre de turno con firma siempre** y

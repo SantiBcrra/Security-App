@@ -14,10 +14,12 @@ use App\Services\ShiftPlanner;
         <tbody>
         <?php foreach ($shifts as $s): ?>
             <tr class="<?= (int) $s['is_active'] === 1 ? '' : 'text-body-secondary' ?>">
-                <td class="fw-semibold"><?= e($s['name'] ?: 'Sin nombre') ?></td>
+                <td class="fw-semibold"><?= e($s['name'] ?: 'Sin nombre') ?><?= ($s['mode'] ?? '') === 'puesto' ? ' <span class="badge text-bg-info">por puesto</span>' : '' ?></td>
                 <td><?= e($s['site_name']) ?></td>
                 <td><?= e(ShiftPlanner::describe($s)) ?></td>
-                <td><?= e(ShiftPlanner::guardNames($s)) ?></td>
+                <td><?php if (($s['mode'] ?? '') === 'puesto'): ?><span class="small text-body-secondary">Grupo:</span> <?= e(ShiftPlanner::guardNames($s)) ?>
+                    <?php if ($s['device_name']): ?><div class="small text-body-secondary">Celular compartido: <?= e($s['device_name']) ?></div><?php endif; ?>
+                    <?php else: ?><?= e(ShiftPlanner::guardNames($s)) ?><?php endif; ?></td>
                 <td class="small"><?= $s['valid_from'] || $s['valid_until']
                     ? e(($s['valid_from'] ? 'desde ' . date('d/m/Y', strtotime($s['valid_from'])) : '') . ($s['valid_until'] ? ' hasta ' . date('d/m/Y', strtotime($s['valid_until'])) : ''))
                     : 'Sin vencimiento' ?></td>

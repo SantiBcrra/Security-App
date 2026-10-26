@@ -81,13 +81,21 @@ final class ShiftPlanner
             if ($u !== null && (int) $u['is_active'] === 1) $users[] = (int) $u['id'];
         }
         $users = array_values(array_unique($users));
-        if (!$users) $errors['users'] = 'Elegí al menos un guardia.';
+        $mode = ($in['mode'] ?? 'personal') === 'puesto' ? 'puesto' : 'personal';
+        if (!$users) $errors['users'] = $mode === 'puesto' ? 'Elegí los guardias del grupo que cubre el puesto.' : 'Elegí al menos un guardia.';
+        // Por puesto: el celular compartido es opcional (si cada guardia usa el suyo, no hace falta).
+        $device = null;
+        if ($mode === 'puesto' && !empty($in['device'])) {
+            $device = Users::findByUuid((string) $in['device']);
+            if ($device === null || (int) $device['is_active'] !== 1) $errors['device'] = 'El usuario del celular del puesto no existe o está desactivado.';
+            elseif (in_array((int) $device['id'], $users, true)) $errors['device'] = 'El usuario del celular no puede ser también un guardia del grupo: es la cuenta del puesto.';
+        }
         $from = $date($in['valid_from'] ?? '');
         $until = $date($in['valid_until'] ?? '');
         if ($from && $until && $until < $from) $errors['valid_until'] = 'La vigencia termina antes de empezar.';
         $grace = ($in['grace_minutes'] ?? '') === '' ? null : max(1, min(120, (int) $in['grace_minutes']));
-        $data = ['name' => mb_substr(trim((string) ($in['name'] ?? '')), 0, 120) ?: null, 'site_id' => $site ? (int) $site['id'] : null,
-            'user_ids' => json_encode($users), 'pattern' => $pattern, 'days' => $days, 'rotation_on' => $on, 'rotation_off' => $off,
+        $data = ['name' => mb_substr(trim((string) ($in['name'] ?? '')), 0, 120) ?: null, 'mode' => $mode, 'site_id' => $site ? (int) $site['id'] : null,
+            'user_ids' => json_encode($users), 'device_user_id' => $device ? (int) $device['id'] : null, 'pattern' => $pattern, 'days' => $days, 'rotation_on' => $on, 'rotation_off' => $off,
             'anchor_date' => $anchor, 'start_time' => $start, 'end_time' => $end,
             'blocks' => $blocks ? json_encode($blocks) : null, 'valid_from' => $from, 'valid_until' => $until, 'grace_minutes' => $grace];
         return [$data, $errors];
@@ -186,9 +194,11 @@ final class ShiftPlanner
             $db->prepare('UPDATE guard_shifts SET ' . implode(', ', array_map(fn ($c) => "{$c} = ?", $cols)) . ', updated_at = UTC_TIMESTAMP() WHERE id = ?')
                 ->execute(array_merge(array_values($data), [(int) $shift['id']]));
             self::dropFuture((int) $shift['id']);
+            PostCoverage::dropFuture((int) $shift['id']);
             Audit::tenant('guard_shift.update', 'guard_shift', $uuid, array_intersect_key($shift, $data), $data);
         }
         self::generate();
+        PostCoverage::generate();
         return $uuid;
     }
 
@@ -196,8 +206,9 @@ final class ShiftPlanner
     {
         DB::tenant()->prepare('UPDATE guard_shifts SET is_active = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([$active ? 1 : 0, (int) $shift['id']]);
         self::dropFuture((int) $shift['id']);
+        PostCoverage::dropFuture((int) $shift['id']);
         Audit::tenant($active ? 'guard_shift.activate' : 'guard_shift.deactivate', 'guard_shift', $shift['uuid']);
-        if ($active) self::generate();
+        if ($active) { self::generate(); PostCoverage::generate(); }
     }
 
     /** Los turnos futuros que todavía no empezaron se anulan (baja al celular) y se vuelven a generar con lo nuevo. */
@@ -214,19 +225,22 @@ final class ShiftPlanner
         DB::tenant()->prepare('UPDATE guard_shifts SET is_active = 0, deleted_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = ?')->execute([(int) $shift['id']]);
         DB::tenant()->prepare("UPDATE guard_shift_slots SET status = 'anulado', updated_at = UTC_TIMESTAMP()
             WHERE shift_id = ? AND status IN ('programado', 'justificado') AND start_at > UTC_TIMESTAMP()")->execute([(int) $shift['id']]);
+        PostCoverage::dropFuture((int) $shift['id']);
         Audit::tenant('guard_shift.delete', 'guard_shift', $shift['uuid'], ['nombre' => $shift['name'], 'horario' => self::describe($shift)], null);
     }
 
     public static function find(string $uuid): ?array
     {
-        $s = DB::tenant()->prepare('SELECT g.*, s.uuid AS site_uuid, s.name AS site_name FROM guard_shifts g JOIN sites s ON s.id = g.site_id WHERE g.uuid = ? AND g.deleted_at IS NULL');
+        $s = DB::tenant()->prepare('SELECT g.*, s.uuid AS site_uuid, s.name AS site_name, d.uuid AS device_uuid, d.name AS device_name FROM guard_shifts g
+            JOIN sites s ON s.id = g.site_id LEFT JOIN users d ON d.id = g.device_user_id WHERE g.uuid = ? AND g.deleted_at IS NULL');
         $s->execute([$uuid]);
         return $s->fetch() ?: null;
     }
 
     public static function all(): array
     {
-        return DB::tenant()->query('SELECT g.*, s.uuid AS site_uuid, s.name AS site_name FROM guard_shifts g JOIN sites s ON s.id = g.site_id
+        return DB::tenant()->query('SELECT g.*, s.uuid AS site_uuid, s.name AS site_name, d.uuid AS device_uuid, d.name AS device_name FROM guard_shifts g
+            JOIN sites s ON s.id = g.site_id LEFT JOIN users d ON d.id = g.device_user_id
             WHERE g.deleted_at IS NULL ORDER BY g.is_active DESC, s.name, g.start_time')->fetchAll();
     }
 
@@ -375,7 +389,8 @@ final class ShiftPlanner
         };
         $created = 0;
         $touched = [];
-        $shifts = $db->query('SELECT * FROM guard_shifts WHERE is_active = 1 AND deleted_at IS NULL')->fetchAll();
+        // Por puesto no hay turnos por persona: se generan franjas a cubrir (PostCoverage).
+        $shifts = $db->query("SELECT * FROM guard_shifts WHERE is_active = 1 AND deleted_at IS NULL AND mode <> 'puesto'")->fetchAll();
         $activeUsers = array_map('intval', $db->query('SELECT id FROM users WHERE is_active = 1')->fetchAll(\PDO::FETCH_COLUMN));
         foreach ($shifts as $s) {
             $grace = (int) ($s['grace_minutes'] ?? self::defaultGrace());

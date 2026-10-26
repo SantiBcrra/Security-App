@@ -146,6 +146,23 @@ final class UsersController
         return Response::redirect('/panel/usuarios');
     }
 
+    /** PIN para identificarse en el celular compartido del puesto (no es la contraseña). */
+    public function pin(Request $request, string $uuid): Response
+    {
+        $user = Users::findByUuid($uuid);
+        if ($user === null || $user['deleted_at'] !== null) return Response::redirect('/panel/usuarios');
+        $remove = (string) $request->input('quitar', '') === '1';
+        try {
+            \App\Services\ActingGuard::setPin((int) $user['id'], $remove ? null : trim((string) $request->input('pin', '')));
+        } catch (\App\Core\UserError $e) {
+            Flash::add('danger', $e->getMessage());
+            return Response::redirect('/panel/usuarios/' . $uuid . '#pin');
+        }
+        Audit::tenant($remove ? 'user.pin_remove' : 'user.pin_set', 'user', $uuid); // nunca el PIN
+        Flash::add('success', $remove ? 'PIN quitado.' : 'PIN guardado. Llega al celular del puesto en la próxima sincronización.');
+        return Response::redirect('/panel/usuarios/' . $uuid . '#pin');
+    }
+
     public function invite(Request $request, string $uuid): Response
     {
         $user = Users::findByUuid($uuid);

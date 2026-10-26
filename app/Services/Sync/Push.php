@@ -23,7 +23,7 @@ final class Push
     public const TYPES = ['observation.create', 'observation.comment', 'observation.transition', 'round.start', 'round.scan', 'round.scan_auto', 'round.finish', 'round.track', 'device.status', 'patrol.point_locate', 'guard.panic', 'action.start', 'action.close', 'inspection.create', 'incident.create', 'ppe.delivery',
         'permit.start', 'permit.measure', 'permit.isolate', 'permit.release', 'permit.suspend', 'permit.resume', 'permit.close',
         'shift.start', 'shift.end', 'shift.exit', 'shift.exit_reason', 'shift.return', 'shift.track', 'absence.request',
-        'logbook.create', 'logbook.exit', 'logbook.correct', 'logbook.close', 'logbook.receive'];
+        'logbook.create', 'logbook.exit', 'logbook.correct', 'logbook.close', 'logbook.receive', 'consent.accept'];
 
     /** @return list<array{op_id:string, status:'ok'|'error', data?:array, error?:string}> */
     public static function run(array $operations): array
@@ -39,7 +39,14 @@ final class Push
                 $results[] = $previous; // ya procesada: mismo resultado, nada nuevo
                 continue;
             }
-            $result = ['op_id' => $opId] + self::apply((string) ($op['type'] ?? ''), (array) ($op['data'] ?? []));
+            // Celular compartido del puesto: la operación va a nombre del guardia de turno (`as_user`).
+            try {
+                $guard = \App\Services\ActingGuard::resolve(isset($op['as_user']) ? (string) $op['as_user'] : null);
+                $result = ['op_id' => $opId] + \App\Services\ActingGuard::run($guard,
+                    fn () => self::apply((string) ($op['type'] ?? ''), (array) ($op['data'] ?? [])));
+            } catch (UserError $e) {
+                $result = ['op_id' => $opId] + self::error($e->getMessage());
+            }
             // Los errores de validación también se guardan: reenviar lo mismo da lo mismo.
             DB::tenant()->prepare('INSERT IGNORE INTO idempotency_keys (op_id, user_id, op_type, response, created_at) VALUES (?, ?, ?, ?, UTC_TIMESTAMP())')
                 ->execute([$opId, (int) UserAuth::user()['id'], mb_substr((string) ($op['type'] ?? ''), 0, 40), json_encode($result, JSON_UNESCAPED_UNICODE)]);
@@ -79,6 +86,10 @@ final class Push
                 'absence.request'        => ['status' => 'ok', 'data' => self::absenceRequest($data)],
                 'logbook.create', 'logbook.exit', 'logbook.correct', 'logbook.close', 'logbook.receive' => self::logbook($type, $data),
                 'guard.panic'            => self::panic($data),
+                // Celular compartido: cada guardia acepta el consentimiento (Ley 25.326) la primera vez que se identifica, aun sin señal.
+                'consent.accept'         => \App\Services\Consent::accept((int) UserAuth::user()['id'], (string) ($data['version'] ?? ''),
+                    \App\Services\ApiAuth::device()['uuid'] ?? null, null)
+                    ? ['status' => 'ok', 'data' => ['aceptado' => true]] : self::error('El texto del consentimiento cambió: volvé a leerlo y aceptalo.'),
                 'action.start'           => self::actionStep($data, 'tomar'),
                 'action.close'           => self::actionStep($data, 'cerrar'),
                 'inspection.create'      => self::inspectionCreate($data),

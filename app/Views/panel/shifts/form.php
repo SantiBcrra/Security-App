@@ -1,9 +1,11 @@
 <?php
-/** Turnos → alta / edición. @var ?array $shift @var array $sites @var array $guards @var array $userUuids @var int $defaultGrace @var ?array $old */
+/** Turnos → alta / edición. @var ?array $shift @var array $sites @var array $guards @var array $devices @var array $userUuids @var int $defaultGrace @var ?array $old */
 use App\Services\ShiftPlanner;
 $v = $old ?? [];
 $s = $shift ?? [];
 $pattern = $v['pattern'] ?? ($s['pattern'] ?? 'weekly');
+$mode = $v['mode'] ?? ($s['mode'] ?? 'personal');
+$device = $v['device'] ?? ($s['device_uuid'] ?? '');
 $days = array_map('intval', (array) ($v['days'] ?? explode(',', (string) ($s['days'] ?? '1,2,3,4,5'))));
 $users = (array) ($v['users'] ?? $userUuids);
 $site = $v['site'] ?? ($s['site_uuid'] ?? (count($sites) === 1 ? $sites[0]['uuid'] : ''));
@@ -18,7 +20,7 @@ $formBlocks = array_map(fn ($b) => ['day' => (int) ($b['day'] ?? 1), 'start' => 
     <div class="alert alert-warning">Primero cargá la planta / predio en <a href="<?= e(url('/panel/datos/plantas')) ?>">Datos maestros → Plantas</a>, con su ubicación y radio (el área del predio).</div>
 <?php endif; ?>
 <form method="post" action="<?= e(url('/panel/rondas/turnos/programacion' . ($shift ? '/' . $shift['uuid'] : ''))) ?>" class="card card-body" style="max-width: 860px"
-      x-data="{ pattern: <?= e(json_encode($pattern)) ?>, on: <?= (int) ($v['rotation_on'] ?? ($s['rotation_on'] ?? 1)) ?>, off: <?= (int) ($v['rotation_off'] ?? ($s['rotation_off'] ?? 1)) ?>,
+      x-data="{ mode: <?= e(json_encode($mode)) ?>, pattern: <?= e(json_encode($pattern)) ?>, on: <?= (int) ($v['rotation_on'] ?? ($s['rotation_on'] ?? 1)) ?>, off: <?= (int) ($v['rotation_off'] ?? ($s['rotation_off'] ?? 1)) ?>,
                start: <?= e(json_encode($v['start_time'] ?? ($s['start_time'] ?? '08:00'))) ?>, end: <?= e(json_encode($v['end_time'] ?? ($s['end_time'] ?? '16:00'))) ?>,
                preset(on, off, start, end) { this.pattern = 'rotation'; this.on = on; this.off = off; this.start = start; this.end = end; },
                dayNames: <?= e(json_encode(array_values(ShiftPlanner::DAYS))) ?>, maxHours: <?= ShiftPlanner::MAX_BLOCK_HOURS ?>,
@@ -51,7 +53,19 @@ $formBlocks = array_map(fn ($b) => ['day' => (int) ($b['day'] ?? 1), 'start' => 
         <div class="col-md-6"><label class="form-label">Nombre (opcional)</label><input class="form-control" name="name" maxlength="120" value="<?= e($v['name'] ?? ($s['name'] ?? '')) ?>" placeholder="Noche portería"></div>
     </div>
 
-    <label class="form-label mt-3">Tipo de turno</label>
+    <label class="form-label mt-3">¿Quién cubre este horario?</label>
+    <div class="btn-group mb-2 flex-wrap" role="group">
+        <input type="radio" class="btn-check" name="mode" value="personal" id="m-personal" x-model="mode"><label class="btn btn-outline-primary" for="m-personal">Guardias fijos (sé quién viene)</label>
+        <input type="radio" class="btn-check" name="mode" value="puesto" id="m-puesto" x-model="mode"><label class="btn btn-outline-primary" for="m-puesto">Un puesto que cubre un grupo (no sé quién viene)</label>
+    </div>
+    <div class="alert alert-info small" x-show="mode === 'puesto'">
+        <strong>Turno por puesto</strong> (por ejemplo guardias de una empresa de seguridad que se organizan solos): cargás el horario que hay que
+        cubrir y el grupo de guardias. Cualquiera del grupo lo cubre tocando <strong>Empezar turno</strong>; el que llega releva al que estaba.
+        Se avisa si nadie empezó, si alguien se fue y nadie lo relevó, o si una persona lleva demasiadas horas seguidas. No hay avisos de "no vino"
+        por persona ni ausencias: ellos se organizan. Si el guardia deja el puesto <strong>sin persona</strong> con un motivo (viene el encargado, el dueño…), no se avisa.
+    </div>
+
+    <label class="form-label mt-1">Tipo de horario</label>
     <div class="btn-group mb-2 flex-wrap" role="group">
         <input type="radio" class="btn-check" name="pattern" value="weekly" id="p-weekly" x-model="pattern"><label class="btn btn-outline-primary" for="p-weekly">Fijo (días de la semana)</label>
         <input type="radio" class="btn-check" name="pattern" value="custom" id="p-custom" x-model="pattern"><label class="btn btn-outline-primary" for="p-custom">Horario por día (franjas)</label>
@@ -129,15 +143,28 @@ $formBlocks = array_map(fn ($b) => ['day' => (int) ($b['day'] ?? 1), 'start' => 
             <div class="form-text">Desde esa fecha se repite: <span x-text="on"></span> día(s) trabaja, <span x-text="off"></span> descansa.</div></div>
     </div>
 
-    <label class="form-label mt-3">Guardias</label>
+    <label class="form-label mt-3" x-text="mode === 'puesto' ? 'Guardias del grupo (los que pueden cubrir el puesto)' : 'Guardias'">Guardias</label>
     <div class="border rounded p-2" style="max-height: 220px; overflow:auto">
         <?php foreach ($guards as $g): ?>
             <div class="form-check"><input class="form-check-input" type="checkbox" name="users[]" value="<?= e($g['uuid']) ?>" id="u<?= e($g['uuid']) ?>" <?= in_array($g['uuid'], $users, true) ? 'checked' : '' ?>>
-                <label class="form-check-label" for="u<?= e($g['uuid']) ?>"><?= e($g['name']) ?> <span class="small text-body-secondary"><?= e($g['role_name']) ?></span></label></div>
+                <label class="form-check-label" for="u<?= e($g['uuid']) ?>"><?= e($g['name']) ?> <span class="small text-body-secondary"><?= e($g['role_name']) ?></span>
+                    <?php if (empty($g['pin_hash'])): ?><span class="badge text-bg-warning" x-show="mode === 'puesto'" title="Sin PIN no puede identificarse en el celular compartido">sin PIN</span><?php endif; ?></label></div>
         <?php endforeach; ?>
         <?php if (!$guards): ?><div class="text-body-secondary small">No hay usuarios con el módulo Rondas.</div><?php endif; ?>
     </div>
-    <div class="form-text">Cada guardia elegido tiene ese turno. Un guardia puede estar en turnos de varios predios.</div>
+    <div class="form-text" x-show="mode !== 'puesto'">Cada guardia elegido tiene ese turno. Un guardia puede estar en turnos de varios predios.</div>
+    <div class="form-text" x-show="mode === 'puesto'">Cualquiera de ellos puede cubrir el puesto, de a uno por vez. Cuando la empresa de seguridad cambie de personal, agregalos o sacalos acá.</div>
+
+    <div class="mt-3" x-show="mode === 'puesto'">
+        <label class="form-label">Celular compartido del puesto (opcional)</label>
+        <select class="form-select" name="device" style="max-width: 420px">
+            <option value="">Cada guardia usa su propio celular</option>
+            <?php foreach ($devices ?? [] as $d): ?><option value="<?= e($d['uuid']) ?>" <?= $device === $d['uuid'] ? 'selected' : '' ?>><?= e($d['name']) ?> (<?= e($d['role_name']) ?>)</option><?php endforeach; ?>
+        </select>
+        <div class="form-text">Si la empresa de seguridad tiene <strong>un solo celular</strong> para todos sus guardias: creá un usuario para ese celular (por ejemplo
+            "Celular portería") con el rol de guardia, abrí la app con él una sola vez y elegilo acá. Al empezar el turno cada guardia elige su nombre y pone
+            su <strong>PIN</strong> (se carga en Usuarios); las rondas, el libro y el pánico quedan a su nombre. El celular nunca se cierra entre guardias.</div>
+    </div>
 
     <div class="row g-3 mt-1">
         <div class="col-md-3"><label class="form-label">Vigente desde</label><input class="form-control" type="date" name="valid_from" value="<?= e($v['valid_from'] ?? ($s['valid_from'] ?? '')) ?>"></div>

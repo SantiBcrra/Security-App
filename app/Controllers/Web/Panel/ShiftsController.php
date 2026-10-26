@@ -48,8 +48,10 @@ final class ShiftsController
         $today = $this->localToday();
         $day = $this->date($request, 'fecha', $today);
         ShiftPlanner::generate(); // por si el cron todavía no corrió
+        \App\Services\PostCoverage::generate();
         return Response::html(View::render('panel/shifts/today', [
             'title' => 'Turnos de guardias', 'day' => $day, 'today' => $today, 'slots' => ShiftService::day($day, $this->onlyUser()),
+            'posts' => $this->onlyUser() === null ? \App\Services\PostCoverage::day($day) : [],
             'pending' => $this->onlyUser() === null ? ShiftAbsences::list('solicitada') : [],
             'hasShifts' => (bool) ShiftPlanner::all(), 'canEdit' => ShiftAbsences::canManage(),
         ], 'layouts/app'));
@@ -65,6 +67,51 @@ final class ShiftsController
             'replaces' => $slot['replaces_slot_id'] ? ShiftService::findById((int) $slot['replaces_slot_id']) : null,
             'absence' => $slot['absence_id'] ? ShiftAbsences::findById((int) $slot['absence_id']) : null,
         ], 'layouts/app'));
+    }
+
+    /** Franja de un puesto: quién la cubrió (tramos y relevos), huecos y motivos. */
+    public function post(Request $request, string $uuid): Response
+    {
+        $c = \App\Services\PostCoverage::find($uuid);
+        if ($c === null || $this->onlyUser() !== null) return new Response('', 404);
+        return Response::html(View::render('panel/shifts/post', [
+            'title' => 'Puesto ' . ($c['shift_name'] ?: $c['site_name']), 'c' => \App\Services\PostCoverage::detail($c),
+        ], 'layouts/app'));
+    }
+
+    /** Reporte de cobertura de los puestos (horas a cubrir vs. cubiertas, huecos). */
+    public function coverage(Request $request): Response
+    {
+        [$f, $rows] = $this->coverageFilters($request);
+        if ($request->input('exportar') === '1' && UserAuth::can('rondas', 'exportar')) {
+            Audit::tenant('shifts.coverage_export', 'guard_shift', null, null, ['desde' => $f['desde'], 'hasta' => $f['hasta']]);
+            $out = "\u{FEFF}Puesto;Predio;Franja;Horas a cubrir;Horas cubiertas;% cubierto;Huecos justificados (h);Huecos sin justificar (h);Guardias\r\n";
+            $h = fn (int $sec) => number_format($sec / 3600, 2, ',', '');
+            foreach ($rows as $p) foreach ($p['rows'] as $c) {
+                $j = array_sum(array_map(fn ($g) => $g['justified'] ? $g['seconds'] : 0, $c['gaps']));
+                $u = array_sum(array_map(fn ($g) => $g['justified'] ? 0 : $g['seconds'], $c['gaps']));
+                $names = implode(', ', array_unique(array_map(fn ($sg) => $sg['user_name'], $c['segments'])));
+                $out .= implode(';', array_map(fn ($v) => '"' . str_replace('"', '""', (string) $v) . '"', [$p['name'] ?: $p['site_name'], $p['site_name'],
+                    fecha($c['start_at'], 'd/m/Y H:i') . ' a ' . fecha($c['end_at'], 'd/m/Y H:i'), $h($c['elapsed']), $h($c['covered']),
+                    $c['percent'] ?? '', $h($j), $h($u), $names])) . "\r\n";
+            }
+            return new Response($out, 200, ['Content-Type' => 'text/csv; charset=utf-8',
+                'Content-Disposition' => "attachment; filename=\"cobertura-{$f['desde']}-a-{$f['hasta']}.csv\""]);
+        }
+        return Response::html(View::render('panel/shifts/coverage', [
+            'title' => 'Cobertura de puestos', 'filters' => $f, 'posts' => $rows, 'sites' => \App\Models\Sites::list(null, true),
+            'canExport' => UserAuth::can('rondas', 'exportar'),
+        ], 'layouts/app'));
+    }
+
+    private function coverageFilters(Request $request): array
+    {
+        $today = $this->localToday();
+        $f = ['desde' => $this->date($request, 'desde', date('Y-m-d', strtotime($today . ' -6 days'))), 'hasta' => $this->date($request, 'hasta', $today),
+            'predio' => (string) $request->input('predio', '')];
+        if ($f['hasta'] < $f['desde']) $f['hasta'] = $f['desde'];
+        $site = $f['predio'] !== '' ? \App\Models\Sites::findByUuid($f['predio']) : null;
+        return [$f, \App\Services\PostCoverage::report($f['desde'], $f['hasta'], $site ? (int) $site['id'] : null)];
     }
 
     // ── un turno: alta suelta, edición y baja ────────────────────
@@ -142,6 +189,7 @@ final class ShiftsController
             'title' => $shift ? 'Editar turno' : 'Nuevo turno', 'shift' => $shift, 'userUuids' => $userUuids, 'old' => $old,
             'sites' => \App\Models\Sites::list(),
             'guards' => $this->guards(), 'defaultGrace' => ShiftPlanner::defaultGrace(),
+            'devices' => array_values(array_filter(Users::all(), fn ($u) => (int) $u['is_active'] === 1)),
         ], 'layouts/app'));
     }
 

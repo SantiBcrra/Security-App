@@ -61,6 +61,9 @@ final class Messages
         'guard.shift_exit_alarm'   => 'Guardia fuera del predio sin motivo',
         'guard.shift_silent'       => 'Guardia en turno sin contacto o sin GPS',
         'guard.shift_uncovered'    => 'Puesto sin cubrir (ausencia sin reemplazo)',
+        'guard.shift_post_uncovered' => 'Puesto sin cubrir (nadie empezó el turno)',
+        'guard.shift_relief_missing' => 'Relevo que no llegó (el puesto quedó sin guardia)',
+        'guard.shift_long'         => 'Guardia con muchas horas seguidas de turno',
         'guard.absence_requested'  => 'Pedido de ausencia de un guardia',
         'guard.absence_decided'    => 'Respuesta a un pedido de ausencia',
         'logbook.important'        => 'Libro de guardia: novedad importante',
@@ -214,8 +217,9 @@ Llamalo y marcá la alerta como atendida.",
     {
         $who = $r['user_name'] ?? 'Un guardia';
         $site = $r['site_name'] ?? '';
-        $url = isset($r['uuid']) && str_starts_with($event, 'guard.shift_') && $event !== 'guard.shift_uncovered'
-            ? '/panel/rondas/turno/' . $r['uuid'] : '/panel/rondas/turnos/ausencias';
+        $url = !empty($r['_post']) ? '/panel/rondas/turnos/puesto/' . $r['uuid']
+            : (isset($r['uuid']) && str_starts_with($event, 'guard.shift_') && $event !== 'guard.shift_uncovered'
+            ? '/panel/rondas/turno/' . $r['uuid'] : '/panel/rondas/turnos/ausencias');
         $span = fn () => fecha($r['start_at'] ?? null, 'd/m H:i') . ' a ' . fecha($r['end_at'] ?? null, 'H:i');
         $map = fn ($lat, $lng) => $lat !== null ? "\nUbicación: https://maps.google.com/?q={$lat},{$lng}" : '';
         $far = function ($d): string {
@@ -243,6 +247,12 @@ Llamalo y marcá la alerta como atendida.",
             'guard.shift_uncovered' => ["Puesto sin cubrir · {$site}", "{$who} tiene ausencia aprobada (" . ($r['type_label'] ?? '') . ') del ' . date('d/m', strtotime((string) $r['date_from']))
                 . ' al ' . date('d/m', strtotime((string) $r['date_to'])) . ' y no tiene reemplazo: ' . (int) ($r['slots'] ?? 0) . ' turno(s) sin cubrir desde el '
                 . fecha($r['first_start'] ?? null, 'd/m H:i') . '.'],
+            'guard.shift_post_uncovered' => ["Puesto sin cubrir · {$site}", "Nadie empezó el turno en {$site}" . (!empty($r['shift_name']) ? " ({$r['shift_name']})" : '')
+                . ': la franja de ' . $span() . ' empezó a las ' . fecha($r['start_at'], 'H:i') . ' y ya pasó la tolerancia. Comunicate con la empresa de seguridad.'],
+            'guard.shift_relief_missing' => ["Relevo que no llegó · {$site}", ($r['user_name'] ?? 'El guardia') . " terminó su turno en {$site} a las " . fecha($r['ended_at'] ?? null, 'H:i')
+                . ' y nadie lo relevó: el puesto está sin guardia (la franja sigue hasta el ' . fecha($r['end_at'] ?? null, 'd/m H:i') . ').'],
+            'guard.shift_long' => ["Muchas horas seguidas · {$who}", "{$who} lleva " . (int) ($r['hours'] ?? 0) . " h seguidas de turno en {$site} (desde el "
+                . fecha($r['started_at'] ?? null, 'd/m H:i') . '). Revisá si corresponde un relevo.'],
             'guard.absence_requested' => ["Pedido de ausencia · {$who}", "{$who} pide ausencia (" . ($r['type_label'] ?? '') . ') del ' . date('d/m', strtotime((string) $r['date_from']))
                 . ' al ' . date('d/m', strtotime((string) $r['date_to'])) . (!empty($r['reason']) ? ': ' . $r['reason'] : '') . '. Aprobala o rechazala en Turnos → Ausencias.'],
             'guard.absence_decided' => [$r['status'] === 'aprobada' ? 'Ausencia aprobada' : 'Ausencia rechazada',

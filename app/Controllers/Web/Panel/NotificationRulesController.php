@@ -51,6 +51,7 @@ final class NotificationRulesController
                 'shift' => ['activas' => \App\Services\ShiftService::enabled(), 'gracia' => \App\Services\ShiftPlanner::defaultGrace(),
                     'tolerancia_m' => \App\Services\ShiftService::toleranceM(), 'minutos_fuera' => \App\Services\ShiftService::outMinutes(),
                     'sin_motivo' => \App\Services\ShiftService::noReasonMinutes(), 'cierre' => \App\Services\ShiftService::autoEndMinutes(),
+                    'relevo' => \App\Services\PostCoverage::reliefMinutes(), 'horas_max' => \App\Services\PostCoverage::maxHours(),
                     'sin_contacto' => \App\Services\ShiftService::silentMinutes(), 'dias' => \App\Services\ShiftService::retentionDays()],
             ],
             'queue'    => NotificationQueue::recent(30),
@@ -162,7 +163,10 @@ final class NotificationRulesController
         Settings::set('turnos.cierre_auto_minutos', $int('shift_auto_end', 120, 15, 720));
         Settings::set('turnos.minutos_sin_contacto', $int('shift_silent', 30, 10, 720));
         Settings::set('turnos.dias_posiciones', $int('shift_days', 90, 7, 3650));
-        $keys = ['automatizaciones', 'gracia_minutos', 'tolerancia_m', 'minutos_fuera', 'minutos_sin_motivo', 'cierre_auto_minutos', 'minutos_sin_contacto', 'dias_posiciones'];
+        Settings::set('turnos.minutos_relevo', $int('shift_relief', 15, 5, 240));
+        Settings::set('turnos.horas_maximas', $int('shift_max_hours', 24, 0, 72));
+        $keys = ['automatizaciones', 'gracia_minutos', 'tolerancia_m', 'minutos_fuera', 'minutos_sin_motivo', 'cierre_auto_minutos', 'minutos_sin_contacto', 'dias_posiciones',
+            'minutos_relevo', 'horas_maximas'];
         Audit::tenant('settings.update', 'settings', null, null, array_combine(array_map(fn ($k) => "turnos_{$k}", $keys), array_map(fn ($k) => Settings::get("turnos.{$k}"), $keys)));
         Flash::add('success', 'Ajustes de turnos guardados.');
         return Response::redirect('/panel/configuracion/notificaciones');

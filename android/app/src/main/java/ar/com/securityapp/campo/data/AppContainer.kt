@@ -13,7 +13,7 @@ class AppContainer(context: Context) {
     val sessionLost = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val api = ApiClient(prefs, tokens) { sessionLost.tryEmit(Unit) }
     val auth = AuthRepository(appContext, api, prefs, tokens, db)
-    val outbox = Outbox(api, db)
+    val outbox = Outbox(api, db) { prefs.dutyGuardUuid }
     val uploads = Uploads(appContext, api, db, tokens)
     val observations = ObservationsRepository(db, outbox, uploads, api)
     val notifications = NotificationsRepository(appContext, api)
@@ -24,6 +24,9 @@ class AppContainer(context: Context) {
     val rounds = RoundsRepository(db, outbox, api)
     val shifts = ShiftsRepository(db, outbox, api, prefs)
     val logbook = LogbookRepository(db, outbox, uploads, api, prefs)
+    val post = PostRepository(db, outbox, api, prefs, shifts)
+    /** Celular compartido del puesto: nombre del guardia de turno (lo muestra el encabezado). */
+    val dutyName = kotlinx.coroutines.flow.MutableStateFlow(prefs.dutyGuardName)
     /** Se emite después de cada sincronización (la UI vuelve a leer la base local). */
     val dataChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     val updates = UpdateManager(appContext, api)

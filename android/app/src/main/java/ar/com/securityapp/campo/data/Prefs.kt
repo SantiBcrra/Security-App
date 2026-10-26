@@ -58,8 +58,28 @@ class Prefs(context: Context) {
         get() = sp.getString("theme_mode", "system") ?: "system"
         set(value) { sp.edit().putString("theme_mode", value).apply() }
 
+    // ── Celular compartido del puesto: el guardia que está de turno en este celular ──
+    var dutyGuardUuid: String?
+        get() = sp.getString("duty_guard_uuid", null)
+        set(value) { sp.edit().putString("duty_guard_uuid", value).apply() }
+
+    var dutyGuardName: String?
+        get() = sp.getString("duty_guard_name", null)
+        set(value) { sp.edit().putString("duty_guard_name", value).apply() }
+
+    var dutySlotUuid: String?
+        get() = sp.getString("duty_slot_uuid", null)
+        set(value) { sp.edit().putString("duty_slot_uuid", value).apply() }
+
+    /** Guardias que ya aceptaron el consentimiento en este celular (se manda a la cola; esto evita volver a mostrarlo). */
+    var consentedGuards: Set<String>
+        get() = sp.getStringSet("consented_guards", emptySet()) ?: emptySet()
+        set(value) { sp.edit().putStringSet("consented_guards", value).apply() }
+
+    fun clearDuty() { sp.edit().remove("duty_guard_uuid").remove("duty_guard_name").remove("duty_slot_uuid").apply() }
+
     /** Borra lo de la sesión (al salir o al cambiar de usuario). Conserva el dispositivo, el servidor y la empresa. */
     fun clearSession() {
-        sp.edit().remove("me").remove("cursor").remove("last_sync").remove("meta").apply()
+        sp.edit().remove("me").remove("cursor").remove("last_sync").remove("meta").remove("duty_guard_uuid").remove("duty_guard_name").remove("duty_slot_uuid").apply()
     }
 }

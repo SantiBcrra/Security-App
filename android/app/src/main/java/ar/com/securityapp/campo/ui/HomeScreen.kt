@@ -160,7 +160,11 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     }
     val goHome = { leave() }
     val goActivity = { if (route == "m:rondas") openScanner = false else { leave(); openModule = "rondas" } }
-    val goScan = { haptics.tick(); if (route == "m:rondas") openScanner = true else { leave(); openModule = "rondas"; openScanner = true } }
+    val dutyName by vm.dutyName.collectAsStateWithLifecycle()
+    /** Celular compartido: rondas y libro quedan a nombre del guardia de turno, así que primero alguien tiene que empezar. */
+    val needsDuty = { m: String -> me.sharedDevice && !me.isPreview && dutyName == null && m in setOf("rondas", "libro") }
+    val askDuty = { scope.launch { snackbar.showSnackbar("Primero empezá tu turno (Empezar mi turno): así queda a tu nombre.") }; Unit }
+    val goScan = { haptics.tick(); if (needsDuty("rondas")) askDuty() else if (route == "m:rondas") openScanner = true else { leave(); openModule = "rondas"; openScanner = true } }
     val goNotices = { val was = route == "avisos"; leave(); if (!was) vm.openAvisos.value = true }
     val goMore = { val was = route == "settings"; leave(); if (!was) showSettings = true }
 
@@ -194,7 +198,8 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
                             "panic" -> ar.com.securityapp.campo.panic.PanicScreen((lastPanic.value as? SessionViewModel.PanicState.Done)?.result, onClose = { vm.closePanic() })
                             "home" -> HomeContent(vm, me, sync, update, nextRound, snackbar, openIntent,
                                 onShifts = { showShifts = true }, onLogbook = { page -> logbookPage = page; openModule = "libro" },
-                                onRounds = { openModule = "rondas" }, onModule = { openModule = it })
+                                onRounds = { if (needsDuty("rondas")) askDuty() else openModule = "rondas" },
+                                onModule = { if (needsDuty(it)) askDuty() else openModule = it })
                         }
                     }
                 }
@@ -255,7 +260,11 @@ private fun HomeContent(
                 update.release?.let { release ->
                     item(span = { GridItemSpan(2) }) { UpdateCard(release.versionName, update, onInstall = { vm.installUpdate(openIntent) }) }
                 }
-                if (me.can("rondas", "crear")) {
+                if (me.sharedDevice) {
+                    // Celular compartido del puesto: quién está de turno, empezar con nombre y PIN, cambio de guardia, terminar.
+                    item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.ui.shifts.PostDutyCard() }
+                    item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.panic.PanicButton(onTrigger = { vm.triggerPanic() }) }
+                } else if (me.can("rondas", "crear")) {
                     item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.ui.shifts.ShiftCard(onOpen = onShifts,
                         onLogbook = if (me.can("libro", "crear")) ({ page -> onLogbook(page) }) else null) }
                     item(span = { GridItemSpan(2) }) { ar.com.securityapp.campo.panic.PanicButton(onTrigger = { vm.triggerPanic() }) }
@@ -288,8 +297,12 @@ private fun HomeTopBar(vm: SessionViewModel, me: Me, unread: Int, syncing: Boole
     Row(Modifier.fillMaxWidth().background(Brand).statusBarsPadding().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Image(painterResource(R.drawable.security_logo), "Logo de Security App", Modifier.size(38.dp).padding(end = 8.dp))
         Column(Modifier.weight(1f)) {
-            Text(me.name, color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(me.role, color = Color(0xFFB4BACB), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Celular compartido del puesto: arriba el guardia de turno (todo queda a su nombre) y abajo el celular.
+            val duty = if (me.sharedDevice) vm.dutyName.collectAsStateWithLifecycle().value else null
+            Text(duty ?: if (me.sharedDevice) "Nadie de turno" else me.name, color = Color.White, style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (me.sharedDevice) "${if (duty != null) "De turno · " else ""}${me.name}" else me.role, color = Color(0xFFB4BACB),
+                style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onNotices) {
             androidx.compose.material3.BadgedBox(badge = { if (unread > 0) androidx.compose.material3.Badge(containerColor = Accent, contentColor = OnAccent) { Text(if (unread > 99) "99+" else "$unread") } }) {

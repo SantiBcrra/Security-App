@@ -1,5 +1,5 @@
 <?php
-/** Turnos → Hoy. @var array $slots @var array $pending @var string $day @var string $today @var bool $hasShifts @var bool $canEdit */
+/** Turnos → Hoy. @var array $posts @var array $slots @var array $pending @var string $day @var string $today @var bool $hasShifts @var bool $canEdit */
 use App\Services\ShiftReport;
 use App\Services\ShiftService;
 $prev = date('Y-m-d', strtotime($day . ' -1 day'));
@@ -47,6 +47,8 @@ $card = fn (string $title, int $n, string $hint, string $color) => '<div class="
     <span class="text-body-secondary small ms-1"><?= e(App\Services\ShiftPlanner::DAYS[(int) date('N', strtotime($day))]) ?> <?= e(date('d/m/Y', strtotime($day))) ?></span>
 </div>
 
+<?php if (!empty($posts)): ?><?= App\Core\View::render('panel/shifts/_posts_today', ['posts' => $posts], null) ?><?php endif; ?>
+
 <div class="row g-2 mb-3">
     <?= $card('En turno, en el predio', $k['inside'], 'ahora', 'success') ?>
     <?= $card('Fuera del predio', $k['outside'], 'en turno, salió', 'danger') ?>
@@ -63,7 +65,7 @@ $card = fn (string $title, int $n, string $hint, string $color) => '<div class="
         <tbody>
         <?php foreach ($slots as $s): [$label, $color] = ShiftService::label($s); $m = ShiftReport::measure($s); ?>
             <tr role="button" onclick="if (!event.target.closest('a')) location.href='<?= e(url('/panel/rondas/turno/' . $s['uuid'])) ?>'">
-                <td class="fw-semibold"><?= e($s['user_name']) ?><?= $s['replaces_slot_id'] ? ' <span class="badge text-bg-light">reemplazo</span>' : '' ?><?= $s['unscheduled'] ? ' <span class="badge text-bg-light">no programado</span>' : '' ?></td>
+                <td class="fw-semibold"><?= e($s['user_name']) ?><?= $s['coverage_id'] ? ' <span class="badge text-bg-info">puesto</span>' : '' ?><?= $s['replaces_slot_id'] ? ' <span class="badge text-bg-light">reemplazo</span>' : '' ?><?= $s['unscheduled'] ? ' <span class="badge text-bg-light">no programado</span>' : '' ?></td>
                 <td><?= e($s['site_name']) ?></td>
                 <td class="text-nowrap"><?= e(fecha($s['start_at'], 'H:i')) ?> – <?= e(fecha($s['end_at'], 'H:i')) ?><?= fecha($s['start_at'], 'Y-m-d') !== fecha($s['end_at'], 'Y-m-d') ? ' <span class="small text-body-secondary">(+1)</span>' : '' ?></td>
                 <td><span class="badge text-bg-<?= e($color) ?>"><?= e($label) ?></span></td>
@@ -72,6 +74,7 @@ $card = fn (string $title, int $n, string $hint, string $color) => '<div class="
                     <?= $s['start_inside'] === null ? '' : ((int) $s['start_inside'] === 1 ? '' : ' <span class="badge text-bg-danger">fuera del predio</span>') ?>
                 <?php else: ?>—<?php endif; ?></td>
                 <td class="text-nowrap"><?= $s['ended_at'] ? e(fecha($s['ended_at'], 'H:i')) . ($s['end_mode'] === 'auto' ? ' <span class="badge text-bg-secondary">automático</span>' : '')
+                    . ($s['end_mode'] === 'relevo' ? ' <span class="badge text-bg-light">relevo</span>' : '') . ($s['end_mode'] === 'sin_persona' ? ' <span class="badge text-bg-secondary">sin persona</span>' : '')
                     . ($m['early'] > 0 ? ' <span class="badge text-bg-warning">' . $m['early'] . ' min antes</span>' : '') : '—' ?></td>
                 <td><?= (int) $s['exits_count'] > 0 ? e($s['exits_count'] . ' salida(s) · ' . $m['out'] . ' min') : '—' ?></td>
                 <td class="text-end"><a class="btn btn-sm btn-outline-secondary" href="<?= e(url('/panel/rondas/turno/' . $s['uuid'])) ?>">Ver</a></td>

@@ -33,6 +33,8 @@ data class UpdateState(val release: UpdateManager.Release? = null, val downloadi
 
 class SessionViewModel(app: Application) : AndroidViewModel(app) {
     private val c = (app as CampoApp).container
+    /** Celular compartido del puesto: guardia de turno (null = nadie). */
+    val dutyName: kotlinx.coroutines.flow.StateFlow<String?> = c.dutyName
     private val _screen = MutableStateFlow<Screen>(Screen.Loading)
     val screen: StateFlow<Screen> = _screen
     private val _sync = MutableStateFlow(SyncState(lastSync = c.prefs.lastSync))

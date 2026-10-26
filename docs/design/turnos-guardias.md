@@ -72,3 +72,19 @@ de entrada y día y hora de salida. Cada franja genera un turno (el del fin de s
 pueden superponer (se controla también el paso del domingo al lunes). Para ausencias y días sin servicio cuenta el día de
 entrada. Atajos en el formulario: noches Lun a Vie + fin de semana, Lun a Vie 08–17 + Sáb 08–13, 24 h todos los días,
 fin de semana completo.
+
+## Turnos por puesto y celular compartido — 25/10/2026
+Pedido del usuario: los guardias son de una empresa de seguridad tercerizada que se organiza sola (una semana pueden ser 5
+personas, otra 3). Indumor sabe qué horario hay que cubrir, no quién viene. La empresa tiene **un solo celular** para todos.
+
+- **Programación por puesto**: horario (cualquier tipo, incluido "horario por día") + grupo de guardias + celular compartido
+  opcional. No hay turnos por persona: hay franjas a cubrir. El que llega toca "Empezar mi turno" y toma el puesto; el siguiente
+  lo releva. "Dejar el puesto sin persona" (con motivo: llegó el encargado, el dueño…) justifica el hueco.
+- **Avisos**: puesto sin cubrir (nadie empezó), relevo que no llegó (alguien terminó y nadie siguió), muchas horas seguidas.
+  Sin "no vino" ni ausencias: no se sabe quién tenía que venir.
+- **Celular compartido**: la app queda abierta con la cuenta del puesto. Cada guardia elige su nombre y pone su PIN (lo carga
+  el supervisor en la ficha del usuario); desde ahí rondas, libro, pánico y observaciones quedan a su nombre. El celular nunca
+  cierra sesión entre guardias (cerrar sesión borraría lo pendiente). El PIN identifica a la persona; no es una contraseña: el
+  acceso lo protege la cuenta del puesto. El consentimiento de ubicación lo acepta cada guardia la primera vez.
+- **Reporte de cobertura**: horas a cubrir contra cubiertas, huecos con y sin justificación; las horas por guardia siguen en
+  "Horas trabajadas" (sirve para controlar o liquidar a la empresa de seguridad).

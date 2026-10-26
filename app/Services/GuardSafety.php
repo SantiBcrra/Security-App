@@ -55,7 +55,7 @@ final class GuardSafety
     public static function track(array $data): array
     {
         $round = Patrols::round((string) ($data['round_uuid'] ?? ''));
-        if (!$round || (int) $round['user_id'] !== (int) UserAuth::user()['id']) {
+        if (!$round || !ActingGuard::canActFor((int) $round['user_id'])) {
             throw new UserError('La ronda no está disponible.');
         }
         $points = array_slice((array) ($data['points'] ?? []), 0, self::MAX_POINTS);
@@ -122,7 +122,7 @@ final class GuardSafety
         }
         $user = UserAuth::user();
         $round = !empty($data['round_uuid']) ? Patrols::round((string) $data['round_uuid']) : null;
-        if ($round !== null && (int) $round['user_id'] !== (int) $user['id']) {
+        if ($round !== null && !ActingGuard::canActFor((int) $round['user_id'])) {
             $round = null;
         }
         $lat = is_numeric($data['lat'] ?? null) && abs((float) $data['lat']) <= 90 ? (float) $data['lat'] : null;

@@ -31,8 +31,8 @@ android {
         // en 10.0.2.2 o por Wi-Fi) y la app no llega al servidor de desarrollo. Sin Google Play no hay exigencia de subirlo.
         targetSdk = 35
         // Subir los dos en cada versión publicada en /admin/app-android (versionCode siempre crece).
-        versionCode = 19
-        versionName = "1.4.1"
+        versionCode = 20
+        versionName = "1.5.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["MAPS_API_KEY"] = mapsProps.getProperty("MAPS_API_KEY", "")
     }
