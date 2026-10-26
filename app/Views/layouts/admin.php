@@ -4,6 +4,7 @@ $admin = App\Services\AdminAuth::user();
 $items = [
     ['/admin', 'Tablero', 'chart', null],
     ['/admin/empresas', 'Empresas', 'building', '/admin/empresas'],
+    ['/admin/administradores', 'Super-admins', 'users', '/admin/administradores'],
     ['/admin/migraciones', 'Base de datos', 'layers', '/admin/migraciones'],
     ['/admin/configuracion', 'Configuración', 'settings', '/admin/configuracion'],
     ['/admin/tareas', 'Tareas programadas', 'clock', '/admin/tareas'],

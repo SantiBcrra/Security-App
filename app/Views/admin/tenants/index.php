@@ -35,3 +35,24 @@
         </div>
     </div>
 <?php endif; ?>
+
+<?php if (!empty($deleted)): ?>
+    <details class="mt-4">
+        <summary class="text-body-secondary small">Empresas eliminadas (<?= count($deleted) ?>)</summary>
+        <div class="card shadow-sm mt-2"><div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+            <thead><tr><th>Empresa</th><th>Base de datos</th><th>Eliminada</th><th>Motivo</th><th></th></tr></thead>
+            <tbody>
+            <?php foreach ($deleted as $t): ?>
+                <tr class="text-body-secondary">
+                    <td><a href="<?= e(url('/admin/empresas/' . $t['uuid'])) ?>"><?= e($t['name']) ?></a><div class="small"><?= e($t['slug']) ?></div></td>
+                    <td><code><?= e($t['db_name']) ?></code></td>
+                    <td class="small"><?= e(fecha($t['deleted_at'], 'd/m/Y H:i')) ?></td>
+                    <td class="small"><?= e($t['deleted_reason']) ?></td>
+                    <td class="text-end"><form method="post" action="<?= e(url('/admin/empresas/' . $t['uuid'] . '/restaurar')) ?>" onsubmit="return confirm('¿Restaurar? Queda suspendida hasta reactivarla.')">
+                        <?= csrf_field() ?><button class="btn btn-outline-secondary btn-sm">Restaurar</button></form></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table></div></div>
+    </details>
+<?php endif; ?>

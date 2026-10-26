@@ -17,7 +17,14 @@ $feedback = fn (string $f) => isset($errors[$f]) ? '<div class="invalid-feedback
     </form>
 </div>
 
-<?php if ($isSuspended): ?>
+<?php if (!empty($tenant['deleted_at'])): ?>
+    <div class="alert alert-dark d-flex flex-wrap align-items-center gap-2">
+        <span>Empresa <strong>eliminada</strong> el <?= e(fecha($tenant['deleted_at'], 'd/m/Y H:i')) ?>. Motivo: <?= e($tenant['deleted_reason']) ?>.
+            Su base <code><?= e($tenant['db_name']) ?></code> sigue intacta.</span>
+        <form method="post" action="<?= e(url('/admin/empresas/' . $tenant['uuid'] . '/restaurar')) ?>" onsubmit="return confirm('¿Restaurar la empresa? Queda suspendida hasta que la reactives.')">
+            <?= csrf_field() ?><button class="btn btn-sm btn-light">Restaurar empresa</button></form>
+    </div>
+<?php elseif ($isSuspended): ?>
     <div class="alert alert-danger">
         Suspendida el <?= e(fecha($tenant['suspended_at'], 'd/m/Y H:i')) ?>. Motivo: <?= e($tenant['status_reason']) ?>
     </div>
@@ -124,6 +131,7 @@ $feedback = fn (string $f) => isset($errors[$f]) ? '<div class="invalid-feedback
             </ul>
         </div>
 
+        <?php if (empty($tenant['deleted_at'])): ?>
         <div class="card shadow-sm mb-3 <?= $isSuspended ? '' : 'border-danger-subtle' ?>">
             <div class="card-header"><strong><?= $isSuspended ? 'Reactivar' : 'Suspender' ?></strong></div>
             <?php if ($isSuspended): ?>
@@ -142,6 +150,24 @@ $feedback = fn (string $f) => isset($errors[$f]) ? '<div class="invalid-feedback
                 </form>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
+
+        <?php if (empty($tenant['deleted_at'])): ?>
+        <div class="card shadow-sm mb-3 border-danger" id="eliminar">
+            <div class="card-header text-danger"><strong>Eliminar empresa</strong></div>
+            <form class="card-body" method="post" action="<?= e(url('/admin/empresas/' . $tenant['uuid'] . '/eliminar')) ?>"
+                  onsubmit="return confirm('¿Eliminar la empresa <?= e(addslashes($tenant['name'])) ?>? Nadie va a poder entrar.')">
+                <?= csrf_field() ?>
+                <p class="small text-body-secondary">Nadie de la empresa (web ni app) puede entrar, deja de correr su cron y sale de la lista. La base
+                    <code><?= e($tenant['db_name']) ?></code> y sus archivos <strong>no se borran</strong>: se puede restaurar. Si querés liberar el espacio,
+                    borrá la base desde el panel del hosting (eso sí no tiene vuelta atrás).</p>
+                <input class="form-control mb-2" name="reason" placeholder="Motivo (obligatorio)" maxlength="255" required>
+                <label class="form-label small mb-1">Para confirmar, escribí el identificador: <code><?= e($tenant['slug']) ?></code></label>
+                <input class="form-control mb-2" name="confirm" autocomplete="off" required>
+                <button class="btn btn-danger btn-sm">Eliminar empresa</button>
+            </form>
+        </div>
+        <?php endif; ?>
 
         <div class="small text-body-secondary">
             UUID: <code><?= e($tenant['uuid']) ?></code><br>

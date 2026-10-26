@@ -227,6 +227,66 @@ return [
         @unlink($fake);
     },
 
+    'super-admins: alta, edición, cambio de contraseña (la propia pide la actual), nunca a uno mismo ni al último activo' => function () use ($setup) {
+        $setup();
+        $ctl = new \App\Controllers\Web\Admin\PlatformAdminsController();
+        \App\Models\PlatformAdmin::upsert('Primera', 'primera@plataforma.test', 'clave-larga-uno');
+        $me = \App\Models\PlatformAdmin::findByEmail('primera@plataforma.test');
+        $_SESSION = ['platform_admin_id' => (int) $me['id']];
+        $ctl->store(new Request('POST', '/', [], ['name' => 'Corto', 'email' => 'corto@plataforma.test', 'password' => 'corta', 'password_confirmation' => 'corta']));
+        assert_same(null, \App\Models\PlatformAdmin::findByEmail('corto@plataforma.test'), 'contraseña corta');
+        $ctl->store(new Request('POST', '/', [], ['name' => 'Segunda', 'email' => 'Segunda@Plataforma.test', 'password' => 'clave-larga-dos', 'password_confirmation' => 'clave-larga-dos']));
+        $two = \App\Models\PlatformAdmin::findByEmail('segunda@plataforma.test');
+        assert_true($two !== null && password_verify('clave-larga-dos', $two['password_hash']), 'creada con su contraseña');
+        $ctl->store(new Request('POST', '/', [], ['name' => 'Otra', 'email' => 'segunda@plataforma.test', 'password' => 'clave-larga-tres', 'password_confirmation' => 'clave-larga-tres']));
+        assert_same(2, count(\App\Models\PlatformAdmin::all()), 'email repetido');
+        $ctl->store(new Request('POST', '/', [], ['name' => 'Segunda B', 'email' => 'segunda@plataforma.test', 'password' => '']), $two['uuid']);
+        $two = \App\Models\PlatformAdmin::findByUuid($two['uuid']);
+        assert_true($two['name'] === 'Segunda B' && password_verify('clave-larga-dos', $two['password_hash']), 'sin contraseña: no se cambia');
+        $ctl->store(new Request('POST', '/', [], ['name' => 'Primera', 'email' => 'primera@plataforma.test', 'password' => 'nueva-clave-larga', 'password_confirmation' => 'nueva-clave-larga', 'current_password' => 'mal']), $me['uuid']);
+        assert_true(password_verify('clave-larga-uno', \App\Models\PlatformAdmin::findByUuid($me['uuid'])['password_hash']), 'la propia exige la actual');
+        $ctl->store(new Request('POST', '/', [], ['name' => 'Primera', 'email' => 'primera@plataforma.test', 'password' => 'nueva-clave-larga', 'password_confirmation' => 'nueva-clave-larga', 'current_password' => 'clave-larga-uno']), $me['uuid']);
+        assert_true(password_verify('nueva-clave-larga', \App\Models\PlatformAdmin::findByUuid($me['uuid'])['password_hash']));
+        $ctl->toggle(new Request('POST', '/'), $me['uuid']);
+        $ctl->delete(new Request('POST', '/'), $me['uuid']);
+        assert_same(1, (int) \App\Models\PlatformAdmin::findByUuid($me['uuid'])['is_active'], 'no se desactiva ni elimina a sí misma');
+        $ctl->toggle(new Request('POST', '/'), $two['uuid']);
+        assert_same(0, (int) \App\Models\PlatformAdmin::findByUuid($two['uuid'])['is_active']);
+        assert_same(null, \App\Models\PlatformAdmin::findActive((int) $two['id']), 'desactivada: su sesión ya no vale');
+        $_SESSION = ['platform_admin_id' => (int) $two['id']];
+        \App\Models\PlatformAdmin::setActive((int) $two['id'], true);
+        \App\Models\PlatformAdmin::setActive((int) $me['id'], false);
+        $ctl->toggle(new Request('POST', '/'), $two['uuid']);
+        $_SESSION = ['platform_admin_id' => (int) $me['id']];
+        \App\Models\PlatformAdmin::setActive((int) $me['id'], true);
+        $ctl->delete(new Request('POST', '/'), $two['uuid']);
+        assert_same(null, \App\Models\PlatformAdmin::findByUuid($two['uuid']), 'eliminada');
+        assert_true(str_contains((string) DB::master()->query("SELECT GROUP_CONCAT(action) FROM platform_audit_log")->fetchColumn(), 'platform_admin.delete'), 'auditado');
+        $_SESSION = [];
+    },
+
+    'empresas: eliminar (confirmando el identificador) la saca de la lista y bloquea el acceso; restaurar la devuelve suspendida' => function () use ($setup, &$state) {
+        $setup();
+        $me = \App\Models\PlatformAdmin::findByEmail('primera@plataforma.test');
+        $_SESSION = ['platform_admin_id' => (int) $me['id']];
+        $ctl = new \App\Controllers\Web\Admin\TenantsController();
+        $ctl->delete(new Request('POST', '/', [], ['confirm' => 'otro', 'reason' => 'Baja']), $state['b']);
+        assert_same(2, count(Tenants::all()), 'sin el identificador correcto no se elimina');
+        $ctl->delete(new Request('POST', '/', [], ['confirm' => 'test-b', 'reason' => 'Dejó de ser cliente']), $state['b']);
+        assert_same(['test-a'], array_column(Tenants::all(), 'slug'));
+        assert_same(['test-b'], array_column(Tenants::deleted(), 'slug'));
+        $threw = false;
+        try { Tenant::activate(Tenants::findByUuid($state['b'])); } catch (TenantSuspended) { $threw = true; }
+        assert_true($threw, 'nadie entra');
+        assert_same(2, count(Migrator::statusAll()), 'las migraciones la saltean');
+        assert_true(Tenant::connect(Tenants::findByUuid($state['b']))->query('SELECT 1')->fetchColumn() == 1, 'la base no se borró');
+        $ctl->restore(new Request('POST', '/'), $state['b']);
+        $b = Tenants::findByUuid($state['b']);
+        assert_same([null, 'suspended', 2], [$b['deleted_at'], $b['status'], count(Tenants::all())]);
+        Tenants::update($state['b'], ['status' => 'active', 'status_reason' => null, 'suspended_at' => null]);
+        $_SESSION = [];
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$state, $master) {
         if (!$state['ready']) {
             throw new SkipTest('no hubo setup');

@@ -31,6 +31,14 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   (middleware `RequireInstalled`). Con él, `/install` y `/install/check.php` dan 403.
 - Super-admins de la plataforma (`platform_admins`, base maestra) son distintos de los usuarios
   de empresas (Etapa 3). Login con bloqueo: 5 fallos por email+IP o 20 por IP en 15 min.
+- **CRUD de super-admins** (`/admin/administradores`, `PlatformAdminsController`, 27/10/2026): alta (nombre, email, contraseña de
+  ≥ 10 caracteres que escribe quien lo crea), edición (vacía = no cambia; la propia exige la contraseña actual), activar/desactivar
+  (la sesión se corta en el próximo click: `findActive`) y eliminar (borrado real; la auditoría conserva el nombre). Nunca a uno
+  mismo ni al último activo. Auditado en `platform_audit_log`, nunca la contraseña.
+- **Eliminar empresa** (`POST /admin/empresas/{uuid}/eliminar`, master 0008 `tenants.deleted_at` + `deleted_reason`): se confirma
+  escribiendo el identificador + motivo. Queda suspendida, `Tenant::activate` la rechaza ("dada de baja"), `Tenants::all()` la
+  excluye (lista, cron, migraciones) y aparece en "Empresas eliminadas" con **Restaurar** (vuelve suspendida). La base y los
+  archivos NO se borran; para liberar espacio se borra la base a mano desde el panel del hosting.
 
 ## Empresas (Etapa 2)
 - Registro en la maestra (`tenants`). Cada empresa: base propia (`securityapp_{slug}` en modo

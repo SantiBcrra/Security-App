@@ -11,9 +11,41 @@ final class Tenants
     /** Campos editables desde el panel. La conexión a la base no se edita por formulario. */
     public const EDITABLE = ['name', 'legal_name', 'cuit', 'timezone', 'plan'];
 
+    /** Empresas vigentes (sin las eliminadas). */
     public static function all(): array
     {
-        return DB::master()->query('SELECT * FROM tenants ORDER BY name')->fetchAll();
+        try {
+            return DB::master()->query('SELECT * FROM tenants WHERE deleted_at IS NULL ORDER BY name')->fetchAll();
+        } catch (\PDOException $e) {
+            if ($e->getCode() !== '42S22') throw $e; // la migración maestra 0008 todavía no se aplicó
+            return DB::master()->query('SELECT * FROM tenants ORDER BY name')->fetchAll();
+        }
+    }
+
+    /** Empresas eliminadas (para restaurarlas). */
+    public static function deleted(): array
+    {
+        try {
+            return DB::master()->query('SELECT * FROM tenants WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC')->fetchAll();
+        } catch (\PDOException $e) {
+            if ($e->getCode() !== '42S22') throw $e;
+            return [];
+        }
+    }
+
+    /** Dar de baja: nadie entra (queda suspendida) y sale de la lista; la base de datos no se toca. */
+    public static function markDeleted(string $uuid, string $reason): void
+    {
+        DB::master()->prepare("UPDATE tenants SET deleted_at = UTC_TIMESTAMP(), deleted_reason = ?, status = 'suspended',
+            status_reason = 'Empresa eliminada', suspended_at = COALESCE(suspended_at, UTC_TIMESTAMP()), updated_at = UTC_TIMESTAMP() WHERE uuid = ?")
+            ->execute([mb_substr($reason, 0, 255), $uuid]);
+    }
+
+    /** Restaurar: vuelve a la lista, suspendida (se reactiva a mano). */
+    public static function restore(string $uuid): void
+    {
+        DB::master()->prepare("UPDATE tenants SET deleted_at = NULL, deleted_reason = NULL, status_reason = 'Restaurada: revisar y reactivar',
+            updated_at = UTC_TIMESTAMP() WHERE uuid = ?")->execute([$uuid]);
     }
 
     public static function findByUuid(string $uuid): ?array

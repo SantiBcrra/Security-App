@@ -45,6 +45,7 @@ final class TenantsController
         return Response::html(View::render('admin/tenants/index', [
             'title'   => 'Empresas',
             'tenants' => Tenants::all(),
+            'deleted' => Tenants::deleted(),
             'pending' => $pending,
         ], 'layouts/admin'));
     }
@@ -200,6 +201,10 @@ final class TenantsController
         if ($tenant === null) {
             return Response::redirect('/admin/empresas');
         }
+        if (!empty($tenant['deleted_at'])) {
+            Flash::add('danger', 'La empresa está eliminada: restaurala primero.');
+            return Response::redirect('/admin/empresas/' . $uuid);
+        }
         $reason = trim((string) $request->input('reason', ''));
         if ($status === 'suspended' && $reason === '') {
             Flash::add('danger', 'Indicá el motivo de la suspensión.');
@@ -215,6 +220,41 @@ final class TenantsController
             ['status' => $tenant['status'], 'status_reason' => $tenant['status_reason']],
             ['status' => $status, 'status_reason' => $changes['status_reason']]);
         Flash::add('success', $status === 'suspended' ? 'Empresa suspendida: nadie puede entrar hasta reactivarla.' : 'Empresa activa.');
+        return Response::redirect('/admin/empresas/' . $uuid);
+    }
+
+    /**
+     * Eliminar (dar de baja): se confirma escribiendo el identificador y un motivo. Nadie entra, no corre el cron ni las
+     * migraciones y sale de la lista. La base de datos y los archivos NO se borran: se puede restaurar.
+     */
+    public function delete(Request $request, string $uuid): Response
+    {
+        $tenant = Tenants::findByUuid($uuid);
+        if ($tenant === null || !empty($tenant['deleted_at'])) return Response::redirect('/admin/empresas');
+        $reason = trim((string) $request->input('reason', ''));
+        if (trim((string) $request->input('confirm', '')) !== $tenant['slug']) {
+            Flash::add('danger', "Para eliminar, escribí el identificador de la empresa: {$tenant['slug']}.");
+            return Response::redirect('/admin/empresas/' . $uuid . '#eliminar');
+        }
+        if ($reason === '') {
+            Flash::add('danger', 'Indicá el motivo de la baja.');
+            return Response::redirect('/admin/empresas/' . $uuid . '#eliminar');
+        }
+        if (Impersonation::active() && \App\Core\Session::get(Impersonation::TENANT_KEY) === $uuid) Impersonation::stop();
+        Tenants::markDeleted($uuid, $reason);
+        self::audit('tenant.delete', $tenant, ['status' => $tenant['status']], ['eliminada' => true, 'motivo' => $reason]);
+        Flash::add('success', "Empresa {$tenant['name']} eliminada: nadie puede entrar y ya no aparece en la lista. Su base ({$tenant['db_name']}) "
+            . 'no se borró: se puede restaurar desde "Empresas eliminadas".');
+        return Response::redirect('/admin/empresas');
+    }
+
+    public function restore(Request $request, string $uuid): Response
+    {
+        $tenant = Tenants::findByUuid($uuid);
+        if ($tenant === null || empty($tenant['deleted_at'])) return Response::redirect('/admin/empresas');
+        Tenants::restore($uuid);
+        self::audit('tenant.restore', $tenant, ['eliminada' => true, 'motivo' => $tenant['deleted_reason']], ['eliminada' => false]);
+        Flash::add('success', 'Empresa restaurada. Quedó suspendida: aplicá las migraciones pendientes y reactivala cuando esté lista.');
         return Response::redirect('/admin/empresas/' . $uuid);
     }
 

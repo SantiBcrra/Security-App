@@ -25,6 +25,9 @@ final class Tenant
     /** Conecta DB::tenant() a la base de la empresa. Rechaza empresas suspendidas. */
     public static function activate(array $tenant): void
     {
+        if (!empty($tenant['deleted_at'])) {
+            throw new TenantSuspended("La empresa {$tenant['name']} fue dada de baja.");
+        }
         if (($tenant['status'] ?? '') === 'suspended') {
             throw new TenantSuspended("La empresa {$tenant['name']} está suspendida.");
         }

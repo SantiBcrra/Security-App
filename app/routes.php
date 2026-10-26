@@ -100,6 +100,16 @@ return static function (Router $r): void {
         $r->post('/empresas/{uuid}/activar', [TenantsController::class, 'activate']);
         $r->post('/empresas/{uuid}/entrar', [TenantsController::class, 'impersonate']);
         $r->post('/empresas/{uuid}/administrador', [TenantsController::class, 'createAdmin']);
+        $r->post('/empresas/{uuid}/eliminar', [TenantsController::class, 'delete']);
+        $r->post('/empresas/{uuid}/restaurar', [TenantsController::class, 'restore']);
+
+        $r->get('/administradores', [\App\Controllers\Web\Admin\PlatformAdminsController::class, 'index']);
+        $r->get('/administradores/nuevo', [\App\Controllers\Web\Admin\PlatformAdminsController::class, 'form']);
+        $r->post('/administradores', [\App\Controllers\Web\Admin\PlatformAdminsController::class, 'store']);
+        $r->get('/administradores/{uuid}', [\App\Controllers\Web\Admin\PlatformAdminsController::class, 'form']);
+        $r->post('/administradores/{uuid}', [\App\Controllers\Web\Admin\PlatformAdminsController::class, 'store']);
+        $r->post('/administradores/{uuid}/estado', [\App\Controllers\Web\Admin\PlatformAdminsController::class, 'toggle']);
+        $r->post('/administradores/{uuid}/eliminar', [\App\Controllers\Web\Admin\PlatformAdminsController::class, 'delete']);
 
         $r->get('/configuracion', [PlatformSettingsController::class, 'show']);
         $r->post('/configuracion', [PlatformSettingsController::class, 'save']);
