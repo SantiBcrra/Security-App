@@ -22,6 +22,27 @@ data class LogEntry(val uuid: String, val siteUuid: String, val folio: Int?, val
 data class KnownVisitor(val type: String, val key: String, val name: String?, val doc: String?, val company: String?, val plate: String?, val vehicleType: String?,
                         val driver: String?, val visits: Int)
 
+/** Autorización vigente o histórica que bajó la sincronización para el predio. */
+data class AuthorizedVisitor(val uuid: String, val type: String, val siteUuid: String?, val name: String?, val doc: String?,
+                             val company: String?, val plate: String?, val reason: String?, val validFrom: String?, val validUntil: String?,
+                             val days: List<Int>, val timeFrom: String?, val timeTo: String?) {
+    fun status(now: java.time.ZonedDateTime = java.time.ZonedDateTime.now()): String {
+        val day = now.toLocalDate().toString()
+        val wd = now.dayOfWeek.value
+        val hm = "%02d:%02d".format(now.hour, now.minute)
+        return when {
+            (validFrom != null && day < validFrom) || (validUntil != null && day > validUntil) -> "vencido"
+            days.isNotEmpty() && wd !in days -> "fuera_horario"
+            timeFrom != null && timeTo != null && !(if (timeFrom <= timeTo) hm in timeFrom..timeTo else hm >= timeFrom || hm <= timeTo) -> "fuera_horario"
+            else -> "autorizado"
+        }
+    }
+
+    val label: String
+        get() = if (type == "vehiculo") listOfNotNull(plate, company).joinToString(" · ")
+        else listOfNotNull(name, doc?.let { "DNI $it" }, company).joinToString(" · ")
+}
+
 /**
  * Libro de guardia sin señal: cada anotación se guarda en el celular (entidad `logbook_entries`, `local: true`) y se encola
  * (`logbook.create|exit|close|receive`); el pull la reemplaza por la del servidor (con folio). Las fotos se suben después de
@@ -100,6 +121,15 @@ class LogbookRepository(private val db: LocalDb, private val outbox: Outbox, pri
         }
         return best
     }
+
+    /** Autorizaciones del predio actual, también disponibles sin señal. */
+    fun authorized(siteUuid: String, kind: String): List<AuthorizedVisitor> = db.all("logbook_authorized").mapNotNull { raw ->
+        parse(raw)?.takeIf { it.str("kind") == kind && (it.strOrNull("site_uuid") == null || it.strOrNull("site_uuid") == siteUuid) }?.let { o ->
+            AuthorizedVisitor(o.str("uuid"), kind, o.strOrNull("site_uuid"), o.strOrNull("person_name"), o.strOrNull("person_doc"),
+                o.strOrNull("company"), o.strOrNull("plate"), o.strOrNull("reason"), o.strOrNull("valid_from"), o.strOrNull("valid_until"),
+                o.arr("days").mapNotNull { (it as? JsonPrimitive)?.content?.toIntOrNull() }, o.strOrNull("time_from"), o.strOrNull("time_to"))
+        }
+    }.sortedWith(compareBy<AuthorizedVisitor> { it.status() != "autorizado" }.thenBy { it.label.lowercase() })
 
     fun all(siteUuid: String): List<LogEntry> = db.all(ENTITY).mapNotNull { parse(it)?.let(::entry) }.filter { it.siteUuid == siteUuid }
         .sortedByDescending { it.occurredAt }
