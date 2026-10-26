@@ -52,7 +52,8 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
       guardias con cuenta propia — app 1.5.4 (`versionCode 24`, última)
 - [x] **CRUD de roles**: crear (en blanco o partiendo de otro), editar y eliminar pasando sus usuarios a otro rol; sin "Copiar"
 - [x] **Super-admins** (crear, editar, cambiar contraseña, desactivar, eliminar) y **eliminar / restaurar empresas** — master 0008
-- Para retomar: migraciones tenant al día hasta la **0083** y master hasta la **0008**; tests `php tests/run.php` = 238 OK. Zip de actualización del servidor:
+- [x] Rol del sistema SyH sin el módulo Usuarios (tenant 0084)
+- Para retomar: migraciones tenant al día hasta la **0084** y master hasta la **0008**; tests `php tests/run.php` = 238 OK. Zip de actualización del servidor:
   `(git diff --name-only d9ea828 HEAD -- app public database; echo .htaccess) | sort -u | xargs git archive --format=zip -o ~/Desktop/deploy/actualizacion-servidor.zip HEAD`.
   Ojo: el libro es una cadena de huellas (nunca UPDATE de campos de `Logbook::HASHED`); no crear datos de prueba en la
   instalación real de Indumor; Permisos de trabajo y EPP siguen ocultos en la app hasta que el usuario lo pida.

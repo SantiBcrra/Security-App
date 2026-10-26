@@ -126,8 +126,8 @@ final class Permissions
                 'name'        => 'Responsable de Seguridad e Higiene',
                 'description' => 'Gestiona todos los módulos de seguridad e higiene de la empresa.',
                 'permissions' => $grant(self::SH_MODULES, $all, 'todo')
-                    + $grant(['datos_maestros'], ['ver', 'crear', 'editar', 'exportar'], 'todo')
-                    + $grant(['usuarios'], ['ver'], 'todo'),
+                    + $grant(['datos_maestros'], ['ver', 'crear', 'editar', 'exportar'], 'todo'),
+                // Sin Usuarios (decisión del usuario 27/10/2026, tenant 0084): los usuarios los administra el admin de la empresa.
             ],
             'supervisor' => [
                 'name'        => 'Supervisor',

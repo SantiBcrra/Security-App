@@ -792,7 +792,7 @@ return [
         $on = array_values(array_diff(\App\Services\Modules::keys(), ['epp', 'permisos_trabajo']));
         $ctrl->updateModules(new \App\Core\Request('POST', '/panel/configuracion/modulos', [], ['modules' => array_merge($on, ['usuarios', 'inventado'])]));
         assert_same(['permisos_trabajo', 'epp'], \App\Services\Modules::disabled(), 'solo módulos que se pueden desactivar');
-        assert_true(!UserAuth::can('epp', 'ver') && !UserAuth::can('permisos_trabajo', 'crear') && UserAuth::can('rondas', 'ver') && UserAuth::can('usuarios', 'ver'));
+        assert_true(!UserAuth::can('epp', 'ver') && !UserAuth::can('permisos_trabajo', 'crear') && UserAuth::can('rondas', 'ver') && UserAuth::can('datos_maestros', 'ver'));
         assert_same(null, UserAuth::scope('epp'));
         assert_true(!isset(UserAuth::permissions()['epp']) && isset(UserAuth::permissions()['rondas']), 'la app del celular no lo recibe');
         assert_true(!isset(Pull::run(null, 10)['meta']['permisos']['permisos_trabajo']));

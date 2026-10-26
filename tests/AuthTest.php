@@ -143,6 +143,7 @@ return [
         }
         assert_true($can('reportante', 'observaciones', 'crear'));
         assert_true(!$can('reportante', 'usuarios', 'ver'), 'reportante no ve usuarios');
+        assert_true(!$can('responsable_hys', 'usuarios', 'ver'), 'SyH no ve usuarios (los administra el admin)');
         assert_true(!$can('reportante', 'observaciones', 'cerrar'));
         assert_same('propios', Permissions::scope($roles['reportante']['permissions'], 'observaciones'));
         assert_true($can('auditor', 'inspecciones', 'ver') && $can('auditor', 'inspecciones', 'exportar'));
