@@ -405,6 +405,8 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   `/planilla`), botón "Lista de autorizados" en el libro, marcas ✅/⚠ en las anotaciones y en "Adentro ahora", aviso al anotar.
 - Sync: pull `logbook_authorized` (a quien anota, `libro.crear`). App 1.5.3 (`versionCode 23`): `LogbookRepository.checkAuth`
   (mismas reglas que el servidor, sin señal) muestra al escribir DNI o patente "✅ Autorizado" / "⚠ …" y la marca en cada ingreso.
+  App 1.5.5 (`versionCode 25`) agrega la lista offline de autorizados en el Libro y los botones "Elegir de autorizados" en
+  persona/vehículo, que completan los datos y vuelven a evaluar la vigencia antes de anotar.
 
 ## Acciones CAPA (Etapa 10) — diseño en `docs/design/etapa-10-capa.md`
 - Tablas `actions` (número ACC-000001 con `Sequences::next('actions')`, `origin_type`/`origin_id`), `action_events`

@@ -59,6 +59,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ar.com.securityapp.campo.CampoApp
 import ar.com.securityapp.campo.data.KnownVisitor
+import ar.com.securityapp.campo.data.AuthorizedVisitor
 import ar.com.securityapp.campo.data.bool
 import ar.com.securityapp.campo.data.LogEntry
 import ar.com.securityapp.campo.data.LogbookRepository
@@ -117,6 +118,7 @@ class LogbookViewModel(app: Application) : AndroidViewModel(app) {
     fun choose(s: Site) { repo.chooseSite(s.uuid); _ui.value = _ui.value.copy(site = s); reload() }
     fun say(m: String?) { _ui.value = _ui.value.copy(message = m) }
     fun lookup(type: String, prefix: String): List<KnownVisitor> = repo.lookup(type, prefix)
+    fun authorized(kind: String): List<AuthorizedVisitor> = _ui.value.site?.let { repo.authorized(it.uuid, kind) }.orEmpty()
     fun pending(e: LogEntry) = e.local || repo.pending(e.uuid)
 
     /** Lista de autorizados: cómo da este ingreso ahora (null = sin lista para el predio o sin datos todavía). */
@@ -168,7 +170,7 @@ fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = 
     val endShift = startPage == "cerrar"
     AppBackHandler { if (page != null && page != startPage) page = null else onBack() }
     when {
-        page == "novedad" || page == "persona" || page == "vehiculo" -> { EntryForm(page!!, vm, vm.dutyWarning(sharedDevice), onDone = { page = null }); return }
+        page == "novedad" || page == "persona" || page == "vehiculo" -> { EntryForm(page!!, vm, vm.dutyWarning(sharedDevice), vm.authorized(page!!), onDone = { page = null }); return }
         page == "cerrar" -> { CloseForm(ui, endShift, onCancel = { if (startPage == "cerrar") onBack() else page = null },
             onSign = { t, s -> vm.close(t, s, endShift); if (endShift) onClosed() else page = null }); return }
         page == "recibir" && ui.pendingClose != null -> { ReceiveForm(ui.pendingClose!!, onCancel = { page = null },
@@ -176,6 +178,7 @@ fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = 
     }
     var exiting by remember { mutableStateOf<LogEntry?>(null) }
     var pickSite by remember { mutableStateOf(false) }
+    var showAuthorized by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (showTopBar) TopBar("Libro de guardia", onBack)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -211,6 +214,7 @@ fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = 
                     }
                 }
             }
+            if (canCreate) OutlinedButton({ showAuthorized = true }, Modifier.fillMaxWidth()) { Text("Ver lista de autorizados") }
             Text("Adentro ahora (${ui.inside.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             if (ui.inside.isEmpty()) Text("No queda nadie adentro.", color = Muted, style = MaterialTheme.typography.bodySmall)
             ui.inside.forEach { e ->
@@ -243,6 +247,7 @@ fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = 
     if (pickSite) AlertDialog(onDismissRequest = { pickSite = false }, title = { Text("¿Qué predio?") },
         text = { Column { ui.sites.forEach { s -> Text(s.name, Modifier.fillMaxWidth().clickable { vm.choose(s); pickSite = false }.padding(vertical = 12.dp)) } } },
         confirmButton = { TextButton({ pickSite = false }) { Text("Cancelar") } })
+    if (showAuthorized) AuthorizedListDialog(vm.authorized("persona") + vm.authorized("vehiculo"), onDismiss = { showAuthorized = false })
 }
 
 /** "No hay guardia de turno" / "No tenés turno iniciado": se puede anotar igual (queda marcado y avisa al supervisor). */
@@ -303,11 +308,12 @@ private fun EntryRow(e: LogEntry, pending: Boolean) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EntryForm(kind: String, vm: LogbookViewModel, dutyWarning: String?, onDone: () -> Unit) {
+private fun EntryForm(kind: String, vm: LogbookViewModel, dutyWarning: String?, authorized: List<AuthorizedVisitor>, onDone: () -> Unit) {
     val f = remember(kind) { mutableStateMapOf<String, String>() }
     var photos by remember(kind) { mutableStateOf<List<Uri>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    var showAuthorized by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val title = mapOf("novedad" to "Nueva novedad", "persona" to "Ingreso de persona", "vehiculo" to "Ingreso de vehículo")[kind]!!
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -341,6 +347,9 @@ private fun EntryForm(kind: String, vm: LogbookViewModel, dutyWarning: String?, 
                     }
                 }
                 "persona" -> {
+                    OutlinedButton({ showAuthorized = true }, Modifier.fillMaxWidth(), enabled = authorized.any { it.status() == "autorizado" }) {
+                        Text("Elegir de autorizados")
+                    }
                     Lookup("persona", f["person_doc"] ?: "", vm) { k ->
                         f["person_doc"] = k.doc ?: k.key; k.name?.let { f["person_name"] = it }; k.company?.let { f["company"] = it }; k.plate?.let { f["plate"] = it }
                     }
@@ -357,6 +366,9 @@ private fun EntryForm(kind: String, vm: LogbookViewModel, dutyWarning: String?, 
                     Text("Alcanza con el nombre, el DNI o la empresa.", style = MaterialTheme.typography.bodySmall, color = Muted)
                 }
                 "vehiculo" -> {
+                    OutlinedButton({ showAuthorized = true }, Modifier.fillMaxWidth(), enabled = authorized.any { it.status() == "autorizado" }) {
+                        Text("Elegir de autorizados")
+                    }
                     Lookup("vehiculo", f["plate"] ?: "", vm) { k ->
                         f["plate"] = k.plate ?: k.key; k.vehicleType?.let { f["vehicle_type"] = it }; k.driver?.let { f["driver"] = it }
                         k.doc?.let { f["person_doc"] = it }; k.company?.let { f["company"] = it }
@@ -391,6 +403,35 @@ private fun EntryForm(kind: String, vm: LogbookViewModel, dutyWarning: String?, 
             Spacer(Modifier.height(24.dp))
         }
     }
+    if (showAuthorized) AuthorizedListDialog(authorized, onlyCurrent = true, onDismiss = { showAuthorized = false }) { a ->
+        if (kind == "persona") {
+            a.doc?.let { f["person_doc"] = it }; a.name?.let { f["person_name"] = it }; a.company?.let { f["company"] = it }
+        } else {
+            a.plate?.let { f["plate"] = it }; a.company?.let { f["company"] = it }
+        }
+        showAuthorized = false
+    }
+}
+
+@Composable
+private fun AuthorizedListDialog(items: List<AuthorizedVisitor>, onlyCurrent: Boolean = false, onDismiss: () -> Unit, onPick: ((AuthorizedVisitor) -> Unit)? = null) {
+    val visible = items.filter { !onlyCurrent || it.status() == "autorizado" }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (onPick == null) "Lista de autorizados" else "Elegí un autorizado") },
+        text = {
+            if (visible.isEmpty()) Text(if (onlyCurrent) "No hay autorizados vigentes para este predio." else "No hay autorizados cargados para este predio.", color = Muted)
+            else Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                visible.forEach { a ->
+                    val status = a.status()
+                    val row = Modifier.fillMaxWidth().padding(vertical = 8.dp).then(if (onPick != null) Modifier.clickable { onPick(a) } else Modifier)
+                    Column(row) {
+                        Text(a.label, fontWeight = FontWeight.SemiBold)
+                        Text(if (status == "autorizado") "✅ Autorizado ahora" else "⚠ ${LogbookRepository.AUTH_LABELS[status] ?: status}",
+                            style = MaterialTheme.typography.bodySmall, color = if (status == "autorizado") Ok else BrandDark)
+                        a.reason?.takeIf { it.isNotBlank() }?.let { Text("Motivo: $it", style = MaterialTheme.typography.bodySmall, color = Muted) }
+                    }
+                }
+            }
+        }, confirmButton = { TextButton(onDismiss) { Text("Cerrar") } })
 }
 
 /** Sugerencias por DNI o patente con lo que ya vino antes. */

@@ -31,6 +31,7 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
 - [x] App Android: advertencia visible y bloqueo preventivo de acciones de turno en modo «Ver como» (solo lectura)
 - [x] App Android: mapa de rutas con Google Maps (puntos, recorrido y vista satelital opcional; clave local fuera del repositorio)
 - [x] App Android: recordatorio de rondas programadas 5 minutos antes, aviso a la hora, atraso y próxima ronda visible en el inicio
+- [x] App Android 1.5.5: lista offline de autorizados en el Libro y selección precargada para ingresos de personas/vehículos
 
 ### Hecho — últimas entregas (Claude, hasta el 26/10/2026; detalle técnico en `CLAUDE.md`)
 - [x] Mapas siempre en satélite (web y app); ronda en vivo en la app y en el panel; edición de puntos sin cambiar el QR
@@ -93,7 +94,7 @@ Se conservaron las APIs v1 y la sincronización del servidor para que Android si
 
 ## Pendiente — operación (usuario)
 - [x] Aplicar migraciones en Indumor (al día hasta la 0069)
-- [ ] Subir el último zip y aplicar en /admin/migraciones hasta la 0083; publicar el APK 1.5.4 en /admin/app-android
+- [ ] Subir el último zip y aplicar en /admin/migraciones hasta la 0083; publicar el APK 1.5.5 en /admin/app-android
 - [ ] Configurar SMTP en /admin/configuracion y agregar la casilla de RRHH a las reglas urgentes (condición insegura, reporte de fin de turno)
 - [ ] Ingresar una vez en la notebook del puesto con la cuenta del puesto; cargar los guardias como empleados con PIN
 - [ ] Pausar o eliminar programaciones de prueba (generan avisos de "no vino"); marcar "Atendido" los pánicos de prueba
