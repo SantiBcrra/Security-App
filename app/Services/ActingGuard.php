@@ -31,10 +31,17 @@ final class ActingGuard
     /** Programaciones por puesto que usan este celular. @return list<array> */
     public static function posts(int $deviceUserId): array
     {
-        $q = DB::tenant()->prepare("SELECT g.*, s.uuid AS site_uuid, s.name AS site_name FROM guard_shifts g JOIN sites s ON s.id = g.site_id
-            WHERE g.mode = 'puesto' AND g.device_user_id = ? AND g.is_active = 1 AND g.deleted_at IS NULL ORDER BY s.name, g.name");
-        $q->execute([$deviceUserId]);
-        return $q->fetchAll();
+        // Sin las migraciones de turnos por puesto (0077/0078) no hay celulares de puesto: el ingreso y la sincronización
+        // tienen que seguir funcionando igual hasta que se actualice la base.
+        try {
+            $q = DB::tenant()->prepare("SELECT g.*, s.uuid AS site_uuid, s.name AS site_name FROM guard_shifts g JOIN sites s ON s.id = g.site_id
+                WHERE g.mode = 'puesto' AND g.device_user_id = ? AND g.is_active = 1 AND g.deleted_at IS NULL ORDER BY s.name, g.name");
+            $q->execute([$deviceUserId]);
+            return $q->fetchAll();
+        } catch (\PDOException $e) {
+            if (in_array((string) $e->getCode(), ['42S22', '42S02'], true)) return []; // columna o tabla que todavía no existe
+            throw $e;
+        }
     }
 
     public static function isDevice(int $userId): bool
