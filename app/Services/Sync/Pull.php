@@ -111,6 +111,8 @@ final class Pull
                 'gases'             => \App\Services\WorkPermitControls::gasLimits() + ['vigencia_min' => \App\Services\WorkPermitControls::MEASUREMENT_VALID_MINUTES],
                 'usuario'           => $user ? ['uuid' => $user['uuid'], 'nombre' => $user['name'], 'rol' => $user['role_name']] : null,
                 'puesto'            => $user ? \App\Services\ActingGuard::meta((int) $user['id']) : null,
+                // Guardia de alguna programación: la app avisa en el libro si no tiene turno iniciado.
+                'es_guardia'        => $user ? \App\Services\ShiftService::isGuard((int) $user['id']) : false,
             ],
         ];
     }

@@ -45,15 +45,18 @@ $authBadge = function (array $e): string {
             if (d.name) {
                 const where = d.outside_now ? ' · <strong>fuera del predio ahora</strong>' : (d.inside === true ? ' · empezó en el predio' : (d.inside === false ? ' · empezó fuera del predio' : ''));
                 box.className = 'mb-3 alert ' + (d.outside_now ? 'alert-warning' : 'alert-success') + ' d-flex flex-wrap align-items-center gap-2';
-                box.innerHTML = '<span class="fs-5">👮</span><span><strong>De turno: ' + esc(d.name) + '</strong> desde las ' + esc(d.since || '') + where
-                    + '<br><span class="small">Todo lo que se anote en el libro queda a su nombre. El cambio de guardia se hace en el celular del puesto.</span></span>';
+                box.innerHTML = '<span class="fs-5">👮</span><span><strong>' + (d.mode === 'guard' ? 'Estás de turno' : 'De turno: ' + esc(d.name)) + '</strong> desde las ' + esc(d.since || '') + where
+                    + '<br><span class="small">' + (d.mode === 'guard' ? 'Lo que anotes queda dentro de tu turno.'
+                        : 'Todo lo que se anote en el libro queda a su nombre. El cambio de guardia se hace en el celular del puesto.') + '</span></span>';
             } else {
                 box.className = 'mb-3 alert alert-danger d-flex flex-wrap align-items-center gap-2';
-                box.innerHTML = '<span class="fs-5">⚠</span><span><strong>No hay guardia de turno.</strong> Empezá tu turno en el celular del puesto (tu nombre y PIN).'
+                box.innerHTML = '<span class="fs-5">⚠</span><span>' + (d.mode === 'guard'
+                        ? '<strong>No tenés turno iniciado.</strong> Empezá tu turno en la app del celular (Mi turno → Empezar turno).'
+                        : '<strong>No hay guardia de turno.</strong> Empezá tu turno en el celular del puesto (tu nombre y PIN).')
                     + '<br><span class="small">Lo que se anote ahora queda marcado "sin guardia de turno" y se avisa al supervisor.</span></span>';
             }
         }
-        paint(<?= json_encode(['name' => $duty['name'], 'since' => $duty['since'], 'inside' => $duty['inside'], 'outside_now' => $duty['outside_now']]) ?>);
+        paint(<?= json_encode(['mode' => $duty['mode'] ?? 'post', 'name' => $duty['name'], 'since' => $duty['since'], 'inside' => $duty['inside'], 'outside_now' => $duty['outside_now']]) ?>);
         setInterval(() => fetch(box.dataset.url, {headers: {'Accept': 'application/json'}, credentials: 'same-origin'})
             .then(r => r.ok ? r.json() : null).then(j => { if (j && j.data && j.data.device) paint(j.data); }).catch(() => {}), 45000);
     })();

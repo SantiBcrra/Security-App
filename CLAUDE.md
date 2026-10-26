@@ -325,6 +325,12 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   al ingresar a la web con una cuenta de puesto se guarda la cookie httponly `secapp_terminal` (`{uuid empresa}.{secreto}`, en la
   base solo el SHA-256, 90 días renovables); `RequireTenant` vuelve a abrir la sesión sola; "Salir" la revoca; ficha del usuario
   → "Cuenta del puesto · equipos recordados" (dejar de recordar). Los usuarios comunes siguen con la sesión de 12 h.
+- **"Sin turno" también para guardias con su propia cuenta** (`Logbook::dutyState()`: `ok` | `none` | null = no se controla):
+  cuenta de puesto sin nadie de turno, o guardia (`ShiftService::isGuard` = está en `user_ids` de alguna programación activa) sin
+  turno en curso → `none`: se anota igual (`no_duty = 1` + `logbook.no_duty`). Admin, SyH y supervisores que no están en ninguna
+  programación = null (sin cartel ni marca). Web: cartel "No tenés turno iniciado…" (`dutyInfo` `mode` guard | post). Pull
+  `meta.es_guardia`. App 1.5.4 (`versionCode 24`): el libro ya NO se bloquea en el celular compartido sin guardia de turno (solo
+  Rondas); `LogbookViewModel.dutyWarning()` muestra el aviso rojo arriba del libro y en cada formulario.
 
 ## Reporte de fin de turno y condición insegura (RRHH) — decisión del usuario 26/10/2026
 - **Casillas de email fijas** en las reglas de aviso (recipiente `{type: email, value}`; Configuración → Notificaciones y alertas →

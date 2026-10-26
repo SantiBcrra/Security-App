@@ -20,8 +20,20 @@ use App\Services\Notify\Notifier;
 final class Logbook
 {
     public const MODULE = 'libro';
-    /** Notebook del puesto sin nadie de turno: la anotación queda marcada (no_duty, fuera de la huella). */
-    public static bool $withoutDuty = false;
+    /**
+     * ¿Hay guardia de turno para lo que se anota? 'none' = no (se anota igual, marcado no_duty y aviso), 'ok' = sí, null = no aplica
+     * (administradores, SyH, supervisores: no son guardias). Cuenta del puesto (notebook o celular compartido) sin guardia a cuyo
+     * nombre registrar = nadie de turno; guardia con su propio usuario = tiene que tener un turno en curso.
+     */
+    public static function dutyState(): ?string
+    {
+        $u = UserAuth::user();
+        if ($u === null) return null;
+        if (ActingGuard::device() !== null) return 'ok'; // a nombre del guardia de turno del puesto
+        if (ActingGuard::isDevice((int) $u['id'])) return 'none';
+        if (!ShiftService::isGuard((int) $u['id'])) return null;
+        return ShiftService::current((int) $u['id']) !== null ? 'ok' : 'none';
+    }
     public const KINDS = ['novedad' => 'Novedad', 'persona' => 'Ingreso de persona', 'vehiculo' => 'Ingreso de vehículo', 'salida' => 'Salida',
         'correccion' => 'Corrección', 'cierre' => 'Cierre de turno', 'recepcion' => 'Recepción del puesto'];
     /** "riesgo" = condición insegura (cable pelado, fuga de gas…): avisa al instante (crítico) y abre una observación para SyH. */
@@ -129,7 +141,7 @@ final class Logbook
                 'reason' => null, 'badge' => null, 'plate' => null, 'vehicle_type' => null, 'driver' => null, 'load_note' => null, 'ref_entry_id' => null,
                 'data' => null, 'signature_path' => null, 'signature_sha256' => null, 'lat' => null, 'lng' => null, 'shift_slot_id' => null, 'source' => 'web'];
             $row['folio'] = $folio;
-            if (self::$withoutDuty) $row['no_duty'] = 1;
+            if (self::dutyState() === 'none') $row['no_duty'] = 1; // fuera de la huella
             $row['created_at'] = gmdate('Y-m-d H:i:s');
             $row['prev_hash'] = $prev;
             $row['hash'] = self::hashOf($prev, $row);
@@ -141,7 +153,14 @@ final class Logbook
             if ($own && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
-        return self::find($row['uuid']);
+        $entry = self::find($row['uuid']);
+        if (!empty($row['no_duty'])) { // aviso al supervisor, una vez por hora y predio
+            $bucket = gmdate('Y-m-d-H');
+            if (\App\Models\NotificationMarks::claim("logbook_noduty:{$entry['site_id']}:{$bucket}")) {
+                Notifier::dispatch('logbook.no_duty', $entry + ['label' => self::label($entry)]);
+            }
+        }
+        return $entry;
     }
 
     private static function occurred(array $in): string

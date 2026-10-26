@@ -757,9 +757,22 @@ return [
         // Un usuario común no queda recordado
         $_COOKIE = [];
         assert_true(!\App\Services\ActingGuard::isDevice((int) $st['g1']['id']));
+        // El guardia con su propia cuenta: con turno empezado anota normal; sin turno, marcado y con el aviso
+        UserAuth::setCurrent($st['g1']);
+        assert_same('ok', \App\Services\Logbook::dutyState());
+        assert_same(0, (int) \App\Services\Logbook::create(['site_uuid' => $st['site']['uuid'], 'kind' => 'novedad', 'text' => 'Con turno'])['entry']['no_duty']);
         Push::run([$op('shift.end', ['slot_uuid' => $s, 'ended_at_device' => $iso(0)]) + ['as_user' => $st['g1']['uuid']]]);
+        UserAuth::setCurrent($st['g1']);
+        assert_same('none', \App\Services\Logbook::dutyState(), 'guardia de una programación sin turno iniciado');
+        assert_same(1, (int) \App\Services\Logbook::create(['site_uuid' => $st['site']['uuid'], 'kind' => 'novedad', 'text' => 'Sin turno'])['entry']['no_duty']);
+        $j = json_decode($ctl->duty(new \App\Core\Request('GET', '/panel/libro/de-turno', ['predio' => $st['site']['uuid']]))->body, true);
+        assert_same(['guard', null], [$j['data']['mode'], $j['data']['name']], 'el cartel le pide empezar su turno');
         UserAuth::setCurrent($st['hys']);
+        assert_same(null, \App\Services\Logbook::dutyState(), 'SyH no es guardia: no se controla');
         ShiftPlanner::delete(ShiftPlanner::find($shiftUuid));
+        UserAuth::setCurrent($st['g1']);
+        assert_same(null, \App\Services\Logbook::dutyState(), 'sin programaciones activas deja de ser guardia');
+        UserAuth::setCurrent($st['hys']);
         $_SESSION = [];
     },
 

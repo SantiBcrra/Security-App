@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\DB;
+use App\Core\Tenant;
 use App\Core\UserError;
 use App\Core\Uuid;
 use App\Models\NotificationMarks;
@@ -106,6 +107,15 @@ final class ShiftService
             LEFT JOIN guard_shift_exits e ON e.id = p.exit_id WHERE p.slot_id = ? ORDER BY p.at');
         $q->execute([$slotId]);
         return $q->fetchAll();
+    }
+
+    /** ¿Es guardia de alguna programación activa (por persona o del grupo de un puesto)? */
+    public static function isGuard(int $userId): bool
+    {
+        foreach (DB::tenant()->query('SELECT user_ids FROM guard_shifts WHERE is_active = 1 AND deleted_at IS NULL')->fetchAll(\PDO::FETCH_COLUMN) as $ids) {
+            if (in_array($userId, array_map('intval', json_decode((string) $ids, true) ?: []), true)) return true;
+        }
+        return false;
     }
 
     /** Turno en curso del usuario (uno a la vez). */

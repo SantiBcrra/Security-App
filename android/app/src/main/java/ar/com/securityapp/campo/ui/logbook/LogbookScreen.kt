@@ -4,6 +4,7 @@ import ar.com.securityapp.campo.ui.AppBackHandler
 import ar.com.securityapp.campo.ui.theme.*
 
 import android.app.Application
+import kotlinx.serialization.json.jsonObject
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -58,6 +59,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ar.com.securityapp.campo.CampoApp
 import ar.com.securityapp.campo.data.KnownVisitor
+import ar.com.securityapp.campo.data.bool
 import ar.com.securityapp.campo.data.LogEntry
 import ar.com.securityapp.campo.data.LogbookRepository
 import ar.com.securityapp.campo.data.Site
@@ -84,6 +86,19 @@ class LogbookViewModel(app: Application) : AndroidViewModel(app) {
     private val repo get() = c.logbook
     private val _ui = MutableStateFlow(LogbookState())
     val ui: StateFlow<LogbookState> = _ui
+
+    /**
+     * Aviso de turno para el libro: cuenta del puesto sin guardia de turno, o guardia (de alguna programación) sin turno iniciado.
+     * Se anota igual: el servidor lo marca "sin guardia de turno" y avisa al supervisor. null = no hay que avisar.
+     */
+    fun dutyWarning(sharedDevice: Boolean): String? {
+        if (c.api.previewToken != null) return null
+        if (sharedDevice) return if (c.prefs.dutyGuardUuid == null)
+            "No hay guardia de turno. Empezá tu turno en el inicio (Empezar mi turno, con tu nombre y PIN). Si anotás igual, queda marcado y se avisa al supervisor." else null
+        val esGuardia = c.prefs.metaJson?.let { runCatching { c.api.json.parseToJsonElement(it).jsonObject.bool("es_guardia") }.getOrNull() } ?: false
+        return if (esGuardia && c.shifts.current() == null)
+            "No tenés turno iniciado. Empezá tu turno en el inicio (Mi turno → Empezar turno). Si anotás igual, queda marcado y se avisa al supervisor." else null
+    }
 
     init {
         reload()
@@ -147,13 +162,13 @@ private fun ago(at: Instant): String {
  */
 @Composable
 fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = true, startPage: String? = null, onClosed: () -> Unit = {},
-                  vm: LogbookViewModel = viewModel()) {
+                  sharedDevice: Boolean = false, vm: LogbookViewModel = viewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     var page by remember(startPage) { mutableStateOf(startPage) }
     val endShift = startPage == "cerrar"
     AppBackHandler { if (page != null && page != startPage) page = null else onBack() }
     when {
-        page == "novedad" || page == "persona" || page == "vehiculo" -> { EntryForm(page!!, vm, onDone = { page = null }); return }
+        page == "novedad" || page == "persona" || page == "vehiculo" -> { EntryForm(page!!, vm, vm.dutyWarning(sharedDevice), onDone = { page = null }); return }
         page == "cerrar" -> { CloseForm(ui, endShift, onCancel = { if (startPage == "cerrar") onBack() else page = null },
             onSign = { t, s -> vm.close(t, s, endShift); if (endShift) onClosed() else page = null }); return }
         page == "recibir" && ui.pendingClose != null -> { ReceiveForm(ui.pendingClose!!, onCancel = { page = null },
@@ -169,6 +184,7 @@ fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = 
                 if (ui.sites.size > 1) TextButton({ pickSite = true }) { Text("Cambiar predio") }
             }
             ui.message?.let { Text(it, color = Ok, style = MaterialTheme.typography.bodySmall) }
+            vm.dutyWarning(sharedDevice)?.let { DutyWarning(it) }
             if (ui.site == null) {
                 Text("No hay predios cargados o no elegiste uno.", color = Muted)
                 return@Column
@@ -229,6 +245,17 @@ fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = 
         confirmButton = { TextButton({ pickSite = false }) { Text("Cancelar") } })
 }
 
+/** "No hay guardia de turno" / "No tenés turno iniciado": se puede anotar igual (queda marcado y avisa al supervisor). */
+@Composable
+private fun DutyWarning(text: String) {
+    Card(colors = CardDefaults.cardColors(containerColor = DangerBg)) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("⚠", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(end = 10.dp))
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = Danger, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
 /** Resultado de la lista de autorizados mientras el guardia escribe el DNI o la patente (también sin señal). */
 @Composable
 private fun AuthBanner(r: ar.com.securityapp.campo.data.LogbookRepository.AuthResult?) {
@@ -276,7 +303,7 @@ private fun EntryRow(e: LogEntry, pending: Boolean) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EntryForm(kind: String, vm: LogbookViewModel, onDone: () -> Unit) {
+private fun EntryForm(kind: String, vm: LogbookViewModel, dutyWarning: String?, onDone: () -> Unit) {
     val f = remember(kind) { mutableStateMapOf<String, String>() }
     var photos by remember(kind) { mutableStateOf<List<Uri>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -286,6 +313,7 @@ private fun EntryForm(kind: String, vm: LogbookViewModel, onDone: () -> Unit) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         TopBar(title, onDone)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            dutyWarning?.let { DutyWarning(it) }
             @Composable fun Field(key: String, label: String, caps: Boolean = false, lines: Int = 1) =
                 OutlinedTextField(f[key] ?: "", { f[key] = it }, Modifier.fillMaxWidth(), label = { Text(label) }, minLines = lines, singleLine = lines == 1,
                     keyboardOptions = KeyboardOptions(capitalization = if (caps) KeyboardCapitalization.Characters else KeyboardCapitalization.Sentences))

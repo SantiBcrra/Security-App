@@ -40,33 +40,37 @@ final class LogbookController
     private function asDuty(?array $site, callable $fn): mixed
     {
         $me = UserAuth::user();
-        if ($me === null || !\App\Services\ActingGuard::isDevice((int) $me['id'])) return $fn();
+        if ($me === null || !\App\Services\ActingGuard::isDevice((int) $me['id'])) return $fn(); // guardia con su usuario: Logbook lo controla
         $duty = \App\Services\ActingGuard::onDuty((int) $me['id'], $site ? (int) $site['id'] : null);
         if ($duty !== null) return \App\Services\ActingGuard::run($duty['guard'], $fn);
-        Logbook::$withoutDuty = true;
-        try {
-            $r = $fn();
-        } finally {
-            Logbook::$withoutDuty = false;
-        }
-        $entry = $r['entry'] ?? null;
-        if ($entry && empty($r['duplicate'])) {
-            $bucket = gmdate('Y-m-d-H');
-            if (\App\Models\NotificationMarks::claim("logbook_noduty:{$entry['site_id']}:{$bucket}")) {
-                \App\Services\Notify\Notifier::dispatch('logbook.no_duty', $entry + ['label' => Logbook::label($entry)]);
-            }
-            Flash::add('warning', 'Se anotó SIN GUARDIA DE TURNO: empezá tu turno en el celular del puesto (nombre y PIN) para que lo que anotes quede a tu nombre. Se avisó al supervisor.');
-        }
-        return $r;
+        return $fn(); // sin nadie de turno: Logbook lo marca y avisa; el mensaje lo agrega noDutyFlash()
     }
 
-    /** Guardia de turno para mostrar arriba del libro (solo en la notebook del puesto). */
+    /** Mensaje después de anotar sin nadie de turno. */
+    private function noDutyFlash(mixed $r): void
+    {
+        if (!empty($r['entry']['no_duty']) && empty($r['duplicate'])) {
+            $device = \App\Services\ActingGuard::isDevice((int) UserAuth::user()['id']);
+            Flash::add('warning', 'Se anotó SIN GUARDIA DE TURNO: ' . ($device ? 'empezá tu turno en el celular del puesto (tu nombre y PIN)' : 'empezá tu turno en la app (Mi turno → Empezar turno)')
+                . ' para que lo que anotes quede dentro de tu turno. Se avisó al supervisor.');
+        }
+    }
+
+    /** Guardia de turno para mostrar arriba del libro (notebook del puesto, o guardia con su usuario). */
     private function dutyInfo(?array $site): ?array
     {
         $me = UserAuth::user();
-        if ($me === null || !\App\Services\ActingGuard::isDevice((int) $me['id'])) return null;
+        if ($me === null) return null;
+        if (!\App\Services\ActingGuard::isDevice((int) $me['id'])) {
+            if (!\App\Services\ShiftService::isGuard((int) $me['id'])) return null; // admin, SyH, supervisor: no aplica
+            $slot = \App\Services\ShiftService::current((int) $me['id']);
+            return ['device' => true, 'mode' => 'guard', 'name' => $slot ? $me['name'] : null, 'guard_id' => null,
+                'since' => $slot ? fecha($slot['started_at'], 'H:i') : null,
+                'inside' => $slot ? ($slot['start_inside'] === null ? null : (int) $slot['start_inside'] === 1) : null,
+                'outside_now' => $slot ? $slot['open_exit_uuid'] !== null : false];
+        }
         $d = \App\Services\ActingGuard::onDuty((int) $me['id'], $site ? (int) $site['id'] : null);
-        return ['device' => true, 'name' => $d['guard']['name'] ?? null, 'guard_id' => isset($d['guard']) ? (int) $d['guard']['id'] : null,
+        return ['device' => true, 'mode' => 'post', 'name' => $d['guard']['name'] ?? null, 'guard_id' => isset($d['guard']) ? (int) $d['guard']['id'] : null,
             'since' => $d ? fecha($d['slot']['started_at'], 'H:i') : null,
             'inside' => $d ? ($d['slot']['start_inside'] === null ? null : (int) $d['slot']['start_inside'] === 1) : null,
             'outside_now' => $d ? $d['slot']['open_exit_uuid'] !== null : false];
@@ -106,6 +110,7 @@ final class LogbookController
         $site = $this->site($request);
         try {
             $r = $this->asDuty($site, fn () => Logbook::create($request->post + ['site_uuid' => $site['uuid'] ?? '']));
+            $this->noDutyFlash($r);
             $photo = $request->files['photo'] ?? null;
             if (is_array($photo) && ($photo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
                 $meta = \App\Services\ImageProcessor::store(Tenant::current()['uuid'], $photo['tmp_name'], $photo['name'] ?? null, true, (int) UserAuth::user()['id'], 'logbook');
@@ -128,6 +133,7 @@ final class LogbookController
     {
         try {
             $r = $this->asDuty($this->site($request), fn () => Logbook::exit($uuid, $request->post));
+            $this->noDutyFlash($r);
             Flash::add('success', 'Salida anotada (folio ' . $r['entry']['folio'] . ').');
         } catch (UserError $e) {
             Flash::add('danger', $e->getMessage());
@@ -139,6 +145,7 @@ final class LogbookController
     {
         try {
             $r = $this->asDuty($this->site($request), fn () => Logbook::correct($uuid, $request->post));
+            $this->noDutyFlash($r);
             Flash::add('success', 'Corrección anotada (folio ' . $r['entry']['folio'] . '). La anotación original no cambia.');
         } catch (UserError $e) {
             Flash::add('danger', $e->getMessage());
@@ -151,6 +158,7 @@ final class LogbookController
         $site = $this->site($request);
         try {
             $r = $this->asDuty($site, fn () => Logbook::close($request->post + ['site_uuid' => $site['uuid'] ?? '']));
+            $this->noDutyFlash($r);
             Flash::add('success', 'Turno cerrado y firmado (folio ' . $r['entry']['folio'] . ').');
         } catch (UserError $e) {
             Flash::add('danger', $e->getMessage());
@@ -162,6 +170,7 @@ final class LogbookController
     {
         try {
             $r = $this->asDuty($this->site($request), fn () => Logbook::receive($uuid, $request->post));
+            $this->noDutyFlash($r);
             Flash::add('success', 'Recibiste el puesto (folio ' . $r['entry']['folio'] . ').');
         } catch (UserError $e) {
             Flash::add('danger', $e->getMessage());

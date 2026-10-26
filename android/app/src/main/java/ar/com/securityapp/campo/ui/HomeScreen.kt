@@ -162,7 +162,8 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
     val goActivity = { if (route == "m:rondas") openScanner = false else { leave(); openModule = "rondas" } }
     val dutyName by vm.dutyName.collectAsStateWithLifecycle()
     /** Celular compartido: rondas y libro quedan a nombre del guardia de turno, así que primero alguien tiene que empezar. */
-    val needsDuty = { m: String -> me.sharedDevice && !me.isPreview && dutyName == null && m in setOf("rondas", "libro") }
+    // El libro se puede usar sin turno (queda marcado y avisa); las rondas no: quedarían a nombre del celular y no del guardia.
+    val needsDuty = { m: String -> me.sharedDevice && !me.isPreview && dutyName == null && m == "rondas" }
     val askDuty = { scope.launch { snackbar.showSnackbar("Primero empezá tu turno (Empezar mi turno): así queda a tu nombre.") }; Unit }
     val goScan = { haptics.tick(); if (needsDuty("rondas")) askDuty() else if (route == "m:rondas") openScanner = true else { leave(); openModule = "rondas"; openScanner = true } }
     val goNotices = { val was = route == "avisos"; leave(); if (!was) vm.openAvisos.value = true }
@@ -193,7 +194,7 @@ fun HomeScreen(vm: SessionViewModel, me: Me, openIntent: (Intent) -> Unit) {
                             "m:inspecciones" -> ar.com.securityapp.campo.ui.inspections.InspeccionesScreen(onBack = goHome, canCreate = me.can("inspecciones", "crear"), showTopBar = false)
                             "m:incidentes" -> ar.com.securityapp.campo.ui.incidents.IncidentesScreen(onBack = goHome, canCreate = me.can("incidentes", "crear"), showTopBar = false)
                             "m:libro" -> ar.com.securityapp.campo.ui.logbook.LogbookScreen(onBack = goHome, canCreate = me.can("libro", "crear"),
-                                showTopBar = false, startPage = logbookPage, onClosed = goHome)
+                                showTopBar = false, startPage = logbookPage, onClosed = goHome, sharedDevice = me.sharedDevice)
                             "m:observaciones" -> ar.com.securityapp.campo.ui.observations.ObservacionesScreen(onBack = goHome, canCreate = me.can("observaciones", "crear"), showTopBar = false)
                             "panic" -> ar.com.securityapp.campo.panic.PanicScreen((lastPanic.value as? SessionViewModel.PanicState.Done)?.result, onClose = { vm.closePanic() })
                             "home" -> HomeContent(vm, me, sync, update, nextRound, snackbar, openIntent,
