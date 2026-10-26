@@ -32,6 +32,28 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
 - [x] App Android: mapa de rutas con Google Maps (puntos, recorrido y vista satelital opcional; clave local fuera del repositorio)
 - [x] App Android: recordatorio de rondas programadas 5 minutos antes, aviso a la hora, atraso y próxima ronda visible en el inicio
 
+### Hecho — últimas entregas (Claude, hasta el 26/10/2026; detalle técnico en `CLAUDE.md`)
+- [x] Mapas siempre en satélite (web y app); ronda en vivo en la app y en el panel; edición de puntos sin cambiar el QR
+- [x] CRUD completo: eliminar (baja lógica) datos maestros, usuarios, plantillas/programas, catálogo EPP, reglas, rutas, puntos y
+      programaciones; editar ausencias; editar/eliminar turnos; anular rondas con motivo. La evidencia nunca se edita ni se borra
+- [x] Turnos con **horario por día** (franjas de hasta 72 h, ej. Sáb 14:00 → Lun 08:00) — tenant 0076
+- [x] App 1.4.x: transiciones, atrás predictivo, vibración, deslizar para sincronizar, **modo oscuro**, botón central "Escanear"
+- [x] **Turnos por puesto** (guardias tercerizados que se organizan solos): franjas a cubrir, relevo, "Dejar el puesto sin persona"
+      con motivo, avisos de cobertura, reporte de cobertura — tenant 0077–0079
+- [x] **Celular compartido**: una cuenta del puesto, cada guardia se identifica con PIN; operaciones con `as_user` (`ActingGuard`) — app 1.5.0
+- [x] **Guardias = empleados** (sin usuario): PIN en Turnos → Guardias y PIN; perfil interno `users.no_login` — tenant 0083
+- [x] **Reporte de fin de turno** por franja (email a RRHH con casillas fijas en las reglas), al terminar el turno sin depender del
+      cron; "Ver reporte" / "Enviar reporte ahora"; cron de respaldo también desde la app (LiteSpeed o PHP-FPM) — tenant 0080
+- [x] Libro: **condición insegura** (aviso crítico inmediato + observación), **lista de autorizados** (personas y vehículos con
+      vigencia/días/horario, importación Excel, control sin señal en la app) — tenant 0081
+- [x] Libro en la **notebook del puesto**: anota a nombre del guardia de turno del celular, sesión recordada 90 días
+      (`PostTerminal`) — tenant 0082; aviso **"sin turno iniciado"** (se anota igual, marcado, avisa al supervisor) también para
+      guardias con cuenta propia — app 1.5.4 (`versionCode 24`, última)
+- Para retomar: migraciones tenant al día hasta la **0083**; tests `php tests/run.php` = 235 OK. Zip de actualización del servidor:
+  `(git diff --name-only d9ea828 HEAD -- app public database; echo .htaccess) | sort -u | xargs git archive --format=zip -o ~/Desktop/deploy/actualizacion-servidor.zip HEAD`.
+  Ojo: el libro es una cadena de huellas (nunca UPDATE de campos de `Logbook::HASHED`); no crear datos de prueba en la
+  instalación real de Indumor; Permisos de trabajo y EPP siguen ocultos en la app hasta que el usuario lo pida.
+
 ### Decisión sobre el cliente móvil
 
 La PWA `/movil/` fue eliminada del código y del roadmap el 09/10/2026. Se descartó porque los guardias usarán
@@ -71,6 +93,10 @@ Se conservaron las APIs v1 y la sincronización del servidor para que Android si
 
 ## Pendiente — operación (usuario)
 - [x] Aplicar migraciones en Indumor (al día hasta la 0069)
+- [ ] Subir el último zip y aplicar en /admin/migraciones hasta la 0083; publicar el APK 1.5.4 en /admin/app-android
+- [ ] Configurar SMTP en /admin/configuracion y agregar la casilla de RRHH a las reglas urgentes (condición insegura, reporte de fin de turno)
+- [ ] Ingresar una vez en la notebook del puesto con la cuenta del puesto; cargar los guardias como empleados con PIN
+- [ ] Pausar o eliminar programaciones de prueba (generan avisos de "no vino"); marcar "Atendido" los pánicos de prueba
 - [x] `gh auth login` y `git push`
 - [ ] Primer deploy al hosting: URL de producción, docroot a `public/`, `/install/check.php` en verde, cron por URL
 - [ ] Respaldar `config/config.local.php` (y más adelante el keystore de la app Android)
