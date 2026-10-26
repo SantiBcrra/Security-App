@@ -1,7 +1,7 @@
 <?php
 /**
  * Libro de guardia del día. @var ?array $site @var array $sites @var string $day @var string $today @var array $entries @var array $inside
- * @var ?array $pending @var ?array $summary @var ?array $verify @var bool $canCreate @var bool $canExport
+ * @var ?array $pending @var ?array $summary @var ?array $verify @var bool $canCreate @var bool $canExport @var ?array $duty (notebook del puesto)
  */
 use App\Services\Logbook;
 [$old] = App\Core\Flash::pullInput();
@@ -33,6 +33,32 @@ $authBadge = function (array $e): string {
         <?php if ($canExport && $site): ?><a class="btn btn-outline-secondary btn-sm" href="<?= e(url('/panel/libro/exportar' . $q(['desde' => $day, 'hasta' => $day]))) ?>">CSV</a><?php endif; ?>
     </div>
 </div>
+
+<?php if (!empty($duty)): ?>
+    <?php /* Notebook del puesto: quién está de turno (lo anotado va a su nombre). Se actualiza solo cada 45 s. */ ?>
+    <div id="duty-banner" class="mb-3" data-url="<?= e(url('/panel/libro/de-turno' . $q())) ?>"></div>
+    <script>
+    (function () {
+        const box = document.getElementById('duty-banner');
+        const esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+        function paint(d) {
+            if (d.name) {
+                const where = d.outside_now ? ' · <strong>fuera del predio ahora</strong>' : (d.inside === true ? ' · empezó en el predio' : (d.inside === false ? ' · empezó fuera del predio' : ''));
+                box.className = 'mb-3 alert ' + (d.outside_now ? 'alert-warning' : 'alert-success') + ' d-flex flex-wrap align-items-center gap-2';
+                box.innerHTML = '<span class="fs-5">👮</span><span><strong>De turno: ' + esc(d.name) + '</strong> desde las ' + esc(d.since || '') + where
+                    + '<br><span class="small">Todo lo que se anote en el libro queda a su nombre. El cambio de guardia se hace en el celular del puesto.</span></span>';
+            } else {
+                box.className = 'mb-3 alert alert-danger d-flex flex-wrap align-items-center gap-2';
+                box.innerHTML = '<span class="fs-5">⚠</span><span><strong>No hay guardia de turno.</strong> Empezá tu turno en el celular del puesto (tu nombre y PIN).'
+                    + '<br><span class="small">Lo que se anote ahora queda marcado "sin guardia de turno" y se avisa al supervisor.</span></span>';
+            }
+        }
+        paint(<?= json_encode(['name' => $duty['name'], 'since' => $duty['since'], 'inside' => $duty['inside'], 'outside_now' => $duty['outside_now']]) ?>);
+        setInterval(() => fetch(box.dataset.url, {headers: {'Accept': 'application/json'}, credentials: 'same-origin'})
+            .then(r => r.ok ? r.json() : null).then(j => { if (j && j.data && j.data.device) paint(j.data); }).catch(() => {}), 45000);
+    })();
+    </script>
+<?php endif; ?>
 
 <?php if (!$sites): ?>
     <div class="alert alert-warning">Primero cargá la planta / predio en <a href="<?= e(url('/panel/datos/plantas')) ?>">Datos maestros → Plantas</a>: el libro es de cada predio.</div>
@@ -170,7 +196,7 @@ $authBadge = function (array $e): string {
                                 <strong class="text-body"><?= e(fecha($e['occurred_at'], 'H:i')) ?></strong> · folio <?= (int) $e['folio'] ?>
                                 · <span class="badge text-bg-<?= e($kindBadge[$e['kind']] ?? 'secondary') ?>"><?= e(Logbook::KINDS[$e['kind']] ?? $e['kind']) ?></span>
                                 <?= $e['category'] && $e['kind'] === 'novedad' ? '<span class="badge text-bg-light">' . e(Logbook::CATEGORIES[$e['category']] ?? '') . '</span>' : '' ?>
-                                <?= $e['important'] ? '<span class="badge text-bg-danger">Importante</span>' : '' ?>
+                                <?= $e['important'] ? '<span class="badge text-bg-danger">Importante</span>' : '' ?><?= !empty($e['no_duty']) && !in_array($e['kind'], ['persona', 'vehiculo'], true) ? ' <span class="badge text-bg-danger">sin guardia de turno</span>' : '' ?>
                                 · <?= e($e['user_name'] ?? '—') ?><?= $e['source'] === 'app' ? ' (app)' : '' ?>
                             </div>
                             <?php if ($canCreate && $day === $today && !in_array($e['kind'], ['cierre', 'recepcion', 'correccion'], true)): ?>
@@ -182,7 +208,7 @@ $authBadge = function (array $e): string {
                         </div>
                         <div class="mt-1">
                             <?php if (in_array($e['kind'], ['persona', 'vehiculo'], true)): ?>
-                                <strong><?= e(Logbook::label($e)) ?></strong> <?= $authBadge($e) ?>
+                                <strong><?= e(Logbook::label($e)) ?></strong> <?= $authBadge($e) ?><?= !empty($e['no_duty']) ? ' <span class="badge text-bg-danger">sin guardia de turno</span>' : '' ?>
                                 <?= $e['visiting'] ? ' → ' . e($e['visiting']) : '' ?><?= $e['reason'] ? ' · ' . e($e['reason']) : '' ?>
                                 <?= $e['badge'] ? ' · tarjeta ' . e($e['badge']) : '' ?><?= $e['kind'] === 'persona' && $e['plate'] ? ' · patente ' . e($e['plate']) : '' ?>
                                 <?= $e['load_note'] ? ' · carga: ' . e($e['load_note']) : '' ?>

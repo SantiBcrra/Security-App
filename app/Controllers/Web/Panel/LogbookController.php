@@ -33,6 +33,51 @@ final class LogbookController
         return $site;
     }
 
+    /**
+     * Notebook del puesto (cuenta del puesto): lo que se anota va a nombre del guardia de turno según el celular. Sin nadie de
+     * turno se anota igual, marcado "sin guardia de turno", y se avisa al supervisor (una vez por hora y predio).
+     */
+    private function asDuty(?array $site, callable $fn): mixed
+    {
+        $me = UserAuth::user();
+        if ($me === null || !\App\Services\ActingGuard::isDevice((int) $me['id'])) return $fn();
+        $duty = \App\Services\ActingGuard::onDuty((int) $me['id'], $site ? (int) $site['id'] : null);
+        if ($duty !== null) return \App\Services\ActingGuard::run($duty['guard'], $fn);
+        Logbook::$withoutDuty = true;
+        try {
+            $r = $fn();
+        } finally {
+            Logbook::$withoutDuty = false;
+        }
+        $entry = $r['entry'] ?? null;
+        if ($entry && empty($r['duplicate'])) {
+            $bucket = gmdate('Y-m-d-H');
+            if (\App\Models\NotificationMarks::claim("logbook_noduty:{$entry['site_id']}:{$bucket}")) {
+                \App\Services\Notify\Notifier::dispatch('logbook.no_duty', $entry + ['label' => Logbook::label($entry)]);
+            }
+            Flash::add('warning', 'Se anotó SIN GUARDIA DE TURNO: empezá tu turno en el celular del puesto (nombre y PIN) para que lo que anotes quede a tu nombre. Se avisó al supervisor.');
+        }
+        return $r;
+    }
+
+    /** Guardia de turno para mostrar arriba del libro (solo en la notebook del puesto). */
+    private function dutyInfo(?array $site): ?array
+    {
+        $me = UserAuth::user();
+        if ($me === null || !\App\Services\ActingGuard::isDevice((int) $me['id'])) return null;
+        $d = \App\Services\ActingGuard::onDuty((int) $me['id'], $site ? (int) $site['id'] : null);
+        return ['device' => true, 'name' => $d['guard']['name'] ?? null, 'guard_id' => isset($d['guard']) ? (int) $d['guard']['id'] : null,
+            'since' => $d ? fecha($d['slot']['started_at'], 'H:i') : null,
+            'inside' => $d ? ($d['slot']['start_inside'] === null ? null : (int) $d['slot']['start_inside'] === 1) : null,
+            'outside_now' => $d ? $d['slot']['open_exit_uuid'] !== null : false];
+    }
+
+    /** Lo consulta la notebook cada 45 s para actualizar "De turno" sin recargar. */
+    public function duty(Request $request): Response
+    {
+        return Response::json($this->dutyInfo($this->site($request)) ?? ['device' => false]);
+    }
+
     private function back(?array $site, ?string $day = null): Response
     {
         return Response::redirect('/panel/libro' . ($site ? '?predio=' . $site['uuid'] . ($day ? '&fecha=' . $day : '') : ''));
@@ -43,8 +88,10 @@ final class LogbookController
         $site = $this->site($request);
         $today = $this->today();
         $day = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $request->input('fecha', '')) ? (string) $request->input('fecha') : $today;
-        $me = (int) UserAuth::user()['id'];
+        $duty = $this->dutyInfo($site);
+        $me = $duty['guard_id'] ?? (int) UserAuth::user()['id']; // en la notebook del puesto, "mi tramo" es el del guardia de turno
         return Response::html(View::render('panel/logbook/index', [
+            'duty' => $duty,
             'title' => 'Libro de guardia', 'site' => $site, 'sites' => Logbook::sites(), 'day' => $day, 'today' => $today,
             'entries' => $site ? Logbook::day((int) $site['id'], $day) : [], 'inside' => $site ? Logbook::inside((int) $site['id']) : [],
             'pending' => $site ? Logbook::pendingClose((int) $site['id'], $me) : null, 'summary' => $site ? Logbook::summary((int) $site['id'], $me) : null,
@@ -58,7 +105,7 @@ final class LogbookController
     {
         $site = $this->site($request);
         try {
-            $r = Logbook::create($request->post + ['site_uuid' => $site['uuid'] ?? '']);
+            $r = $this->asDuty($site, fn () => Logbook::create($request->post + ['site_uuid' => $site['uuid'] ?? '']));
             $photo = $request->files['photo'] ?? null;
             if (is_array($photo) && ($photo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
                 $meta = \App\Services\ImageProcessor::store(Tenant::current()['uuid'], $photo['tmp_name'], $photo['name'] ?? null, true, (int) UserAuth::user()['id'], 'logbook');
@@ -80,7 +127,7 @@ final class LogbookController
     public function exit(Request $request, string $uuid): Response
     {
         try {
-            $r = Logbook::exit($uuid, $request->post);
+            $r = $this->asDuty($this->site($request), fn () => Logbook::exit($uuid, $request->post));
             Flash::add('success', 'Salida anotada (folio ' . $r['entry']['folio'] . ').');
         } catch (UserError $e) {
             Flash::add('danger', $e->getMessage());
@@ -91,7 +138,7 @@ final class LogbookController
     public function correct(Request $request, string $uuid): Response
     {
         try {
-            $r = Logbook::correct($uuid, $request->post);
+            $r = $this->asDuty($this->site($request), fn () => Logbook::correct($uuid, $request->post));
             Flash::add('success', 'Corrección anotada (folio ' . $r['entry']['folio'] . '). La anotación original no cambia.');
         } catch (UserError $e) {
             Flash::add('danger', $e->getMessage());
@@ -103,7 +150,7 @@ final class LogbookController
     {
         $site = $this->site($request);
         try {
-            $r = Logbook::close($request->post + ['site_uuid' => $site['uuid'] ?? '']);
+            $r = $this->asDuty($site, fn () => Logbook::close($request->post + ['site_uuid' => $site['uuid'] ?? '']));
             Flash::add('success', 'Turno cerrado y firmado (folio ' . $r['entry']['folio'] . ').');
         } catch (UserError $e) {
             Flash::add('danger', $e->getMessage());
@@ -114,7 +161,7 @@ final class LogbookController
     public function receive(Request $request, string $uuid): Response
     {
         try {
-            $r = Logbook::receive($uuid, $request->post);
+            $r = $this->asDuty($this->site($request), fn () => Logbook::receive($uuid, $request->post));
             Flash::add('success', 'Recibiste el puesto (folio ' . $r['entry']['folio'] . ').');
         } catch (UserError $e) {
             Flash::add('danger', $e->getMessage());

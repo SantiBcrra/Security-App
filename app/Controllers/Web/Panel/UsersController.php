@@ -146,6 +146,17 @@ final class UsersController
         return Response::redirect('/panel/usuarios');
     }
 
+    public function forgetTerminal(Request $request, string $uuid, string $terminal): Response
+    {
+        $user = Users::findByUuid($uuid);
+        if ($user !== null) {
+            \App\Services\PostTerminal::revoke($terminal, (int) $user['id']);
+            Audit::tenant('post_terminal.forget', 'user', $uuid);
+            Flash::add('success', 'Listo: ese equipo tiene que volver a ingresar con la contraseña de la cuenta del puesto.');
+        }
+        return Response::redirect('/panel/usuarios/' . $uuid . '#equipos');
+    }
+
     /** PIN para identificarse en el celular compartido del puesto (no es la contraseña). */
     public function pin(Request $request, string $uuid): Response
     {

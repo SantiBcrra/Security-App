@@ -315,6 +315,17 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
 - App 1.5.1 (`versionCode 21`): `ui/FitText.kt` = texto de una línea que se achica en vez de cortarse (celulares angostos o letra
   grande); lo usan las pestañas de abajo y los botones + Novedad / Persona / Vehículo del libro ("+" arriba, nombre abajo).
 
+- **Notebook del puesto** (libro en la web, 26/10/2026; decisión del usuario: el turno se empieza SOLO en el celular con GPS, la
+  notebook es para escribir el libro): la notebook queda abierta con la misma cuenta del puesto. `LogbookController::asDuty()`:
+  si quien usa el libro es una cuenta de puesto (`ActingGuard::isDevice`), lo anotado (novedad, ingreso, salida, corrección,
+  cierre, recepción) va a nombre del guardia de turno (`ActingGuard::onDuty`, tramo en curso de sus puestos en ese predio); sin
+  nadie de turno se anota igual con `logbook_entries.no_duty = 1` (fuera de la huella), mensaje "empezá tu turno en el celular" y
+  `logbook.no_duty` a supervisores + SyH (una vez por hora y predio). Cartel "De turno: … / No hay guardia de turno" arriba del
+  libro, actualizado cada 45 s (`GET /panel/libro/de-turno`). **Sesión abierta**: `PostTerminal` (tenant 0082 `post_terminals`):
+  al ingresar a la web con una cuenta de puesto se guarda la cookie httponly `secapp_terminal` (`{uuid empresa}.{secreto}`, en la
+  base solo el SHA-256, 90 días renovables); `RequireTenant` vuelve a abrir la sesión sola; "Salir" la revoca; ficha del usuario
+  → "Cuenta del puesto · equipos recordados" (dejar de recordar). Los usuarios comunes siguen con la sesión de 12 h.
+
 ## Reporte de fin de turno y condición insegura (RRHH) — decisión del usuario 26/10/2026
 - **Casillas de email fijas** en las reglas de aviso (recipiente `{type: email, value}`; Configuración → Notificaciones y alertas →
   "Casillas de email (sin usuario en el sistema)"): reciben solo por email, con todo el contenido (sin botón "Ver en el sistema"

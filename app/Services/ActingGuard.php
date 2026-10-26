@@ -49,6 +49,23 @@ final class ActingGuard
         return self::posts($userId) !== [];
     }
 
+    /**
+     * Guardia de turno ahora en los puestos de esta cuenta (en ese predio si se indica): el tramo en curso más reciente.
+     * @return ?array{guard: array, slot: array}
+     */
+    public static function onDuty(int $deviceUserId, ?int $siteId = null): ?array
+    {
+        $ids = array_map(fn ($p) => (int) $p['id'], self::posts($deviceUserId));
+        if (!$ids) return null;
+        $q = DB::tenant()->prepare("SELECT id FROM guard_shift_slots WHERE status = 'en_curso' AND shift_id IN (" . implode(',', $ids) . ')'
+            . ($siteId !== null ? ' AND site_id = ' . (int) $siteId : '') . ' ORDER BY started_at DESC LIMIT 1');
+        $q->execute();
+        $id = $q->fetchColumn();
+        $slot = $id ? ShiftService::findById((int) $id) : null;
+        $guard = $slot ? Users::findById((int) $slot['user_id']) : null;
+        return $guard && $slot ? ['guard' => $guard, 'slot' => $slot] : null;
+    }
+
     /** Guardias del grupo de este celular (unión de los grupos de sus puestos), activos. @return list<int> */
     public static function poolIds(int $deviceUserId): array
     {

@@ -128,6 +128,7 @@ return static function (Router $r): void {
         $r->post('/usuarios/{uuid}', [UsersController::class, 'update'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/eliminar', [UsersController::class, 'delete'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/estado', [UsersController::class, 'toggle'], [$can('usuarios', 'editar')]);
+        $r->post('/usuarios/{uuid}/equipos/{terminal}/olvidar', [UsersController::class, 'forgetTerminal'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/pin', [UsersController::class, 'pin'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/invitacion', [UsersController::class, 'invite'], [$can('usuarios', 'editar')]);
         $r->post('/usuarios/{uuid}/dispositivos/{device}/revocar', [UsersController::class, 'revokeDevice'], [$can('usuarios', 'editar')]);
@@ -262,6 +263,7 @@ return static function (Router $r): void {
         $r->post('/libro/autorizados/{uuid}', [\App\Controllers\Web\Panel\AuthorizedController::class, 'store'], [$can('libro', 'editar')]);
         $r->post('/libro/autorizados/{uuid}/estado', [\App\Controllers\Web\Panel\AuthorizedController::class, 'toggle'], [$can('libro', 'editar')]);
         $r->post('/libro/autorizados/{uuid}/eliminar', [\App\Controllers\Web\Panel\AuthorizedController::class, 'delete'], [$can('libro', 'editar')]);
+        $r->get('/libro/de-turno', [\App\Controllers\Web\Panel\LogbookController::class, 'duty'], [$can('libro', 'ver')]);
         $r->get('/libro/buscar', [\App\Controllers\Web\Panel\LogbookController::class, 'search'], [$can('libro', 'ver')]);
         $r->get('/libro/autocompletar', [\App\Controllers\Web\Panel\LogbookController::class, 'lookup'], [$can('libro', 'crear')]);
         $r->get('/libro/imprimir', [\App\Controllers\Web\Panel\LogbookController::class, 'printable'], [$can('libro', 'ver')]);

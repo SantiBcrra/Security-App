@@ -108,6 +108,25 @@ foreach ($roles as $r) { if ($r['slug'] === Permissions::AUDITOR_ROLE) { $audito
             <?php endif; ?>
         </div>
 
+        <?php $terminals = App\Services\ActingGuard::isDevice((int) $user['id']) ? App\Services\PostTerminal::forUser((int) $user['id']) : []; ?>
+        <?php if (App\Services\ActingGuard::isDevice((int) $user['id'])): ?>
+        <div class="card shadow-sm mb-3" id="equipos">
+            <div class="card-header"><strong>Cuenta del puesto · equipos recordados</strong></div>
+            <div class="card-body small">
+                <p class="text-body-secondary mb-2">Es la cuenta del celular compartido y de la notebook del puesto. En los equipos donde se ingresó con ella la sesión
+                    queda abierta (90 días renovables) y lo que se anota va a nombre del guardia de turno. Si se pierde o se cambia un equipo, dejá de recordarlo.</p>
+                <?php foreach ($terminals as $t): ?>
+                    <div class="d-flex justify-content-between align-items-center border-bottom py-1 gap-2">
+                        <span><?= e(mb_strimwidth((string) ($t['label'] ?: 'Equipo'), 0, 70, '…')) ?><br><span class="text-body-secondary">último uso <?= e(fecha($t['last_used_at'] ?? $t['created_at'], 'd/m/Y H:i')) ?></span></span>
+                        <?php if ($canEdit): ?><form method="post" action="<?= e(url('/panel/usuarios/' . $user['uuid'] . '/equipos/' . $t['uuid'] . '/olvidar')) ?>"><?= csrf_field() ?>
+                            <button class="btn btn-sm btn-outline-danger">Dejar de recordar</button></form><?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+                <?php if (!$terminals): ?><p class="mb-0 text-body-secondary">Todavía no se ingresó desde la web con esta cuenta.</p><?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <div class="card shadow-sm mb-3" id="pin">
             <div class="card-header"><strong>PIN para el celular compartido</strong></div>
             <div class="card-body small">

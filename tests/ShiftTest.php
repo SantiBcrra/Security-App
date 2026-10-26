@@ -707,6 +707,62 @@ return [
         DB::tenant()->exec('DELETE FROM guard_shift_slots');
     },
 
+    'notebook del puesto: el libro web va a nombre del guardia de turno; sin nadie, se anota marcado y avisa; la sesión se recuerda' => function () use ($setup, &$st, $op, $iso, $count) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $device = Users::findByLogin('celu@sh.test');
+        [$data] = ShiftPlanner::validate(['site' => $st['site']['uuid'], 'mode' => 'puesto', 'pattern' => 'weekly', 'days' => [1, 2, 3, 4, 5, 6, 7],
+            'start_time' => '00:00', 'end_time' => '23:59', 'users' => [$st['g1']['uuid'], $st['g2']['uuid']], 'device' => $device['uuid'], 'name' => 'Notebook']);
+        $shiftUuid = ShiftPlanner::save(null, $data);
+        DB::tenant()->exec("UPDATE guard_shift_slots SET status = 'cumplido', ended_at = UTC_TIMESTAMP() WHERE status = 'en_curso'");
+        UserAuth::setCurrent($device);
+        $_SESSION = [];
+        $ctl = new \App\Controllers\Web\Panel\LogbookController();
+        $req = fn (array $post) => new \App\Core\Request('POST', '/panel/libro/anotar', ['predio' => $st['site']['uuid']], $post);
+        $last = fn () => DB::tenant()->query('SELECT * FROM logbook_entries ORDER BY id DESC LIMIT 1')->fetch();
+        // Nadie de turno: se anota igual, marcado, y avisa una vez por hora
+        $before = $count('logbook.no_duty');
+        $ctl->store($req(['kind' => 'novedad', 'category' => 'rutina', 'text' => 'Recorrida sin novedad']));
+        $e = $last();
+        assert_same([1, (int) $device['id']], [(int) $e['no_duty'], (int) $e['user_id']]);
+        assert_true($count('logbook.no_duty') > $before, 'avisa al supervisor');
+        $after = $count('logbook.no_duty');
+        $ctl->store($req(['kind' => 'novedad', 'category' => 'rutina', 'text' => 'Otra sin turno']));
+        assert_same($after, $count('logbook.no_duty'), 'una vez por hora');
+        assert_true(str_contains(json_encode($_SESSION), 'SIN GUARDIA DE TURNO'), 'el mensaje pide empezar el turno');
+        $html = $ctl->index(new \App\Core\Request('GET', '/panel/libro', ['predio' => $st['site']['uuid']]))->body;
+        assert_true(str_contains($html, 'duty-banner') && str_contains($html, 'sin guardia de turno'), 'cartel y marca');
+        // Guardia1 empieza en el celular → lo de la notebook va a su nombre
+        $s = Uuid::v4();
+        Push::run([$op('shift.start', ['uuid' => $s, 'site_uuid' => $st['site']['uuid'], 'started_at_device' => $iso(0)]) + ['as_user' => $st['g1']['uuid']]]);
+        $ctl->store($req(['kind' => 'persona', 'person_name' => 'Visita notebook', 'company' => 'Gas SA']));
+        $e = $last();
+        assert_same([0, (int) $st['g1']['id']], [(int) $e['no_duty'], (int) $e['user_id']]);
+        assert_same((int) $device['id'], (int) UserAuth::user()['id'], 'vuelve a la cuenta del puesto');
+        $j = json_decode($ctl->duty(new \App\Core\Request('GET', '/panel/libro/de-turno', ['predio' => $st['site']['uuid']]))->body, true);
+        assert_same([true, 'Guardia1'], [$j['data']['device'], $j['data']['name']]);
+        $ctl->exit(new \App\Core\Request('POST', '/', ['predio' => $st['site']['uuid']], []), $e['uuid']);
+        assert_same((int) $st['g1']['id'], (int) $last()['user_id'], 'la salida también');
+        assert_true(\App\Services\Logbook::verify((int) $st['site']['id'])['ok'] ?? true, 'la huella del libro sigue íntegra');
+        // Recordar la notebook: sin sesión vuelve a entrar sola; "Salir" la olvida
+        \App\Services\PostTerminal::issue($st['a'], $device, 'Notebook garita');
+        $_SESSION = [];
+        assert_true(\App\Services\PostTerminal::restore(), 'vuelve a entrar sola');
+        assert_same($device['uuid'], $_SESSION[UserAuth::USER_KEY] ?? null);
+        assert_same(1, count(\App\Services\PostTerminal::forUser((int) $device['id'])));
+        \App\Services\PostTerminal::revokeCurrent();
+        $_SESSION = [];
+        assert_true(!\App\Services\PostTerminal::restore(), 'olvidada');
+        // Un usuario común no queda recordado
+        $_COOKIE = [];
+        assert_true(!\App\Services\ActingGuard::isDevice((int) $st['g1']['id']));
+        Push::run([$op('shift.end', ['slot_uuid' => $s, 'ended_at_device' => $iso(0)]) + ['as_user' => $st['g1']['uuid']]]);
+        UserAuth::setCurrent($st['hys']);
+        ShiftPlanner::delete(ShiftPlanner::find($shiftUuid));
+        $_SESSION = [];
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

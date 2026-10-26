@@ -146,6 +146,8 @@ final class UserAuth
         Users::touchLogin((int) $user['id']);
         self::setCurrent($user);
         Audit::tenant('user.login', 'user', $user['uuid']);
+        // Cuenta del puesto (notebook o celular compartido): recordar este equipo para que la sesión no se cierre sola.
+        if (ActingGuard::isDevice((int) $user['id'])) PostTerminal::issue($tenant, $user, substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 191) ?: null);
     }
 
     /** Usuario del request (lo carga RequireTenant en web o RequireApiUser en la API). */
@@ -197,6 +199,7 @@ final class UserAuth
 
     public static function logout(): void
     {
+        if (isset($_COOKIE[PostTerminal::COOKIE])) PostTerminal::revokeCurrent(); // "Salir" en la notebook del puesto: deja de recordarla
         if (self::$user !== null && Tenant::current() !== null) {
             Audit::tenant('user.logout', 'user', self::$user['uuid']);
         }

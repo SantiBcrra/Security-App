@@ -20,6 +20,8 @@ use App\Services\Notify\Notifier;
 final class Logbook
 {
     public const MODULE = 'libro';
+    /** Notebook del puesto sin nadie de turno: la anotación queda marcada (no_duty, fuera de la huella). */
+    public static bool $withoutDuty = false;
     public const KINDS = ['novedad' => 'Novedad', 'persona' => 'Ingreso de persona', 'vehiculo' => 'Ingreso de vehículo', 'salida' => 'Salida',
         'correccion' => 'Corrección', 'cierre' => 'Cierre de turno', 'recepcion' => 'Recepción del puesto'];
     /** "riesgo" = condición insegura (cable pelado, fuga de gas…): avisa al instante (crítico) y abre una observación para SyH. */
@@ -127,6 +129,7 @@ final class Logbook
                 'reason' => null, 'badge' => null, 'plate' => null, 'vehicle_type' => null, 'driver' => null, 'load_note' => null, 'ref_entry_id' => null,
                 'data' => null, 'signature_path' => null, 'signature_sha256' => null, 'lat' => null, 'lng' => null, 'shift_slot_id' => null, 'source' => 'web'];
             $row['folio'] = $folio;
+            if (self::$withoutDuty) $row['no_duty'] = 1;
             $row['created_at'] = gmdate('Y-m-d H:i:s');
             $row['prev_hash'] = $prev;
             $row['hash'] = self::hashOf($prev, $row);

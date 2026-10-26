@@ -67,6 +67,7 @@ final class Messages
         'guard.absence_requested'  => 'Pedido de ausencia de un guardia',
         'guard.absence_decided'    => 'Respuesta a un pedido de ausencia',
         'logbook.important'        => 'Libro de guardia: novedad importante',
+        'logbook.no_duty'          => 'Libro de guardia: anotación sin guardia de turno',
         'logbook.unauthorized'     => 'Libro de guardia: ingreso que no está en la lista de autorizados',
         'logbook.unsafe'           => 'Libro de guardia: condición insegura (aviso inmediato)',
         'guard.shift_report'       => 'Reporte de fin de turno (franja del puesto)',
@@ -275,6 +276,9 @@ Llamalo y marcá la alerta como atendida.",
         [$title, $body] = match ($event) {
             'logbook.important' => ['⚠ Novedad importante · ' . $site, ($e['user_name'] ?? 'El guardia') . ' anotó a las ' . fecha($e['occurred_at'] ?? null, 'H:i')
                 . ' (' . (\App\Services\Logbook::CATEGORIES[$e['category'] ?? ''] ?? 'Novedad') . '): ' . mb_strimwidth((string) ($e['text'] ?? ''), 0, 300, '…')],
+            'logbook.no_duty' => ['Libro sin guardia de turno · ' . $site, 'Se anotó en el libro de guardia de ' . $site . ' a las ' . fecha($e['occurred_at'] ?? null, 'H:i')
+                . ' (folio ' . (int) ($e['folio'] ?? 0) . ': ' . mb_strimwidth((string) (($e['label'] ?? '') ?: ($e['text'] ?? '')), 0, 160, '…') . ') sin ningún guardia de turno.'
+                . ' Pedile al guardia que empiece su turno en el celular del puesto con su nombre y PIN.'],
             'logbook.unauthorized' => ['Ingreso no autorizado · ' . $site, ($e['user_name'] ?? 'El guardia') . ' anotó a las ' . fecha($e['occurred_at'] ?? null, 'H:i')
                 . ' el ingreso de ' . ($e['label'] ?? '') . ': ' . mb_strtolower((string) ($e['auth_label'] ?? 'no autorizado'))
                 . (!empty($e['auth_window']) ? ' (autorizado: ' . $e['auth_window'] . ')' : '') . '. Se registró igual; revisá si corresponde.'],

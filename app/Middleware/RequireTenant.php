@@ -43,6 +43,11 @@ final class RequireTenant
             return $next($request);
         }
 
+        // Notebook del puesto: la sesión venció o se apagó el equipo → vuelve a entrar sola con el token "recordar este equipo".
+        if (AdminAuth::user() === null && \App\Services\PostTerminal::restore()) {
+            $tenant = Tenants::findByUuid((string) Session::get(Impersonation::TENANT_KEY));
+            if ($tenant !== null) return $this->asUser($request, $next, $tenant, (string) Session::get(UserAuth::USER_KEY));
+        }
         Impersonation::clear();
         Session::forget(UserAuth::USER_KEY);
         return $this->deny($request, 'Iniciá sesión para continuar.');
