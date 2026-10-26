@@ -113,9 +113,10 @@ final class Users
         return (int) $stmt->fetchColumn();
     }
 
+    /** Usuarios visibles con ese rol (sin eliminados ni perfiles internos de guardias-empleados). */
     public static function countByRole(int $roleId): int
     {
-        $stmt = DB::tenant()->prepare('SELECT COUNT(*) FROM users WHERE role_id = ?');
+        $stmt = DB::tenant()->prepare('SELECT COUNT(*) FROM users WHERE role_id = ? AND deleted_at IS NULL AND no_login = 0');
         $stmt->execute([$roleId]);
         return (int) $stmt->fetchColumn();
     }

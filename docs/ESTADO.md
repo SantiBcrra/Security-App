@@ -50,7 +50,8 @@ Detalle técnico de cada etapa hecha: `CLAUDE.md`. Diseños: `docs/design/`. Lo 
 - [x] Libro en la **notebook del puesto**: anota a nombre del guardia de turno del celular, sesión recordada 90 días
       (`PostTerminal`) — tenant 0082; aviso **"sin turno iniciado"** (se anota igual, marcado, avisa al supervisor) también para
       guardias con cuenta propia — app 1.5.4 (`versionCode 24`, última)
-- Para retomar: migraciones tenant al día hasta la **0083**; tests `php tests/run.php` = 235 OK. Zip de actualización del servidor:
+- [x] **CRUD de roles**: crear (en blanco o partiendo de otro), editar y eliminar pasando sus usuarios a otro rol; sin "Copiar"
+- Para retomar: migraciones tenant al día hasta la **0083**; tests `php tests/run.php` = 236 OK. Zip de actualización del servidor:
   `(git diff --name-only d9ea828 HEAD -- app public database; echo .htaccess) | sort -u | xargs git archive --format=zip -o ~/Desktop/deploy/actualizacion-servidor.zip HEAD`.
   Ojo: el libro es una cadena de huellas (nunca UPDATE de campos de `Logbook::HASHED`); no crear datos de prueba en la
   instalación real de Indumor; Permisos de trabajo y EPP siguen ocultos en la app hasta que el usuario lo pida.

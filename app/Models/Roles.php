@@ -11,7 +11,7 @@ final class Roles
 {
     public static function all(): array
     {
-        return DB::tenant()->query('SELECT r.*, (SELECT COUNT(*) FROM users u WHERE u.role_id = r.id) AS users_count
+        return DB::tenant()->query('SELECT r.*, (SELECT COUNT(*) FROM users u WHERE u.role_id = r.id AND u.deleted_at IS NULL AND u.no_login = 0) AS users_count
             FROM roles r ORDER BY r.is_system DESC, r.name')->fetchAll();
     }
 
@@ -50,6 +50,22 @@ final class Roles
         DB::tenant()->prepare('UPDATE roles SET name = ?, description = ?, permissions = ?, updated_at = UTC_TIMESTAMP()
             WHERE id = ? AND is_system = 0')
             ->execute([$name, $description, json_encode($permissions), $id]);
+    }
+
+    /** ¿Otro rol ya usa ese nombre? (sin distinguir mayúsculas) */
+    public static function nameTaken(string $name, ?int $exceptId = null): bool
+    {
+        $stmt = DB::tenant()->prepare('SELECT 1 FROM roles WHERE LOWER(name) = LOWER(?) AND id <> ? LIMIT 1');
+        $stmt->execute([trim($name), $exceptId ?? 0]);
+        return (bool) $stmt->fetchColumn();
+    }
+
+    /** Pasa todos los usuarios de un rol a otro (antes de eliminarlo). @return int usuarios movidos */
+    public static function moveUsers(int $fromId, int $toId): int
+    {
+        $stmt = DB::tenant()->prepare('UPDATE users SET role_id = ?, updated_at = UTC_TIMESTAMP() WHERE role_id = ?');
+        $stmt->execute([$toId, $fromId]);
+        return $stmt->rowCount();
     }
 
     public static function delete(int $id): void

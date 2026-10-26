@@ -332,6 +332,43 @@ return [
         \App\Services\AppPreview::reset();
     },
 
+    'roles: crear (en blanco o partiendo de otro), editar y eliminar pasando sus usuarios a otro rol' => function () use ($setup, &$st, $dispatch) {
+        $setup();
+        $admin = [Impersonation::TENANT_KEY => $st['a']['uuid'], UserAuth::USER_KEY => $st['a_admin']['uuid']];
+        $index = $dispatch('GET', '/panel/roles', $admin)->body;
+        assert_true(str_contains($index, '+ Nuevo rol') && !str_contains($index, '/copiar'), 'sin botón Copiar');
+        assert_true(str_contains($dispatch('GET', '/panel/roles/nuevo', $admin)->body, 'Partir de los permisos de'));
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['a_admin']);
+        $_SESSION = [];
+        $ctl = new \App\Controllers\Web\Panel\RolesController();
+        $sup = Roles::findBySlug('supervisor');
+        $perm = Permissions::decode($sup['permissions']);
+        $ctl->store(new \App\Core\Request('POST', '/panel/roles', [], ['name' => 'Supervisor de turno', 'description' => 'Noche', 'perm' => $perm]));
+        $new = Roles::findBySlug('supervisor-de-turno');
+        assert_true($new !== null && (int) $new['is_system'] === 0, 'creado');
+        assert_same(Permissions::normalize($perm), Permissions::decode($new['permissions']), 'mismos permisos que el rol base');
+        $before = count(Roles::all());
+        $ctl->store(new \App\Core\Request('POST', '/panel/roles', [], ['name' => 'supervisor de TURNO', 'perm' => []]));
+        assert_same($before, count(Roles::all()), 'nombre repetido: no se crea');
+        $ctl->update(new \App\Core\Request('POST', '/', [], ['name' => 'Supervisor nocturno', 'perm' => []]), $new['uuid']);
+        assert_same('Supervisor nocturno', Roles::findByUuid($new['uuid'])['name']);
+        $ctl->update(new \App\Core\Request('POST', '/', [], ['name' => 'Otro', 'perm' => []]), $sup['uuid']);
+        assert_same('supervisor', Roles::findByUuid($sup['uuid'])['slug'], 'el rol del sistema no se edita');
+        $u = Users::findById(Users::create(['name' => 'Con rol nuevo', 'email' => 'rolnuevo@a.test', 'role_id' => (int) $new['id']]));
+        $ctl->delete(new \App\Core\Request('POST', '/', [], []), $new['uuid']);
+        assert_true(Roles::findByUuid($new['uuid']) !== null, 'con usuarios y sin elegir destino: no se elimina');
+        $rep = Roles::findBySlug('reportante');
+        $ctl->delete(new \App\Core\Request('POST', '/', [], ['move_to' => $rep['uuid']]), $new['uuid']);
+        assert_same(null, Roles::findByUuid($new['uuid']), 'eliminado');
+        assert_same((int) $rep['id'], (int) Users::findById((int) $u['id'])['role_id'], 'su usuario pasó al rol elegido');
+        $ctl->delete(new \App\Core\Request('POST', '/', [], ['move_to' => $rep['uuid']]), $sup['uuid']);
+        assert_true(Roles::findByUuid($sup['uuid']) !== null, 'el rol del sistema no se elimina');
+        Users::softDelete((int) $u['id']);
+        $_SESSION = [];
+        Tenant::deactivate();
+    },
+
     'no se puede dejar a la empresa sin administrador' => function () use ($setup, &$st) {
         $setup();
         Tenant::activate($st['b']);

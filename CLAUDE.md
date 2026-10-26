@@ -58,7 +58,10 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   para copiar o mandar por WhatsApp (`wa.me`). Nadie más conoce la contraseña. El primer admin
   de cada empresa lo crea el super-admin desde el detalle de la empresa.
 - Permisos: registro único en `app/Policies/Permissions.php` (módulos × acciones + alcance
-  todo/sectores/propios). Roles base `is_system` no editables: se copian y se ajusta la copia.
+  todo/sectores/propios). Roles base `is_system` no se editan ni se eliminan. CRUD de roles (`RolesController`, 27/10/2026):
+  `/panel/roles/nuevo` (en blanco o "Partir de los permisos de" otro rol, `?base=uuid`; nombre único sin distinguir mayúsculas),
+  editar, y eliminar (`POST /panel/roles/{uuid}/eliminar`, permiso `roles.editar`): si tiene usuarios hay que elegir a qué rol
+  pasan (`move_to`, `Roles::moveUsers` mueve también eliminados y perfiles internos); borrado real, auditado. Ya no hay "Copiar".
 - **Módulos activables por empresa** (`Services\Modules`, setting `modulos.desactivados`, /panel/configuracion#modulos): rondas,
   permisos de trabajo, EPP, observaciones, inspecciones, acciones, incidentes. Desactivado = `UserAuth::can()` false, `scope()`
   null y fuera de `UserAuth::permissions()` (así desaparece del menú, del inicio, de sus páginas — `RequirePermission` muestra

@@ -372,10 +372,11 @@ return static function (Router $r): void {
         $r->get('/importar/{uuid}/errores', [ImportController::class, 'errors'], [$can('datos_maestros', 'crear')]);
 
         $r->get('/roles', [RolesController::class, 'index'], [$can('roles', 'ver')]);
+        $r->get('/roles/nuevo', [RolesController::class, 'create'], [$can('roles', 'crear')]);
+        $r->post('/roles', [RolesController::class, 'store'], [$can('roles', 'crear')]);
         $r->get('/roles/{uuid}', [RolesController::class, 'edit'], [$can('roles', 'ver')]);
         $r->post('/roles/{uuid}', [RolesController::class, 'update'], [$can('roles', 'editar')]);
-        $r->post('/roles/{uuid}/copiar', [RolesController::class, 'duplicate'], [$can('roles', 'crear')]);
-        $r->post('/roles/{uuid}/borrar', [RolesController::class, 'delete'], [$can('roles', 'editar')]);
+        $r->post('/roles/{uuid}/eliminar', [RolesController::class, 'delete'], [$can('roles', 'editar')]);
     });
 
     // API v1 (app móvil). Sin cookies ni CSRF: autentica con Bearer JWT.
