@@ -104,15 +104,24 @@ final class PostCoverage
         } else {
             $site = \App\Models\Sites::findByUuid((string) ($d['site_uuid'] ?? ''));
             if ($site === null) return null;
-            $q = DB::tenant()->prepare(self::SELECT . " WHERE c.site_id = ? AND c.status <> 'anulado' AND c.start_at <= ? AND c.end_at > ? ORDER BY c.start_at");
+            // Solo de programaciones activas: pausar o eliminar deja de tomar turnos en sus franjas.
+            $q = DB::tenant()->prepare(self::SELECT . " WHERE c.site_id = ? AND c.status <> 'anulado' AND g.is_active = 1 AND g.deleted_at IS NULL
+                AND c.start_at <= ? AND c.end_at > ? ORDER BY c.start_at");
             $q->execute([(int) $site['id'], $early, $at]);
             $rows = $q->fetchAll();
         }
         foreach ($rows as $c) {
-            if ($c['status'] === 'anulado' || $c['start_at'] > $early || $c['end_at'] <= $at) continue;
+            if ($c['status'] === 'anulado' || $c['start_at'] > $early || $c['end_at'] <= $at || !self::shiftActive((int) $c['shift_id'])) continue;
             if (in_array($userId, ShiftPlanner::userIds($c), true)) return $c;
         }
         return null;
+    }
+
+    private static function shiftActive(int $shiftId): bool
+    {
+        $q = DB::tenant()->prepare('SELECT 1 FROM guard_shifts WHERE id = ? AND is_active = 1 AND deleted_at IS NULL');
+        $q->execute([$shiftId]);
+        return (bool) $q->fetchColumn();
     }
 
     /** Guardia en el puesto ahora (tramo en curso de cualquier franja de esa programación). */
@@ -202,7 +211,9 @@ final class PostCoverage
         $notify = ShiftService::enabled();
         $nowSql = gmdate('Y-m-d H:i:s', $now);
         $db = DB::tenant();
-        $q = $db->prepare("SELECT id FROM guard_post_coverage WHERE status IN ('pendiente', 'en_curso') AND start_at <= ?");
+        // Pausada o eliminada: sin avisos de "sin cubrir" ni "relevo"; si tenía tramos, igual se cierra y manda su reporte.
+        $q = $db->prepare("SELECT c.id FROM guard_post_coverage c JOIN guard_shifts g ON g.id = c.shift_id WHERE c.status IN ('pendiente', 'en_curso') AND c.start_at <= ?
+            AND (g.is_active = 1 AND g.deleted_at IS NULL OR EXISTS (SELECT 1 FROM guard_shift_slots t WHERE t.coverage_id = c.id))");
         $q->execute([$nowSql]);
         foreach ($q->fetchAll(\PDO::FETCH_COLUMN) as $id) {
             $c = self::findById((int) $id);
@@ -212,14 +223,8 @@ final class PostCoverage
             $open = array_values(array_filter($segments, fn ($s) => $s['status'] === 'en_curso'));
             if ($now >= $end) {
                 if ($open && $now < $end + ShiftService::autoEndMinutes() * 60) continue; // espera el cierre del último tramo
-                $covered = self::coveredSeconds($c, $end);
-                $total = max(1, $end - $start);
-                $status = $covered >= $total - 120 ? 'cubierta' : ($covered > 0 ? 'parcial' : 'sin_cubrir');
-                $db->prepare('UPDATE guard_post_coverage SET status = ?, covered_seconds = ?, updated_at = UTC_TIMESTAMP() WHERE id = ?')
-                    ->execute([$status, $covered, (int) $c['id']]);
+                self::finalize($c);
                 $out['closed']++;
-                // Reporte de fin de turno (RRHH y quien diga la regla `guard.shift_report`), una vez por franja.
-                if ($notify) ShiftEndReport::send(self::findById((int) $c['id']));
                 continue;
             }
             $subject = $c + ['_post' => true, 'uuid' => $c['uuid']];
@@ -254,6 +259,37 @@ final class PostCoverage
             }
         }
         return $out;
+    }
+
+    /** Cierra la franja (cubierta | parcial | sin_cubrir) y manda el reporte de fin de turno, una sola vez. */
+    public static function finalize(array $c): void
+    {
+        $start = strtotime($c['start_at'] . ' UTC');
+        $end = strtotime($c['end_at'] . ' UTC');
+        $covered = self::coveredSeconds($c, $end);
+        $status = $covered >= max(1, $end - $start) - 120 ? 'cubierta' : ($covered > 0 ? 'parcial' : 'sin_cubrir');
+        $u = DB::tenant()->prepare("UPDATE guard_post_coverage SET status = ?, covered_seconds = ?, updated_at = UTC_TIMESTAMP() WHERE id = ? AND status IN ('pendiente', 'en_curso')");
+        $u->execute([$status, $covered, (int) $c['id']]);
+        // Reporte de fin de turno (RRHH y quien diga la regla `guard.shift_report`), una vez por franja.
+        if ($u->rowCount() === 1 && ShiftService::enabled()) ShiftEndReport::send(self::findById((int) $c['id']));
+    }
+
+    /** Minutos antes del fin de la franja desde los que "Terminar turno" ya cierra la franja y manda el reporte. */
+    public const REPORT_ON_END_MINUTES = 60;
+
+    /**
+     * Sin depender del cron: cuando el último guardia termina su turno (o lo releva el de la franja siguiente) en la última hora
+     * de la franja o después, la franja se cierra y el reporte sale en ese momento.
+     */
+    public static function closeIfDone(int $coverageId, ?int $now = null): bool
+    {
+        $now ??= time();
+        $c = self::findById($coverageId);
+        if ($c === null || !in_array($c['status'], ['pendiente', 'en_curso'], true)) return false;
+        if ($now < strtotime($c['end_at'] . ' UTC') - self::REPORT_ON_END_MINUTES * 60) return false;
+        foreach (self::segments($coverageId) as $s) if ($s['status'] === 'en_curso') return false;
+        self::finalize($c);
+        return true;
     }
 
     // ── panel ─────────────────────────────────────────────────────

@@ -324,7 +324,13 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   persona con motivo, huecos sin guardia, % cubierto), cada entrada y salida de personas y vehículos (y quién sigue adentro),
   novedades del libro, incidentes y observaciones del predio ("no hubo" si no hubo), rondas y pánicos. Asunto con ⚠ si hubo
   incidentes, condición insegura o puesto sin guardia. Regla por defecto (tenant 0080): SyH por email; la casilla de RRHH se
-  agrega en la regla.
+  agrega en la regla. **Sin depender del cron**: `PostCoverage::closeIfDone()` cierra la franja y manda el reporte cuando el último
+  guardia toca "Terminar turno" en la última hora de la franja o después (`REPORT_ON_END_MINUTES` 60), o cuando el de la franja
+  siguiente lo releva; si no, lo hace el cron. Franjas de programaciones pausadas o eliminadas no toman turnos ni avisan.
+- **Cron sin cupo en el hosting**: el respaldo `CronRunner::lazy()` (cada 5 min, después de responder) ahora lo disparan también
+  las llamadas de la app (sincronización cada 15 min por celular) y funciona con PHP-FPM **o LiteSpeed**
+  (`CronRunner::finisher()`; `/admin/tareas` dice si está disponible en el servidor). Lo recomendado igual es un cron externo
+  gratuito (cron-job.org) llamando a `/cron/run?key=…` cada 5 min.
 - **Condición insegura en el libro**: categoría `riesgo` ("Condición insegura / riesgo", primera en la app y la web). Siempre
   importante; dispara `logbook.unsafe` (**CRÍTICO**: no se silencia y sale en el mismo request; regla por defecto SyH +
   supervisores por app, notificación y email; agregar la casilla de RRHH) y abre una **observación** "Condición insegura" de

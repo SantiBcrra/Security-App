@@ -71,13 +71,22 @@ final class CronRunner
         return $summary;
     }
 
+    /** Función del servidor que entrega la respuesta y deja seguir trabajando (PHP-FPM o LiteSpeed), o null. */
+    public static function finisher(): ?string
+    {
+        foreach (['fastcgi_finish_request', 'litespeed_finish_request'] as $f) if (function_exists($f)) return $f;
+        return null;
+    }
+
     /**
-     * Respaldo cuando no hay cron configurado: si el servidor puede cerrar la respuesta antes de
-     * seguir (PHP-FPM), corre un lote corto cada 5 minutos como máximo.
+     * Respaldo cuando no hay cron configurado: si el servidor puede cerrar la respuesta antes de seguir (PHP-FPM o
+     * LiteSpeed), corre un lote corto cada 5 minutos como máximo. Lo disparan las páginas del panel y también la
+     * sincronización de los celulares (cada 15 min por celular), así anda aunque nadie tenga el panel abierto.
      */
     public static function lazy(): void
     {
-        if (!function_exists('fastcgi_finish_request') || PlatformSettings::get('cron.lazy', '1') !== '1') {
+        $finish = self::finisher();
+        if ($finish === null || PlatformSettings::get('cron.lazy', '1') !== '1') {
             return;
         }
         $file = Storage::path('cache/cron-last.txt');
@@ -89,7 +98,7 @@ final class CronRunner
             return;
         }
         @file_put_contents($file, (string) time());
-        fastcgi_finish_request();
+        $finish();
         try {
             self::run(10);
         } catch (\Throwable $e) {

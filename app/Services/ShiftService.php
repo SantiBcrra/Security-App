@@ -269,6 +269,8 @@ final class ShiftService
             if ($relieved !== null && (int) $relieved['user_id'] !== $me) {
                 self::close($relieved, max($at, (string) $relieved['started_at']), 'relevo');
                 Audit::tenant('guard_shift.relief', 'guard_shift_slot', $relieved['uuid'], null, ['relevado_por' => UserAuth::user()['name']]);
+                // Relevo entre franjas (el de la mañana releva al de la noche): la franja anterior se cierra y manda su reporte.
+                if ($relieved['coverage_id'] && (int) $relieved['coverage_id'] !== (int) $coverage['id']) PostCoverage::closeIfDone((int) $relieved['coverage_id']);
             }
             $db->prepare("INSERT INTO guard_shift_slots (uuid, shift_id, coverage_id, user_id, site_id, start_at, end_at, grace_minutes, status, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'programado', UTC_TIMESTAMP(), UTC_TIMESTAMP())")
@@ -321,6 +323,7 @@ final class ShiftService
         if ($empty && mb_strlen($note) < 3) throw new UserError('Contá por qué el puesto queda sin persona (por ejemplo: "Llegó el encargado").');
         self::close($slot, $at, $empty ? 'sin_persona' : 'manual', $empty ? $note : null);
         Audit::tenant('guard_shift.end', 'guard_shift_slot', $slot['uuid'], null, $empty ? ['sin_persona' => $note] : null);
+        if ($slot['coverage_id']) PostCoverage::closeIfDone((int) $slot['coverage_id']); // fin de la franja: el reporte sale ahora
         return self::shape(self::findById((int) $slot['id']));
     }
 

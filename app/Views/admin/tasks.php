@@ -10,7 +10,10 @@
                     <li><strong>cPanel → Cron Jobs</strong> (cada minuto): <code>curl -s "<?= e($cronUrl) ?>" &gt;/dev/null</code></li>
                     <li>O un servicio gratuito como <strong>cron-job.org</strong> apuntando a esa URL.</li>
                 </ul>
-                <p class="mb-2">Respaldo: si el servidor usa PHP-FPM, cada 5 minutos se procesa un lote corto después de responder una página (lazy cron).</p>
+                <p class="mb-2">Respaldo sin cron (cada 5 minutos, después de responder una página del panel o una sincronización de los celulares):
+                    <?= App\Services\Notify\CronRunner::finisher() !== null
+                        ? '<span class="badge text-bg-success">disponible en este servidor</span>'
+                        : '<span class="badge text-bg-danger">no disponible en este servidor</span> — hace falta un cron (o un servicio externo como cron-job.org).' ?></p>
                 <p class="mb-2">Última corrida: <strong><?= $lastRun ? e(fecha($lastRun, 'd/m/Y H:i:s')) : 'nunca' ?></strong></p>
                 <?php if ($summary): ?><pre class="bg-body-tertiary p-2 rounded small mb-2"><?= e(json_encode($summary, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?></pre><?php endif; ?>
                 <form method="post" action="<?= e(url('/admin/tareas/ejecutar')) ?>"><?= csrf_field() ?><button class="btn btn-primary btn-sm">Ejecutar ahora</button></form>

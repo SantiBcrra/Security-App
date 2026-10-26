@@ -35,9 +35,9 @@ final class App
         (require BASE_PATH . '/app/routes.php')($router);
         $router->dispatch($request)->send();
 
-        // Respaldo del cron: solo en páginas (no API ni el propio cron) y si el servidor puede
-        // cerrar la respuesta antes de seguir trabajando (PHP-FPM).
-        if (self::isInstalled() && !$request->isApi() && !str_starts_with($request->path, '/cron')) {
+        // Respaldo del cron: páginas y sincronización de los celulares (no el propio cron), solo si el servidor puede
+        // cerrar la respuesta antes de seguir trabajando (PHP-FPM o LiteSpeed): el usuario no espera.
+        if (self::isInstalled() && !str_starts_with($request->path, '/cron')) {
             try {
                 \App\Services\Notify\CronRunner::lazy();
             } catch (\Throwable) {

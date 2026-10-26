@@ -661,6 +661,43 @@ return [
         ShiftPlanner::delete(ShiftPlanner::find($shiftUuid));
     },
 
+    'puesto: el reporte sale al terminar el turno en la última hora de la franja (sin cron) y no se repite' => function () use ($setup, &$st, $op, $iso) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $device = Users::findByLogin('celu@sh.test');
+        $tz = ShiftPlanner::tz();
+        $hm = fn (int $min) => (new DateTimeImmutable('@' . (time() + $min * 60)))->setTimezone($tz)->format('H:i');
+        // Franja que termina en 30 min (dentro de la última hora).
+        [$data, $errors] = ShiftPlanner::validate(['site' => $st['site']['uuid'], 'mode' => 'puesto', 'pattern' => 'weekly', 'days' => [1, 2, 3, 4, 5, 6, 7],
+            'start_time' => $hm(-120), 'end_time' => $hm(30), 'users' => [$st['g1']['uuid'], $st['g2']['uuid']], 'device' => $device['uuid'], 'name' => 'Noche corta']);
+        assert_same([], $errors);
+        $shiftUuid = ShiftPlanner::save(null, $data);
+        $shift = ShiftPlanner::find($shiftUuid);
+        $cov = DB::tenant()->query("SELECT * FROM guard_post_coverage WHERE shift_id = {$shift['id']} AND start_at <= UTC_TIMESTAMP() AND end_at > UTC_TIMESTAMP()")->fetch();
+        assert_true($cov !== false);
+        $rule = array_values(array_filter(\App\Models\NotificationRules::all(), fn ($r) => $r['event'] === 'guard.shift_report'))[0];
+        DB::tenant()->prepare('UPDATE notification_rules SET recipients = ? WHERE id = ?')->execute([json_encode([['type' => 'email', 'value' => 'rrhh@sh.test']]), (int) $rule['id']]);
+        $reports = fn () => (int) DB::tenant()->query("SELECT COUNT(*) FROM notification_queue WHERE event = 'guard.shift_report' AND entity_uuid = " . DB::tenant()->quote($cov['uuid']))->fetchColumn();
+        UserAuth::setCurrent($device);
+        $s = Uuid::v4();
+        Push::run([$op('shift.start', ['uuid' => $s, 'site_uuid' => $st['site']['uuid'], 'started_at_device' => $iso(0)]) + ['as_user' => $st['g1']['uuid']]]);
+        assert_same(0, $reports(), 'en turno: todavía no');
+        $r = Push::run([$op('shift.end', ['slot_uuid' => $s, 'ended_at_device' => $iso(1)]) + ['as_user' => $st['g1']['uuid']]]);
+        assert_same('ok', $r[0]['status'], json_encode($r));
+        assert_same(1, $reports(), 'terminó en la última hora: el reporte sale en el momento');
+        assert_true(in_array(DB::tenant()->query("SELECT status FROM guard_post_coverage WHERE id = {$cov['id']}")->fetchColumn(), ['parcial', 'sin_cubrir', 'cubierta'], true));
+        UserAuth::setCurrent($st['hys']);
+        ShiftService::run(strtotime($cov['end_at'] . ' UTC') + 3 * 3600);
+        assert_same(1, $reports(), 'el cron no lo repite');
+        // Antes de la última hora no se adelanta
+        assert_true(!\App\Services\PostCoverage::closeIfDone((int) $cov['id']), 'ya cerrada');
+        ShiftPlanner::delete(ShiftPlanner::find($shiftUuid));
+        DB::tenant()->exec('DELETE FROM guard_shift_positions');
+        DB::tenant()->exec('DELETE FROM guard_shift_exits');
+        DB::tenant()->exec('DELETE FROM guard_shift_slots');
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');
