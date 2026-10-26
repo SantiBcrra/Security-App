@@ -201,9 +201,35 @@ final class ShiftsController
         return Response::html(View::render('panel/shifts/form', [
             'title' => $shift ? 'Editar turno' : 'Nuevo turno', 'shift' => $shift, 'userUuids' => $userUuids, 'old' => $old,
             'sites' => \App\Models\Sites::list(),
-            'guards' => $this->guards(), 'defaultGrace' => ShiftPlanner::defaultGrace(),
-            'devices' => array_values(array_filter(Users::all(), fn ($u) => (int) $u['is_active'] === 1)),
+            'guards' => array_values(array_filter($this->guards(), fn ($u) => (int) ($u['no_login'] ?? 0) !== 1)), 'defaultGrace' => ShiftPlanner::defaultGrace(),
+            'employees' => \App\Services\PostGuards::list(), 'employeeUuids' => array_values(\App\Services\PostGuards::employeeUuids($shift ? ShiftPlanner::userIds($shift) : [])),
+            'devices' => array_values(array_filter(Users::accounts(), fn ($u) => (int) $u['is_active'] === 1)),
         ], 'layouts/app'));
+    }
+
+    /** Guardias del celular compartido = empleados con PIN (sin usuario). */
+    public function guardsPage(Request $request): Response
+    {
+        $q = trim((string) $request->input('q', ''));
+        return Response::html(View::render('panel/shifts/guards', [
+            'title' => 'Guardias y PIN', 'q' => $q, 'rows' => \App\Services\PostGuards::list($q),
+        ], 'layouts/app'));
+    }
+
+    public function guardPin(Request $request, string $uuid): Response
+    {
+        $emp = \App\Models\Employees::findByUuid($uuid);
+        $back = '/panel/rondas/turnos/guardias' . ($request->input('q') ? '?q=' . rawurlencode((string) $request->input('q')) : '');
+        if ($emp === null || $emp['deleted_at'] !== null) return Response::redirect($back);
+        $remove = (string) $request->input('quitar', '') === '1';
+        try {
+            \App\Services\PostGuards::setPin($emp, $remove ? null : trim((string) $request->input('pin', '')));
+        } catch (UserError $e) {
+            Flash::add('danger', $emp['first_name'] . ' ' . $emp['last_name'] . ': ' . $e->getMessage());
+            return Response::redirect($back);
+        }
+        Flash::add('success', $remove ? 'PIN quitado.' : 'PIN guardado para ' . $emp['first_name'] . ' ' . $emp['last_name'] . '. Llega al celular del puesto en la próxima sincronización.');
+        return Response::redirect($back);
     }
 
     public function store(Request $request, ?string $uuid = null): Response

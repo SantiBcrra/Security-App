@@ -56,6 +56,7 @@ final class MasterDataController
             return self::back("/panel/datos/{$resource}/nuevo", $request->post, $errors);
         }
         $id = $res->save($res->toRow($request->post, null), null);
+        $res->afterChange($id);
         $model = $res->model();
         $row = $model::findById($id);
         Audit::tenant($res->entity() . '.create', $res->entity(), $row['uuid'], null, $res->auditable($row));
@@ -87,6 +88,7 @@ final class MasterDataController
         }
         $before = $res->auditable($row);
         $res->save($res->toRow($request->post, $row), $row);
+        $res->afterChange((int) $row['id']);
         $after = $res->auditable(($res->model())::findById((int) $row['id']));
         $changed = array_keys(array_diff_assoc(array_map('strval', $after), array_map('strval', $before)));
         if ($changed) {
@@ -112,6 +114,7 @@ final class MasterDataController
             return Response::redirect("/panel/datos/{$resource}/{$uuid}");
         }
         ($res->model())::setActive((int) $row['id'], $activate);
+        $res->afterChange((int) $row['id']);
         Audit::tenant($res->entity() . ($activate ? '.activate' : '.deactivate'), $res->entity(), $uuid,
             ['activo' => (int) $row['is_active']], ['activo' => $activate ? 1 : 0]);
         Flash::add('success', $activate ? 'Reactivado.' : 'Desactivado: ya no aparece para elegir, pero se conserva su historial.');
@@ -130,6 +133,7 @@ final class MasterDataController
             return Response::redirect("/panel/datos/{$resource}/{$uuid}");
         }
         ($res->model())::softDelete((int) $row['id'], $res->uniqueColumns());
+        $res->afterChange((int) $row['id']);
         Audit::tenant($res->entity() . '.delete', $res->entity(), $uuid, array_intersect_key($row, array_flip(array_merge(['name'], $res->uniqueColumns()))), null);
         Flash::add('success', 'Eliminado. Ya no aparece en las listas ni en los celulares; los registros que lo usaron lo conservan en su historial.');
         return Response::redirect("/panel/datos/{$resource}");

@@ -80,8 +80,15 @@ final class ShiftPlanner
             $u = Users::findByUuid((string) $uuid);
             if ($u !== null && (int) $u['is_active'] === 1) $users[] = (int) $u['id'];
         }
-        $users = array_values(array_unique($users));
         $mode = ($in['mode'] ?? 'personal') === 'puesto' ? 'puesto' : 'personal';
+        // Por puesto: guardias cargados como empleados (sin usuario) → su perfil interno sin acceso (PostGuards).
+        if ($mode === 'puesto') {
+            foreach ((array) ($in['employees'] ?? []) as $uuid) {
+                $e = \App\Models\Employees::findByUuid((string) $uuid);
+                if ($e !== null && (int) $e['is_active'] === 1 && $e['deleted_at'] === null) $users[] = (int) PostGuards::userFor($e)['id'];
+            }
+        }
+        $users = array_values(array_unique($users));
         if (!$users) $errors['users'] = $mode === 'puesto' ? 'Elegí los guardias del grupo que cubre el puesto.' : 'Elegí al menos un guardia.';
         // Por puesto: el celular compartido es opcional (si cada guardia usa el suyo, no hace falta).
         $device = null;

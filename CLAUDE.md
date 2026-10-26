@@ -312,6 +312,13 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   **Dejar el puesto sin persona** con motivo / terminar con el puesto vacío). `PostRepository` (PBKDF2 igual al servidor),
   `Prefs.duty*` = guardia de turno; `Outbox` agrega `_as_user` a cada operación (sale como `as_user`; nunca a `device.status`).
   Encabezado con el guardia de turno; Rondas, Libro y Escanear piden que alguien empiece su turno.
+- **Guardias = empleados** (decisión del usuario 26/10/2026, como los sistemas de seguridad de un solo celular): los guardias
+  tercerizados se cargan en Datos maestros → Empleados, sin usuario ni contraseña. `Services\PostGuards`: cada empleado del grupo
+  tiene un perfil interno (`users.employee_id` + `users.no_login = 1`, tenant 0083, rol reportante) que nunca ingresa
+  (`Users::canSignIn`) y no aparece en Usuarios, reglas, "Ver como" ni celulares (`Users::accounts()`); así turnos, relevos, rondas,
+  libro y reportes siguen igual. El formulario por puesto elige **empleados** (`employees[]`; `ShiftPlanner::validate` crea el
+  perfil); PIN en **Turnos → Guardias y PIN** `/panel/rondas/turnos/guardias` (`rondas.editar`, auditado sin el PIN). Editar,
+  desactivar o eliminar el empleado actualiza el perfil (`Resource::afterChange` → `PostGuards::syncEmployee`). La app no cambia.
 - App 1.5.1 (`versionCode 21`): `ui/FitText.kt` = texto de una línea que se achica en vez de cortarse (celulares angostos o letra
   grande); lo usan las pestañas de abajo y los botones + Novedad / Persona / Vehículo del libro ("+" arriba, nombre abajo).
 

@@ -30,7 +30,7 @@ final class AppPreview
     public static function users(): array
     {
         $me = (int) (UserAuth::user()['id'] ?? 0);
-        $rows = array_filter(Users::all(), fn ($u) => (int) $u['is_active'] === 1 && (int) $u['id'] !== $me);
+        $rows = array_filter(Users::accounts(), fn ($u) => (int) $u['is_active'] === 1 && (int) $u['id'] !== $me);
         usort($rows, fn ($a, $b) => [$a['role_name'], $a['name']] <=> [$b['role_name'], $b['name']]);
         return array_values(array_map(fn ($u) => ['uuid' => $u['uuid'], 'nombre' => $u['name'],
             'rol' => ['slug' => $u['role_slug'], 'nombre' => $u['role_name']]], $rows));

@@ -29,7 +29,7 @@ final class NotificationRulesController
             'edit'     => ($u = (string) $request->input('regla', '')) !== '' ? NotificationRules::findByUuid($u) : null,
             'creating' => $request->input('regla') === 'nueva',
             'roles'    => Roles::all(),
-            'users'    => Users::all(),
+            'users'    => Users::accounts(),
             'sectors'  => Sectors::options(),
             'levels'   => CatalogItems::list(null, false, ['catalog' => 'severidad']),
             'settings' => [

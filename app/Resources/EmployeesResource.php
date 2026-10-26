@@ -39,7 +39,7 @@ final class EmployeesResource extends Resource
             self::ref('sector_id', 'Sector', Sectors::class),
             self::ref('contractor_id', 'Contratista', Contractors::class, false, ['help' => 'Vacío = personal propio de la empresa.']),
             ['name' => 'user_id', 'label' => 'Usuario del sistema', 'type' => 'ref', 'model' => Users::class,
-                'options' => fn (?int $id) => array_column(Users::all(), 'name', 'uuid'),
+                'options' => fn (?int $id) => array_column(Users::accounts(), 'name', 'uuid'),
                 'help' => 'Opcional: si esta persona además ingresa al sistema.'],
             ['name' => 'phone', 'label' => 'Teléfono', 'type' => 'tel', 'max' => 40],
             ['name' => 'email', 'label' => 'Email', 'type' => 'email', 'max' => 191],
@@ -88,6 +88,11 @@ final class EmployeesResource extends Resource
         $row = parent::toRow($data, $current);
         $row['dni'] = $row['dni'] !== null ? preg_replace('/\D/', '', (string) $row['dni']) : null;
         return $row;
+    }
+
+    public function afterChange(int $id): void
+    {
+        \App\Services\PostGuards::syncEmployee($id); // si es guardia del celular compartido: nombre y estado
     }
 
     protected function extraValidate(array $data, ?array $current, array $errors): array

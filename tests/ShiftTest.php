@@ -776,6 +776,52 @@ return [
         $_SESSION = [];
     },
 
+    'puesto: los guardias son empleados (sin usuario): PIN, perfil interno sin acceso, turno desde el celular compartido' => function () use ($setup, &$st, $op, $iso) {
+        $setup();
+        Tenant::activate($st['a']);
+        UserAuth::setCurrent($st['hys']);
+        $device = Users::findByLogin('celu@sh.test');
+        $emp = \App\Models\Employees::findById(\App\Models\Employees::create(['uuid' => Uuid::v4(), 'dni' => '30111222', 'last_name' => 'Gómez', 'first_name' => 'Ana', 'is_active' => 1]));
+        [$data, $errors] = ShiftPlanner::validate(['site' => $st['site']['uuid'], 'mode' => 'puesto', 'pattern' => 'weekly', 'days' => [1, 2, 3, 4, 5, 6, 7],
+            'start_time' => '00:00', 'end_time' => '23:59', 'employees' => [$emp['uuid']], 'device' => $device['uuid'], 'name' => 'Empleados']);
+        assert_same([], $errors, 'alcanza con empleados en el grupo');
+        $shiftUuid = ShiftPlanner::save(null, $data);
+        $g = \App\Services\PostGuards::linkedUser((int) $emp['id']);
+        assert_true($g !== null && (int) $g['no_login'] === 1 && $g['name'] === 'Ana Gómez', 'perfil interno');
+        assert_true(!Users::canSignIn($g + ['password_hash' => 'x']), 'nunca puede ingresar');
+        assert_true(!in_array($g['uuid'], array_column(Users::accounts(), 'uuid'), true), 'no aparece en Usuarios');
+        try { \App\Services\PostGuards::setPin($emp, '12'); assert_true(false, 'PIN corto'); } catch (App\Core\UserError) {}
+        \App\Services\PostGuards::setPin($emp, '4321');
+        $pool = \App\Services\ActingGuard::poolForDevice((int) $device['id']);
+        $mine = array_values(array_filter($pool, fn ($p) => $p['uuid'] === $g['uuid']))[0] ?? null;
+        assert_true($mine !== null && $mine['pin'] !== null && $mine['dni_end'] === '222', 'llega al celular con PIN y DNI');
+        $rows = \App\Services\PostGuards::list('gómez');
+        assert_same([true, ['Empleados']], [(bool) $rows[0]['has_pin'], $rows[0]['posts']]);
+        // El formulario marca al empleado y la página de guardias se renderiza
+        $html = (new \App\Controllers\Web\Panel\ShiftsController())->form(new \App\Core\Request('GET', '/'), $shiftUuid)->body;
+        assert_true(str_contains($html, 'name="employees[]" value="' . $emp['uuid'] . '" id="em' . $emp['uuid'] . '" checked'), 'empleado elegido');
+        assert_true(str_contains((new \App\Controllers\Web\Panel\ShiftsController())->guardsPage(new \App\Core\Request('GET', '/'))->body, 'Con PIN'));
+        // Desde el celular compartido empieza el turno a su nombre
+        UserAuth::setCurrent($device);
+        DB::tenant()->exec("UPDATE guard_shift_slots SET status = 'cumplido', ended_at = UTC_TIMESTAMP() WHERE status = 'en_curso'");
+        $s = Uuid::v4();
+        $r = Push::run([$op('shift.start', ['uuid' => $s, 'site_uuid' => $st['site']['uuid'], 'started_at_device' => $iso(0)]) + ['as_user' => $g['uuid']]]);
+        assert_same('ok', $r[0]['status'], json_encode($r));
+        assert_true(ShiftService::current((int) $g['id']) !== null, 'turno a nombre del empleado');
+        Push::run([$op('shift.end', ['slot_uuid' => $s, 'ended_at_device' => $iso(0)]) + ['as_user' => $g['uuid']]]);
+        // Cambia el nombre o se desactiva el empleado → el perfil lo sigue y deja de poder identificarse
+        UserAuth::setCurrent($st['hys']);
+        \App\Models\Employees::update((int) $emp['id'], ['first_name' => 'Ana María']);
+        \App\Services\PostGuards::syncEmployee((int) $emp['id']);
+        assert_same('Ana María Gómez', Users::findById((int) $g['id'])['name']);
+        \App\Models\Employees::setActive((int) $emp['id'], false);
+        \App\Services\PostGuards::syncEmployee((int) $emp['id']);
+        UserAuth::setCurrent($device);
+        try { \App\Services\ActingGuard::resolve($g['uuid']); assert_true(false, 'desactivado'); } catch (App\Core\UserError) {}
+        UserAuth::setCurrent($st['hys']);
+        ShiftPlanner::delete(ShiftPlanner::find($shiftUuid));
+    },
+
     'limpieza: se borran las bases de prueba' => function () use ($root, $dropAll, &$st, $master) {
         if (!$st['ready']) {
             throw new SkipTest('no hubo setup');

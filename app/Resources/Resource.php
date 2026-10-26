@@ -193,6 +193,11 @@ abstract class Resource
         return (int) $current['id'];
     }
 
+    /** Después de crear, editar, activar/desactivar o eliminar (ej.: empleados → perfil interno del guardia). */
+    public function afterChange(int $id): void
+    {
+    }
+
     /** Validación antes de desactivar (ej: sector con hijos). Devuelve mensaje de error o null. */
     public function canDeactivate(array $row): ?string
     {

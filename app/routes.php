@@ -281,6 +281,8 @@ return static function (Router $r): void {
         $r->post('/rondas/turno/{uuid}', [\App\Controllers\Web\Panel\ShiftsController::class, 'slotStore'], [$can('rondas', 'editar')]);
         $r->post('/rondas/turno/{uuid}/eliminar', [\App\Controllers\Web\Panel\ShiftsController::class, 'slotDelete'], [$can('rondas', 'editar')]);
         $r->post('/rondas/turnos/programacion/{uuid}/eliminar', [\App\Controllers\Web\Panel\ShiftsController::class, 'scheduleDelete'], [$can('rondas', 'editar')]);
+        $r->get('/rondas/turnos/guardias', [\App\Controllers\Web\Panel\ShiftsController::class, 'guardsPage'], [$can('rondas', 'editar')]);
+        $r->post('/rondas/turnos/guardias/{uuid}/pin', [\App\Controllers\Web\Panel\ShiftsController::class, 'guardPin'], [$can('rondas', 'editar')]);
         $r->get('/rondas/turnos/programacion', [\App\Controllers\Web\Panel\ShiftsController::class, 'schedules'], [$can('rondas', 'ver')]);
         $r->get('/rondas/turnos/programacion/nuevo', [\App\Controllers\Web\Panel\ShiftsController::class, 'form'], [$can('rondas', 'editar')]);
         $r->post('/rondas/turnos/programacion', [\App\Controllers\Web\Panel\ShiftsController::class, 'store'], [$can('rondas', 'editar')]);

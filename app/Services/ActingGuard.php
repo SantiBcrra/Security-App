@@ -83,7 +83,8 @@ final class ActingGuard
     {
         $ids = self::poolIds($deviceUserId);
         if (!$ids) return [];
-        $rows = DB::tenant()->query('SELECT id, uuid, name, dni, pin_hash FROM users WHERE id IN (' . implode(',', $ids) . ') ORDER BY name')->fetchAll();
+        $rows = DB::tenant()->query('SELECT u.id, u.uuid, u.name, COALESCE(u.dni, e.dni) AS dni, u.pin_hash FROM users u LEFT JOIN employees e ON e.id = u.employee_id
+            WHERE u.id IN (' . implode(',', $ids) . ') ORDER BY u.name')->fetchAll();
         return array_map(function ($u) {
             $pin = self::parse($u['pin_hash']);
             return ['uuid' => $u['uuid'], 'name' => $u['name'], 'dni_end' => $u['dni'] ? substr((string) $u['dni'], -3) : null,

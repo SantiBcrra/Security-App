@@ -28,7 +28,7 @@ final class UsersController
     {
         return Response::html(View::render('panel/users/index', [
             'title'      => 'Usuarios',
-            'users'      => Users::all(),
+            'users'      => Users::accounts(),
             'invitation' => UserInvitation::pullFlash(),
         ], 'layouts/app'));
     }

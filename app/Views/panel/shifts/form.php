@@ -1,5 +1,5 @@
 <?php
-/** Turnos → alta / edición. @var ?array $shift @var array $sites @var array $guards @var array $devices @var array $userUuids @var int $defaultGrace @var ?array $old */
+/** Turnos → alta / edición. @var ?array $shift @var array $sites @var array $guards @var array $devices @var array $userUuids @var array $employees @var array $employeeUuids @var int $defaultGrace @var ?array $old */
 use App\Services\ShiftPlanner;
 $v = $old ?? [];
 $s = $shift ?? [];
@@ -8,6 +8,7 @@ $mode = $v['mode'] ?? ($s['mode'] ?? 'personal');
 $device = $v['device'] ?? ($s['device_uuid'] ?? '');
 $days = array_map('intval', (array) ($v['days'] ?? explode(',', (string) ($s['days'] ?? '1,2,3,4,5'))));
 $users = (array) ($v['users'] ?? $userUuids);
+$empSel = (array) ($v['employees'] ?? ($employeeUuids ?? []));
 $site = $v['site'] ?? ($s['site_uuid'] ?? (count($sites) === 1 ? $sites[0]['uuid'] : ''));
 // Franjas del horario por día para el formulario: {day, start, plus (días hasta la salida), end}
 $rawBlocks = isset($v['blocks']) ? (json_decode((string) $v['blocks'], true) ?: []) : ShiftPlanner::blocks($s);
@@ -143,7 +144,24 @@ $formBlocks = array_map(fn ($b) => ['day' => (int) ($b['day'] ?? 1), 'start' => 
             <div class="form-text">Desde esa fecha se repite: <span x-text="on"></span> día(s) trabaja, <span x-text="off"></span> descansa.</div></div>
     </div>
 
-    <label class="form-label mt-3" x-text="mode === 'puesto' ? 'Guardias del grupo (los que pueden cubrir el puesto)' : 'Guardias'">Guardias</label>
+    <div x-show="mode === 'puesto'" x-data="{ q: '' }">
+        <label class="form-label mt-3">Guardias del grupo: empleados (no necesitan usuario)</label>
+        <div class="form-text mt-0 mb-1">Los guardias de la empresa de seguridad se cargan en <a href="<?= e(url('/panel/datos/empleados')) ?>">Datos maestros → Empleados</a>
+            (con su contratista). Elegí acá los que pueden cubrir este puesto y poneles el PIN en <a href="<?= e(url('/panel/rondas/turnos/guardias')) ?>">Guardias y PIN</a>.</div>
+        <input class="form-control form-control-sm mb-1" type="search" placeholder="Buscar empleado…" x-model="q" style="max-width: 320px">
+        <div class="border rounded p-2" style="max-height: 260px; overflow:auto">
+            <?php foreach ($employees ?? [] as $em): $label = $em['last_name'] . ', ' . $em['first_name']; ?>
+                <div class="form-check" x-show="!q || <?= e(json_encode(mb_strtolower($label . ' ' . $em['dni'] . ' ' . ($em['contractor_name'] ?? '')))) ?>.includes(q.toLowerCase())">
+                    <input class="form-check-input" type="checkbox" name="employees[]" value="<?= e($em['uuid']) ?>" id="em<?= e($em['uuid']) ?>" <?= in_array($em['uuid'], $empSel, true) ? 'checked' : '' ?>>
+                    <label class="form-check-label" for="em<?= e($em['uuid']) ?>"><?= e($label) ?>
+                        <span class="small text-body-secondary">DNI <?= e($em['dni']) ?><?= $em['contractor_name'] ? ' · ' . e($em['contractor_name']) : '' ?></span>
+                        <?php if (!$em['has_pin']): ?><span class="badge text-bg-warning" title="Sin PIN no puede identificarse en el celular compartido">sin PIN</span><?php endif; ?></label></div>
+            <?php endforeach; ?>
+            <?php if (empty($employees)): ?><div class="text-body-secondary small">No hay empleados cargados.</div><?php endif; ?>
+        </div>
+    </div>
+
+    <label class="form-label mt-3" x-text="mode === 'puesto' ? 'Guardias del grupo con usuario propio (opcional)' : 'Guardias'">Guardias</label>
     <div class="border rounded p-2" style="max-height: 220px; overflow:auto">
         <?php foreach ($guards as $g): ?>
             <div class="form-check"><input class="form-check-input" type="checkbox" name="users[]" value="<?= e($g['uuid']) ?>" id="u<?= e($g['uuid']) ?>" <?= in_array($g['uuid'], $users, true) ? 'checked' : '' ?>>
@@ -163,7 +181,7 @@ $formBlocks = array_map(fn ($b) => ['day' => (int) ($b['day'] ?? 1), 'start' => 
         </select>
         <div class="form-text">Si la empresa de seguridad tiene <strong>un solo celular</strong> para todos sus guardias: creá un usuario para ese celular (por ejemplo
             "Celular portería") con el rol de guardia, abrí la app con él una sola vez y elegilo acá. Al empezar el turno cada guardia elige su nombre y pone
-            su <strong>PIN</strong> (se carga en Usuarios); las rondas, el libro y el pánico quedan a su nombre. El celular nunca se cierra entre guardias.</div>
+            su <strong>PIN</strong> (se carga en Turnos → Guardias y PIN); las rondas, el libro y el pánico quedan a su nombre. El celular nunca se cierra entre guardias.</div>
     </div>
 
     <div class="row g-3 mt-1">

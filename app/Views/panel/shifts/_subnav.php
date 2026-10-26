@@ -5,6 +5,7 @@ $items = [
     'hoy'          => ['Hoy', '/panel/rondas/turnos'],
     'programacion' => ['Programación de turnos', '/panel/rondas/turnos/programacion'],
     'ausencias'    => ['Ausencias y días sin servicio', '/panel/rondas/turnos/ausencias'],
+    'guardias'     => ['Guardias y PIN', '/panel/rondas/turnos/guardias'],
     'horas'        => ['Horas trabajadas', '/panel/rondas/turnos/horas'],
     'cobertura'    => ['Cobertura de puestos', '/panel/rondas/turnos/cobertura'],
 ];

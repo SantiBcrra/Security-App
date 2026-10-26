@@ -17,6 +17,12 @@ final class Users
         return DB::tenant()->query(self::SELECT . ' WHERE u.deleted_at IS NULL ORDER BY u.is_active DESC, u.name')->fetchAll();
     }
 
+    /** Usuarios que pueden ingresar (sin los perfiles internos de los guardias-empleados: `no_login`). */
+    public static function accounts(): array
+    {
+        return array_values(array_filter(self::all(), fn ($u) => (int) ($u['no_login'] ?? 0) !== 1));
+    }
+
     public static function findByUuid(string $uuid): ?array
     {
         return self::one(' WHERE u.uuid = ?', [$uuid]);
@@ -123,6 +129,7 @@ final class Users
     public static function canSignIn(array $user): bool
     {
         return (int) $user['is_active'] === 1
+            && (int) ($user['no_login'] ?? 0) !== 1
             && !empty($user['password_hash'])
             && ($user['access_expires_at'] === null || strtotime($user['access_expires_at'] . ' UTC') > time());
     }
