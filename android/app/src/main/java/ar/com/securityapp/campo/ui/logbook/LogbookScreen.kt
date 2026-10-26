@@ -10,6 +10,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -173,9 +177,16 @@ fun LogbookScreen(onBack: () -> Unit, canCreate: Boolean, showTopBar: Boolean = 
                 }
             }
             if (canCreate) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("novedad" to "+ Novedad", "persona" to "+ Persona", "vehiculo" to "+ Vehículo").forEach { (k, l) ->
-                    Button({ vm.say(null); page = k }, Modifier.weight(1f).height(56.dp), shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) { Text(l, fontWeight = FontWeight.Bold) }
+                // "+" arriba y el nombre abajo, que se achica si no entra (celulares angostos o letra grande): nunca se corta.
+                listOf("novedad" to "Novedad", "persona" to "Persona", "vehiculo" to "Vehículo").forEach { (k, l) ->
+                    Button({ vm.say(null); page = k }, Modifier.weight(1f).heightIn(min = 64.dp), shape = RoundedCornerShape(12.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Add, null, Modifier.size(22.dp))
+                            ar.com.securityapp.campo.ui.FitText(l, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+                        }
+                    }
                 }
             }
             Text("Adentro ahora (${ui.inside.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)

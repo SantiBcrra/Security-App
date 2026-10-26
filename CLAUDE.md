@@ -312,6 +312,8 @@ Local: symlink `/Applications/XAMPP/htdocs/securityapp → ~/Desktop/Security Ap
   **Dejar el puesto sin persona** con motivo / terminar con el puesto vacío). `PostRepository` (PBKDF2 igual al servidor),
   `Prefs.duty*` = guardia de turno; `Outbox` agrega `_as_user` a cada operación (sale como `as_user`; nunca a `device.status`).
   Encabezado con el guardia de turno; Rondas, Libro y Escanear piden que alguien empiece su turno.
+- App 1.5.1 (`versionCode 21`): `ui/FitText.kt` = texto de una línea que se achica en vez de cortarse (celulares angostos o letra
+  grande); lo usan las pestañas de abajo y los botones + Novedad / Persona / Vehículo del libro ("+" arriba, nombre abajo).
 
 ## Libro de guardia — diseño en `docs/design/libro-de-guardia.md`
 - Decisiones del usuario: guardias de **empresa contratada** (su libro rubricado en papel es responsabilidad de ellos; este es

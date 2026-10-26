@@ -323,11 +323,11 @@ private fun HomeBottomBar(selected: String, onHome: () -> Unit, onActivity: () -
     Box(Modifier.fillMaxWidth().background(Color.Black).navigationBarsPadding().zIndex(10f)) {
         NavigationBar(containerColor = BarBg, tonalElevation = 0.dp, windowInsets = WindowInsets(0, 0, 0, 0),
             modifier = Modifier.fillMaxWidth().height(80.dp).align(Alignment.BottomCenter).zIndex(1f)) {
-            NavigationBarItem(selected = selected == "home", onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { Text("Inicio") }, colors = itemColors)
-            NavigationBarItem(selected = selected == "activity", onClick = onActivity, icon = { Icon(Icons.Filled.CheckCircle, "Actividad") }, label = { Text("Actividad") }, colors = itemColors)
+            NavigationBarItem(selected = selected == "home", onClick = onHome, icon = { Icon(Icons.Filled.Home, "Inicio") }, label = { FitText("Inicio", style = MaterialTheme.typography.labelMedium) }, colors = itemColors)
+            NavigationBarItem(selected = selected == "activity", onClick = onActivity, icon = { Icon(Icons.Filled.CheckCircle, "Actividad") }, label = { FitText("Actividad", style = MaterialTheme.typography.labelMedium) }, colors = itemColors)
             Spacer(Modifier.weight(1f))
-            NavigationBarItem(selected = selected == "notices", onClick = onNotices, icon = { Icon(Icons.Filled.Notifications, "Avisos") }, label = { Text("Avisos") }, colors = itemColors)
-            NavigationBarItem(selected = selected == "more", onClick = onMore, icon = { Icon(Icons.Filled.Menu, "Más") }, label = { Text("Más") }, colors = itemColors)
+            NavigationBarItem(selected = selected == "notices", onClick = onNotices, icon = { Icon(Icons.Filled.Notifications, "Avisos") }, label = { FitText("Avisos", style = MaterialTheme.typography.labelMedium) }, colors = itemColors)
+            NavigationBarItem(selected = selected == "more", onClick = onMore, icon = { Icon(Icons.Filled.Menu, "Más") }, label = { FitText("Más", style = MaterialTheme.typography.labelMedium) }, colors = itemColors)
         }
         // Botón central de escaneo: círculo amarillo que sobresale de la barra (borde del color de la barra para el "recorte"),
         // ícono estándar de escanear QR en blanco y la palabra "Escanear" alineada con las otras pestañas.
@@ -342,8 +342,8 @@ private fun HomeBottomBar(selected: String, onHome: () -> Unit, onActivity: () -
             contentAlignment = Alignment.Center) {
             Icon(painterResource(R.drawable.ic_qr_scan), "Escanear QR", Modifier.size(32.dp), tint = Color.White)
         }
-        Text("Escanear", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp).zIndex(2f))
+        FitText("Escanear", style = MaterialTheme.typography.labelMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp).width(76.dp).zIndex(2f))
     }
 }
 
